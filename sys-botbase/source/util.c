@@ -194,7 +194,6 @@ HidNpadButton parseStringToButton(char* arg)
     {
         return HiddbgNpadButton_Capture;
     }
-    
     return HidNpadButton_A; //I guess lol
 }
 
