@@ -5,11 +5,16 @@
 #include <math.h>
 #include "commands.h"
 #include "util.h"
+#include "time.h"
+#include "ntp.h"
 
 Mutex actionLock;
 
 //Controller:
 bool bControllerIsInitialised = false;
+time_t curTime = 0;
+time_t origTime = 0;
+int resetSkips = 0;
 HiddbgHdlsHandle controllerHandle = {0};
 HiddbgHdlsDeviceInfo controllerDevice = {0};
 HiddbgHdlsState controllerState = {0};
@@ -174,21 +179,21 @@ void peek(u64 offset, u64 size)
     free(out);
 }
 
-void click(HidControllerKeys btn)
+void click(HidNpadButton btn)
 {
     initController();
     press(btn);
     svcSleepThread(buttonClickSleepTime * 1e+6L);
     release(btn);
 }
-void press(HidControllerKeys btn)
+void press(HidNpadButton btn)
 {
     initController();
     controllerState.buttons |= btn;
     hiddbgSetHdlsState(controllerHandle, &controllerState);
 }
 
-void release(HidControllerKeys btn)
+void release(HidNpadButton btn)
 {
     initController();
     controllerState.buttons &= ~btn;
@@ -198,16 +203,16 @@ void release(HidControllerKeys btn)
 void setStickState(int side, int dxVal, int dyVal)
 {
     initController();
-    if (side == JOYSTICK_LEFT)
-    {	
+    if(side == 0)
+    {
         controllerState.analog_stick_l.x = dxVal;
-		controllerState.analog_stick_l.y = dyVal;
-	}
-	else
-	{
-		controllerState.analog_stick_r.x = dxVal;
-		controllerState.analog_stick_r.y = dyVal;
-	}
+        controllerState.analog_stick_l.y = dyVal;
+    }
+    if(side == 1)
+    {
+        controllerState.analog_stick_r.x = dxVal;
+        controllerState.analog_stick_r.y = dyVal;
+    }
     hiddbgSetHdlsState(controllerHandle, &controllerState);
 }
 
@@ -233,4 +238,56 @@ void touch(HidTouchState* state, u64 sequentialCount, u64 holdTime, bool hold)
     }
     
     hiddbgUnsetTouchScreenAutoPilotState();
+}
+
+void dateSkip(int resetTimeAfterSkips, int resetNTP)
+{
+    if(origTime == 0)
+    {
+        Result ot = timeGetCurrentTime(TimeType_UserSystemClock, (u64*)&origTime);
+        if(R_FAILED(ot))
+            fatalThrow(ot);
+    }
+
+    Result tg = timeGetCurrentTime(TimeType_UserSystemClock, (u64*)&curTime); //Current system time
+    if(R_FAILED(tg))
+        fatalThrow(tg);
+
+    Result ts = timeSetCurrentTime(TimeType_NetworkSystemClock, (uint64_t)(curTime + 86400)); //Set new time
+    if(R_FAILED(ts))
+        fatalThrow(ts);
+
+    resetSkips++;
+    if(resetNTP == 0 && resetTimeAfterSkips != 0 && (resetTimeAfterSkips == resetSkips)) //Reset time after # of skips
+        resetTime();
+    else if(resetNTP != 0 && resetTimeAfterSkips != 0 && (resetTimeAfterSkips == resetSkips))
+        resetTimeNTP();
+}
+
+void resetTime()
+{
+    if(curTime == 0)
+    {
+        Result ct = timeGetCurrentTime(TimeType_UserSystemClock, (u64*)&curTime); //Current system time
+        if(R_FAILED(ct))
+            fatalThrow(ct);
+    }
+
+    resetSkips = 0;
+    struct tm currentTime = *localtime(&curTime);
+    struct tm timeReset = *localtime(&origTime);
+    timeReset.tm_hour = currentTime.tm_hour;
+    timeReset.tm_min = currentTime.tm_min;
+    timeReset.tm_sec = currentTime.tm_sec;
+    Result rt = timeSetCurrentTime(TimeType_NetworkSystemClock, mktime(&timeReset));
+    if(R_FAILED(rt))
+        fatalThrow(rt);
+}
+
+void resetTimeNTP()
+{
+    resetSkips = 0;
+    Result ts = timeSetCurrentTime(TimeType_NetworkSystemClock, ntpGetTime());
+    if(R_FAILED(ts))
+        fatalThrow(ts);
 }

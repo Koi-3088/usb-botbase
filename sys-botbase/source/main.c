@@ -12,12 +12,14 @@
 #include "args.h"
 #include "util.h"
 #include <poll.h>
+#include "time.h"
 
 #define TITLE_ID 0x430000000000000B
 #define HEAP_SIZE 0x000540000
 
 // we aren't an applet
 u32 __nx_applet_type = AppletType_None;
+TimeServiceType __nx_time_service_type = TimeServiceType_System;
 
 // setup a fake heap (we don't need the heap anyway)
 char fake_heap[HEAP_SIZE];
@@ -40,6 +42,9 @@ void __appInit(void)
     rc = smInitialize();
     if (R_FAILED(rc))
         fatalThrow(rc);
+    rc = apmInitialize();
+    if(R_FAILED(rc))
+        fatalThrow(rc);
     if (hosversionGet() == 0) {
         rc = setsysInitialize();
         if (R_SUCCEEDED(rc)) {
@@ -58,19 +63,25 @@ void __appInit(void)
         fatalThrow(rc);
     rc = timeInitialize();
     if (R_FAILED(rc))
-        fatalThrow(rc);
+    {
+        timeExit();
+        __nx_time_service_type = TimeServiceType_User;
+        rc = timeInitialize();
+        if(R_FAILED(rc))
+            fatalThrow(rc);
+    }
     rc = pmdmntInitialize();
-	if (R_FAILED(rc)) {
+    if (R_FAILED(rc)) {
         fatalThrow(rc);
-	}
+    }
     rc = ldrDmntInitialize();
-	if (R_FAILED(rc)) {
-		fatalThrow(rc);
-	}
+    if (R_FAILED(rc)) {
+        fatalThrow(rc);
+    }
     rc = pminfoInitialize();
-	if (R_FAILED(rc)) {
-		fatalThrow(rc);
-	}
+    if (R_FAILED(rc)) {
+        fatalThrow(rc);
+    }
     rc = socketInitializeDefault();
     if (R_FAILED(rc))
         fatalThrow(rc);
@@ -182,7 +193,7 @@ int argmain(int argc, char **argv)
     {
         if(argc != 2)
             return 0;
-        HidControllerKeys key = parseStringToButton(argv[1]);
+        HidNpadButton key = parseStringToButton(argv[1]);
         click(key);
     }
 
@@ -191,7 +202,7 @@ int argmain(int argc, char **argv)
     {
         if(argc != 2)
             return 0;
-        HidControllerKeys key = parseStringToButton(argv[1]);
+        HidNpadButton key = parseStringToButton(argv[1]);
         press(key);
     }
 
@@ -200,7 +211,7 @@ int argmain(int argc, char **argv)
     {
         if(argc != 2)
             return 0;
-        HidControllerKeys key = parseStringToButton(argv[1]);
+        HidNpadButton key = parseStringToButton(argv[1]);
         release(key);
     }
 
@@ -212,9 +223,9 @@ int argmain(int argc, char **argv)
         
         int side = 0;
         if(!strcmp(argv[1], "LEFT")){
-            side = JOYSTICK_LEFT;
+            side = 0;
         }else if(!strcmp(argv[1], "RIGHT")){
-            side = JOYSTICK_RIGHT;
+            side = 1;
         }else{
             return 0;
         }
@@ -382,6 +393,19 @@ int argmain(int argc, char **argv)
 
         touch(state, count, TOUCHPOLLMIN * 2, true);
 	}
+
+	if(!strcmp(argv[0], "daySkip"))
+    {
+        int resetTimeAfterSkips = parseStringToInt(argv[1]);
+        int resetNTP = parseStringToInt(argv[2]);
+        dateSkip(resetTimeAfterSkips, resetNTP);
+    }
+
+    if(!strcmp(argv[0], "resetTime"))
+        resetTime();
+
+    if(!strcmp(argv[0], "resetTimeNTP"))
+        resetTimeNTP();
 
     return 0;
 }

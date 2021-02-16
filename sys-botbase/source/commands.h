@@ -1,4 +1,5 @@
 #include <switch.h>
+#include <time.h>
 #define TOUCHPOLLMIN 15000000L // touch screen polling rate seems to be 15ms (no idea how to change)
 
 extern Handle debughandle;
@@ -26,8 +27,11 @@ MetaData getMetaData(void);
 
 void poke(u64 offset, u64 size, u8* val);
 void peek(u64 offset, u64 size);
-void click(HidControllerKeys btn);
-void press(HidControllerKeys btn);
-void release(HidControllerKeys btn);
+void click(HidNpadButton btn);
+void press(HidNpadButton btn);
+void release(HidNpadButton btn);
 void setStickState(int side, int dxVal, int dyVal);
+void dateSkip(int resetTimeAfterSkips, int resetNTP);
+void resetTime();
+void resetTimeNTP();
 void touch(HidTouchState* state, u64 sequentialCount, u64 holdTime, bool hold);
