@@ -11,6 +11,7 @@
 #include "commands.h"
 #include "args.h"
 #include "util.h"
+#include "pm_ams.h"
 #include "freeze.h"
 #include <poll.h>
 #include "time.h"
@@ -18,6 +19,12 @@
 #define TITLE_ID 0x430000000000000B
 #define HEAP_SIZE 0x00C00000
 #define THREAD_SIZE 0x1A000
+
+typedef struct
+{
+    u64 size;
+    void* data;
+}USBResponse;
 
 typedef enum {
     Active = 0,
@@ -44,6 +51,8 @@ u8 clickThreadState = 0; // 1 = break thread
 KeyData currentKeyEvent = {0};
 TouchData currentTouchEvent = {0};
 char* currentClick = NULL;
+bool WiFi;
+bool USB;
 
 // for cancelling the touch/click thread
 u8 touchToken = 0;
@@ -52,6 +61,13 @@ u8 clickToken = 0;
 // we aren't an applet
 u32 __nx_applet_type = AppletType_None;
 TimeServiceType __nx_time_service_type = TimeServiceType_System;
+
+void sendUsbResponse(USBResponse response)
+{
+    usbCommsWrite((void*)&response, 4);
+    if (response.size > 0)
+        usbCommsWrite(response.data, response.size);
+}
 
 // we override libnx internals to do a minimal init
 void __libnx_initheap(void)
@@ -109,6 +125,9 @@ void __appInit(void)
     rc = pminfoInitialize();
 	if (R_FAILED(rc)) 
 		fatalThrow(rc);
+    rc = usbCommsInitialize();
+    if (R_FAILED(rc))
+        fatalThrow(rc);
     rc = socketInitializeDefault();
     if (R_FAILED(rc))
         fatalThrow(rc);
@@ -138,7 +157,6 @@ void __appExit(void)
 u64 mainLoopSleepTime = 50;
 u64 freezeRate = 3;
 bool debugResultCodes = false;
-
 bool echoCommands = false;
 
 void makeTouch(HidTouchState* state, u64 sequentialCount, u64 holdTime, bool hold)
@@ -172,6 +190,7 @@ void makeClickSeq(char* seq)
 
 int argmain(int argc, char **argv)
 {
+    USBResponse response;
     if (argc == 0)
         return 0;
 
@@ -183,10 +202,18 @@ int argmain(int argc, char **argv)
             return 0;
 
         MetaData meta = getMetaData();
-
         u64 offset = parseStringToInt(argv[1]);
         u64 size = parseStringToInt(argv[2]);
-        peek(meta.heap_base + offset, size);
+
+		if (USB)
+		{
+            u8 data[size];
+			peekUSB(data, meta.heap_base + offset, size);
+			response.size = size;
+			response.data = &data[0];
+			sendUsbResponse(response);
+		}
+		else peek(meta.heap_base + offset, size);
     }
 
     if (!strcmp(argv[0], "peekMulti"))
@@ -215,7 +242,16 @@ int argmain(int argc, char **argv)
 
         u64 offset = parseStringToInt(argv[1]);
         u64 size = parseStringToInt(argv[2]);
-        peek(offset, size);
+
+		if (USB)
+		{
+            u8 data[size];
+			peekUSB(data, offset, size);
+			response.size = size;
+			response.data = &data[0];
+			sendUsbResponse(response);
+		}
+        else peek(offset, size);
     }
 
     if (!strcmp(argv[0], "peekAbsoluteMulti"))
@@ -241,10 +277,18 @@ int argmain(int argc, char **argv)
             return 0;
 
         MetaData meta = getMetaData();
-
         u64 offset = parseStringToInt(argv[1]);
         u64 size = parseStringToInt(argv[2]);
-        peek(meta.main_nso_base + offset, size);
+
+		if (USB)
+		{
+            u8 data[size];
+			peekUSB(data, meta.main_nso_base + offset, size);
+			response.size = size;
+			response.data = &data[0];
+			sendUsbResponse(response);
+		}
+        else peek(meta.main_nso_base + offset, size);
     }
 
     if (!strcmp(argv[0], "peekMainMulti"))
@@ -273,11 +317,13 @@ int argmain(int argc, char **argv)
             return 0;
             
         MetaData meta = getMetaData();
-
         u64 offset = parseStringToInt(argv[1]);
         u64 size = 0;
         u8* data = parseStringToByteBuffer(argv[2], &size);
-        poke(meta.heap_base + offset, size, data);
+
+		if (USB)
+			pokeUSB(meta.heap_base + offset, size, data);
+        else poke(meta.heap_base + offset, size, data);
         free(data);
     } 
     
@@ -289,7 +335,10 @@ int argmain(int argc, char **argv)
         u64 offset = parseStringToInt(argv[1]);
         u64 size = 0;
         u8* data = parseStringToByteBuffer(argv[2], &size);
-        poke(offset, size, data);
+
+		if (USB)
+			pokeUSB(offset, size, data);
+        else poke(offset, size, data);
         free(data);
     }
         
@@ -299,11 +348,13 @@ int argmain(int argc, char **argv)
             return 0;
             
         MetaData meta = getMetaData();
-
         u64 offset = parseStringToInt(argv[1]);
         u64 size = 0;
         u8* data = parseStringToByteBuffer(argv[2], &size);
-        poke(meta.main_nso_base + offset, size, data);
+
+		if (USB)
+			pokeUSB(meta.main_nso_base + offset, size, data);
+        else poke(meta.main_nso_base + offset, size, data);
         free(data);
     } 
 
@@ -435,7 +486,13 @@ int argmain(int argc, char **argv)
 
     if(!strcmp(argv[0], "getTitleID")){
         MetaData meta = getMetaData();
-        printf("%016lX\n", meta.titleID);
+		if (USB)
+		{
+			response.size = sizeof(meta.titleID);
+			response.data = &meta.titleID;
+			sendUsbResponse(response);
+		}
+        else printf("%016lX\n", meta.titleID);
     }
 
     if(!strcmp(argv[0], "getSystemLanguage")){
@@ -445,23 +502,47 @@ int argmain(int argc, char **argv)
         SetLanguage language = SetLanguage_ENUS;
         setGetSystemLanguage(&languageCode);   
         setMakeLanguage(languageCode, &language);
-        printf("%d\n", language);
+		if (USB)
+		{
+			response.size = sizeof(language);
+			response.data = &language;
+			sendUsbResponse(response);
+		}
+        else printf("%d\n", language);
     }
  
     if(!strcmp(argv[0], "getMainNsoBase")){
         MetaData meta = getMetaData();
-        printf("%016lX\n", meta.main_nso_base);
+		if (USB)
+		{
+			response.size = sizeof(meta.main_nso_base);
+			response.data = &meta.main_nso_base;
+			sendUsbResponse(response);
+		}
+        else printf("%016lX\n", meta.main_nso_base);
     }
     
     if(!strcmp(argv[0], "getBuildID")){
         MetaData meta = getMetaData();
-        printf("%02x%02x%02x%02x%02x%02x%02x%02x\n", meta.buildID[0], meta.buildID[1], meta.buildID[2], meta.buildID[3], meta.buildID[4], meta.buildID[5], meta.buildID[6], meta.buildID[7]);
+		if (USB)
+		{
+			response.size = sizeof(u8);
+			response.data = &meta.buildID;
+			sendUsbResponse(response);
+		}
+        else printf("%02x%02x%02x%02x%02x%02x%02x%02x\n", meta.buildID[0], meta.buildID[1], meta.buildID[2], meta.buildID[3], meta.buildID[4], meta.buildID[5], meta.buildID[6], meta.buildID[7]);
 
     }
 
     if(!strcmp(argv[0], "getHeapBase")){
         MetaData meta = getMetaData();
-        printf("%016lX\n", meta.heap_base);
+		if (USB)
+		{
+			response.size = sizeof(meta.heap_base);
+			response.data = &meta.heap_base;
+			sendUsbResponse(response);
+		}
+        else printf("%016lX\n", meta.heap_base);
     }
 
     if(!strcmp(argv[0], "pixelPeek")){
@@ -474,13 +555,22 @@ int argmain(int argc, char **argv)
 
         if (R_FAILED(rc) && debugResultCodes)
             printf("capssc, 1204: %d\n", rc);
-        
-        u64 i;
-        for (i = 0; i < outSize; i++)
-        {
-            printf("%02X", buf[i]);
-        }
-        printf("\n");
+
+		if (USB)
+		{
+			response.data = &buf[0];
+			response.size = outSize;
+			sendUsbResponse(response);
+		}
+		else
+		{
+			u64 i;
+			for (i = 0; i < outSize; i++)
+			{
+				printf("%02X", buf[i]);
+			}
+			printf("\n");
+		}
 
         free(buf);
     }
@@ -870,6 +960,19 @@ void del_from_pfds(struct pollfd pfds[], int i, int *fd_count)
 
 int main()
 {
+    char str[4];
+    FILE* config = fopen("sdmc:/atmosphere/contents/430000000000000B/config.cfg", "r");
+    if (config)
+    {
+        fscanf(config, "%[^\n]", str);
+        fclose(config);
+        if (strcmp(strlwr(str), "usb") == 0)
+            USB = true;
+        else WiFi = true;
+    }
+    else WiFi = true;
+
+    USBResponse response;
     char *linebuf = malloc(sizeof(char) * MAX_LINE_LENGTH);
 
     int c = sizeof(struct sockaddr_in);
@@ -916,68 +1019,111 @@ int main()
         rc = threadStart(&clickThread);
     
 	flashLed();
-
-    while (appletMainLoop())
+    if (WiFi)
     {
-        poll(pfds, fd_count, -1);
-		mutexLock(&freezeMutex);
-        for(int i = 0; i < fd_count; i++) 
+        while (appletMainLoop())
         {
-            if (pfds[i].revents & POLLIN) 
+            poll(pfds, fd_count, -1);
+            mutexLock(&freezeMutex);
+            for (int i = 0; i < fd_count; i++)
             {
-                if (pfds[i].fd == listenfd) 
+                if (pfds[i].revents & POLLIN)
                 {
-                    newfd = accept(listenfd, (struct sockaddr *)&client, (socklen_t *)&c);
-                    if(newfd != -1)
+                    if (pfds[i].fd == listenfd)
                     {
-                        add_to_pfds(&pfds, newfd, &fd_count, &fd_size);
-                    }else{
-                        svcSleepThread(1e+9L);
-                        close(listenfd);
-                        listenfd = setupServerSocket();
-                        pfds[0].fd = listenfd;
-                        pfds[0].events = POLLIN;
-                        break;
-                    }
-                }
-                else
-                {
-                    bool readEnd = false;
-                    int readBytesSoFar = 0;
-                    while(!readEnd){
-                        int len = recv(pfds[i].fd, &linebuf[readBytesSoFar], 1, 0);
-                        if(len <= 0)
+                        newfd = accept(listenfd, (struct sockaddr*)&client, (socklen_t*)&c);
+                        if (newfd != -1)
                         {
-                            close(pfds[i].fd);
-                            del_from_pfds(pfds, i, &fd_count);
-                            readEnd = true;
+                            add_to_pfds(&pfds, newfd, &fd_count, &fd_size);
                         }
                         else
                         {
-                            readBytesSoFar += len;
-                            if(linebuf[readBytesSoFar-1] == '\n'){
+                            svcSleepThread(1e+9L);
+                            close(listenfd);
+                            listenfd = setupServerSocket();
+                            pfds[0].fd = listenfd;
+                            pfds[0].events = POLLIN;
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        bool readEnd = false;
+                        int readBytesSoFar = 0;
+                        while (!readEnd)
+                        {
+                            int len = recv(pfds[i].fd, &linebuf[readBytesSoFar], 1, 0);
+                            if (len <= 0)
+                            {
+                                close(pfds[i].fd);
+                                del_from_pfds(pfds, i, &fd_count);
                                 readEnd = true;
-                                linebuf[readBytesSoFar - 1] = 0;
+                            }
+                            else
+                            {
+                                readBytesSoFar += len;
+                                if (linebuf[readBytesSoFar - 1] == '\n')
+                                {
+                                    readEnd = true;
+                                    linebuf[readBytesSoFar - 1] = 0;
 
-                                fflush(stdout);
-                                dup2(pfds[i].fd, STDOUT_FILENO);
+                                    fflush(stdout);
+                                    dup2(pfds[i].fd, STDOUT_FILENO);
 
-                                parseArgs(linebuf, &argmain);
+                                    parseArgs(linebuf, &argmain);
 
-                                if(echoCommands){
-                                    printf("%s\n",linebuf);
+                                    if (echoCommands)
+                                    {
+                                        printf("%s\n", linebuf);
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
+
+            fr_count = getFreezeCount(false);
+            if (fr_count == 0)
+                freeze_thr_state = Idle;
+            mutexUnlock(&freezeMutex);
+            svcSleepThread(mainLoopSleepTime * 1e+6L);
         }
-		fr_count = getFreezeCount(false);
-		if (fr_count == 0)
-			freeze_thr_state = Idle;
-		mutexUnlock(&freezeMutex);
-        svcSleepThread(mainLoopSleepTime * 1e+6L);
+    }
+    else
+    {
+        while (appletMainLoop())
+        {
+            mutexLock(&freezeMutex);
+            int lenUSB;
+            usbCommsRead(&lenUSB, sizeof(lenUSB)); //Should use malloc
+            char linebufUSB[lenUSB + 1];
+
+            for (int i = 0; i < lenUSB + 1; i++)
+                linebufUSB[i] = 0;
+
+            usbCommsRead(&linebufUSB, lenUSB);
+
+            //Adds necessary escape characters for pasrser
+            linebufUSB[lenUSB - 1] = '\n';
+            linebufUSB[lenUSB - 2] = '\r';
+
+            fflush(stdout);
+            parseArgs(linebufUSB, &argmain);
+
+            if (echoCommands)
+            {
+                response.size = sizeof(linebufUSB);
+                response.data = &linebufUSB;
+                sendUsbResponse(response);
+            }
+
+            fr_count = getFreezeCount(false);
+            if (fr_count == 0)
+                freeze_thr_state = Idle;
+            mutexUnlock(&freezeMutex);
+            svcSleepThread(mainLoopSleepTime * 1e+6L);
+        }
     }
 	
 	if (R_SUCCEEDED(rc))

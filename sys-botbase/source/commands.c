@@ -181,6 +181,15 @@ void poke(u64 offset, u64 size, u8* val)
     detach();
 }
 
+void pokeUSB(u64 offset, u64 size, u8* val)
+{
+    attach();
+    Result rc = svcWriteDebugProcessMemory(debughandle, val, offset, size);
+    if (R_FAILED(rc) && debugResultCodes)
+        fatalThrow(rc);
+    detach();
+}
+
 void writeMem(u64 offset, u64 size, u8* val)
 {
 	Result rc = svcWriteDebugProcessMemory(debughandle, val, offset, size);
@@ -227,6 +236,14 @@ void peekMulti(u64* offset, u64* size, u64 count)
     }
     printf("\n");
     free(out);
+
+void peekUSB(u8 outData[], u64 offset, u64 size)
+{
+    attach();
+    Result rc = svcReadDebugProcessMemory(outData, debughandle, offset, size);
+    if(R_FAILED(rc) && debugResultCodes)
+        fatalThrow(rc);
+    detach();
 }
 
 void readMem(u8* out, u64 offset, u64 size)
@@ -452,52 +469,56 @@ void clickSequence(char* seq, u8* token)
 
 void dateSkip(int resetTimeAfterSkips, int resetNTP)
 {
-    if(origTime == 0)
+    if (origTime == 0)
     {
         Result ot = timeGetCurrentTime(TimeType_UserSystemClock, (u64*)&origTime);
-        if(R_FAILED(ot))
+        if (R_FAILED(ot))
             fatalThrow(ot);
     }
 
     Result tg = timeGetCurrentTime(TimeType_UserSystemClock, (u64*)&curTime); //Current system time
-    if(R_FAILED(tg))
+    if (R_FAILED(tg))
         fatalThrow(tg);
 
     Result ts = timeSetCurrentTime(TimeType_NetworkSystemClock, (uint64_t)(curTime + 86400)); //Set new time
-    if(R_FAILED(ts))
+    if (R_FAILED(ts))
         fatalThrow(ts);
 
     resetSkips++;
-    if(resetNTP == 0 && resetTimeAfterSkips != 0 && (resetTimeAfterSkips == resetSkips)) //Reset time after # of skips
+    if (resetNTP == 0 && resetTimeAfterSkips != 0 && (resetTimeAfterSkips == resetSkips)) //Reset time after # of skips
         resetTime();
-    else if(resetNTP != 0 && resetTimeAfterSkips != 0 && (resetTimeAfterSkips == resetSkips))
+    else if (resetNTP != 0 && resetTimeAfterSkips != 0 && (resetTimeAfterSkips == resetSkips))
         resetTimeNTP();
 }
 
 void resetTime()
 {
-    if(curTime == 0)
+    if (curTime == 0)
     {
         Result ct = timeGetCurrentTime(TimeType_UserSystemClock, (u64*)&curTime); //Current system time
-        if(R_FAILED(ct))
+        if (R_FAILED(ct))
             fatalThrow(ct);
     }
 
-    resetSkips = 0;
     struct tm currentTime = *localtime(&curTime);
     struct tm timeReset = *localtime(&origTime);
     timeReset.tm_hour = currentTime.tm_hour;
     timeReset.tm_min = currentTime.tm_min;
     timeReset.tm_sec = currentTime.tm_sec;
     Result rt = timeSetCurrentTime(TimeType_NetworkSystemClock, mktime(&timeReset));
-    if(R_FAILED(rt))
+    resetSkips = 0;
+    curTime = 0;
+    origTime = 0;
+    if (R_FAILED(rt))
         fatalThrow(rt);
 }
 
 void resetTimeNTP()
 {
     resetSkips = 0;
+    curTime = 0;
+    origTime = 0;
     Result ts = timeSetCurrentTime(TimeType_NetworkSystemClock, ntpGetTime());
-    if(R_FAILED(ts))
+    if (R_FAILED(ts))
         fatalThrow(ts);
 }
