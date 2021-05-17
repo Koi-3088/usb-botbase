@@ -46,8 +46,10 @@ void getBuildID(MetaData* meta, u64 pid);
 MetaData getMetaData(void);
 
 void poke(u64 offset, u64 size, u8* val);
+void pokeUSB(u64 offset, u64 size, u8* val);
 void writeMem(u64 offset, u64 size, u8* val);
 void peek(u64 offset, u64 size);
+void peekUSB(u8* outData, u64 offset, u64 size);
 void readMem(u8* out, u64 offset, u64 size);
 void click(HidNpadButton btn);
 void press(HidNpadButton btn);
