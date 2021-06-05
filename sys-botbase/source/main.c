@@ -40,6 +40,8 @@ void sub_freeze(void *arg);
 void sub_touch(void *arg);
 void sub_key(void *arg);
 void sub_click(void *arg);
+void usbMainLoop();
+void wifiMainLoop();
 
 // locks for thread
 Mutex freezeMutex, touchMutex, keyMutex, clickMutex;
@@ -51,8 +53,9 @@ u8 clickThreadState = 0;
 KeyData currentKeyEvent = {0};
 TouchData currentTouchEvent = {0};
 char* currentClick = NULL;
-bool WiFi;
 bool USB;
+int fr_count = 0;
+Result res;
 
 // for cancelling the touch/click thread
 u8 touchToken = 0;
@@ -768,7 +771,7 @@ int argmain(int argc, char **argv)
 
     //turns on the screen (display)
     if (!strcmp(argv[0], "screenOn"))
-	{
+    {
         ViDisplay temp_display;
         Result rc = viOpenDisplay("Internal", &temp_display);
         if (R_FAILED(rc))
@@ -782,18 +785,14 @@ int argmain(int argc, char **argv)
     }
     
     if (!strcmp(argv[0], "charge"))
-	{
+    {
         u32 charge;
         psmGetBatteryChargePercentage(&charge);
         printf("%d\n", charge);
     }
 
-	if(!strcmp(argv[0], "daySkip"))
-    {
-        int resetTimeAfterSkips = parseStringToInt(argv[1]);
-        int resetNTP = parseStringToInt(argv[2]);
-        dateSkip(resetTimeAfterSkips, resetNTP);
-    }
+    if(!strcmp(argv[0], "daySkip"))
+        dateSkip();
 
     if(!strcmp(argv[0], "resetTime"))
         resetTime();
@@ -835,168 +834,44 @@ int main()
         fclose(config);
         if (strcmp(strlwr(str), "usb") == 0)
             USB = true;
-        else WiFi = true;
     }
-    else WiFi = true;
 
-    USBResponse response;
-    char *linebuf = malloc(sizeof(char) * MAX_LINE_LENGTH);
-
-    int c = sizeof(struct sockaddr_in);
-    struct sockaddr_in client;
-
-    int fd_count = 0;
-    int fd_size = 5;
-    struct pollfd *pfds = malloc(sizeof *pfds * fd_size);
-
-    int listenfd = setupServerSocket();
-    pfds[0].fd = listenfd;
-    pfds[0].events = POLLIN;
-    fd_count = 1;
-
-    int newfd;
-	
-	Result rc;
-	int fr_count = 0;
-	
     initFreezes();
 
-	// freeze thread
-	mutexInit(&freezeMutex);
-	rc = threadCreate(&freezeThread, sub_freeze, (void*)&freeze_thr_state, NULL, THREAD_SIZE, 0x2C, -2); 
-	if (R_SUCCEEDED(rc))
-        rc = threadStart(&freezeThread);
+    // freeze thread
+    mutexInit(&freezeMutex);
+    res = threadCreate(&freezeThread, sub_freeze, (void*)&freeze_thr_state, NULL, THREAD_SIZE, 0x2C, -2);
+    if (R_SUCCEEDED(res))
+        res = threadStart(&freezeThread);
 
     // touch thread
     mutexInit(&touchMutex);
-    rc = threadCreate(&touchThread, sub_touch, (void*)&currentTouchEvent, NULL, THREAD_SIZE, 0x2C, -2); 
-    if (R_SUCCEEDED(rc))
-        rc = threadStart(&touchThread);
+    res = threadCreate(&touchThread, sub_touch, (void*)&currentTouchEvent, NULL, THREAD_SIZE, 0x2C, -2);
+    if (R_SUCCEEDED(res))
+        res = threadStart(&touchThread);
 
     // key thread
     mutexInit(&keyMutex);
-    rc = threadCreate(&keyboardThread, sub_key, (void*)&currentKeyEvent, NULL, THREAD_SIZE, 0x2C, -2); 
-    if (R_SUCCEEDED(rc))
-        rc = threadStart(&keyboardThread);
+    res = threadCreate(&keyboardThread, sub_key, (void*)&currentKeyEvent, NULL, THREAD_SIZE, 0x2C, -2);
+    if (R_SUCCEEDED(res))
+        res = threadStart(&keyboardThread);
 
     // click sequence thread
     mutexInit(&clickMutex);
-    rc = threadCreate(&clickThread, sub_click, (void*)currentClick, NULL, THREAD_SIZE, 0x2C, -2); 
-    if (R_SUCCEEDED(rc))
-        {rc = threadStart(&clickThread);} // curly brackets remove compiler warning
-    
-	flashLed();
-    if (WiFi)
+    res = threadCreate(&clickThread, sub_click, (void*)currentClick, NULL, THREAD_SIZE, 0x2C, -2);
+    if (R_SUCCEEDED(res))
     {
-        while (appletMainLoop())
-        {
-            poll(pfds, fd_count, -1);
-            mutexLock(&freezeMutex);
-            for (int i = 0; i < fd_count; i++)
-            {
-                if (pfds[i].revents & POLLIN)
-                {
-                    if (pfds[i].fd == listenfd)
-                    {
-                        newfd = accept(listenfd, (struct sockaddr*)&client, (socklen_t*)&c);
-                        if (newfd != -1)
-                        {
-                            add_to_pfds(&pfds, newfd, &fd_count, &fd_size);
-                        }
-                        else
-                        {
-                            svcSleepThread(1e+9L);
-                            close(listenfd);
-                            listenfd = setupServerSocket();
-                            pfds[0].fd = listenfd;
-                            pfds[0].events = POLLIN;
-                            break;
-                        }
-                    }
-                    else
-                    {
-                        bool readEnd = false;
-                        int readBytesSoFar = 0;
-                        while (!readEnd)
-                        {
-                            int len = recv(pfds[i].fd, &linebuf[readBytesSoFar], 1, 0);
-                            if (len <= 0)
-                            {
-                                close(pfds[i].fd);
-                                del_from_pfds(pfds, i, &fd_count);
-                                readEnd = true;
-                            }
-                            else
-                            {
-                                readBytesSoFar += len;
-                                if (linebuf[readBytesSoFar - 1] == '\n')
-                                {
-                                    readEnd = true;
-                                    linebuf[readBytesSoFar - 1] = 0;
+        res = threadStart(&clickThread);
+    } // curly brackets remove compiler warning
 
-                                    fflush(stdout);
-                                    dup2(pfds[i].fd, STDOUT_FILENO);
+    if (USB)
+        usbMainLoop();
+    else wifiMainLoop();
 
-                                    parseArgs(linebuf, &argmain);
-
-                                    if (echoCommands)
-                                    {
-                                        printf("%s\n", linebuf);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            fr_count = getFreezeCount(false);
-            if (fr_count == 0)
-                freeze_thr_state = Idle;
-            mutexUnlock(&freezeMutex);
-            svcSleepThread(mainLoopSleepTime * 1e+6L);
-        }
-    }
-    else
+    if (R_SUCCEEDED(res))
     {
-        while (appletMainLoop())
-        {
-            mutexLock(&freezeMutex);
-            int lenUSB;
-            usbCommsRead(&lenUSB, sizeof(lenUSB)); //Should use malloc
-            char linebufUSB[lenUSB + 1];
-
-            for (int i = 0; i < lenUSB + 1; i++)
-                linebufUSB[i] = 0;
-
-            usbCommsRead(&linebufUSB, lenUSB);
-
-            //Adds necessary escape characters for pasrser
-            linebufUSB[lenUSB - 1] = '\n';
-            linebufUSB[lenUSB - 2] = '\r';
-
-            fflush(stdout);
-            parseArgs(linebufUSB, &argmain);
-
-            if (echoCommands)
-            {
-                response.size = sizeof(linebufUSB);
-                response.data = &linebufUSB;
-                sendUsbResponse(response);
-            }
-
-            fr_count = getFreezeCount(false);
-            if (fr_count == 0)
-                freeze_thr_state = Idle;
-            mutexUnlock(&freezeMutex);
-            svcSleepThread(mainLoopSleepTime * 1e+6L);
-        }
-    }
-	
-	if (R_SUCCEEDED(rc))
-    {
-	    freeze_thr_state = Exit;
-		threadWaitForExit(&freezeThread);
+        freeze_thr_state = Exit;
+        threadWaitForExit(&freezeThread);
         threadClose(&freezeThread);
         currentTouchEvent.state = 3;
         threadWaitForExit(&touchThread);
@@ -1006,12 +881,141 @@ int main()
         threadClose(&keyboardThread);
         clickThreadState = 1;
         threadWaitForExit(&clickThread);
-	}
-	
-	clearFreezes();
+    }
+
+    clearFreezes();
     freeFreezes();
-	
+
     return 0;
+}
+
+void wifiMainLoop()
+{
+    char* linebuf = malloc(sizeof(char) * MAX_LINE_LENGTH);
+
+    int c = sizeof(struct sockaddr_in);
+    struct sockaddr_in client;
+
+    int fd_count = 0;
+    int fd_size = 5;
+    struct pollfd* pfds = malloc(sizeof * pfds * fd_size);
+
+    int listenfd = setupServerSocket();
+    pfds[0].fd = listenfd;
+    pfds[0].events = POLLIN;
+    fd_count = 1;
+
+    int newfd;
+
+    flashLed();
+
+    while (appletMainLoop())
+    {
+        poll(pfds, fd_count, -1);
+        mutexLock(&freezeMutex);
+        for (int i = 0; i < fd_count; i++)
+        {
+            if (pfds[i].revents & POLLIN)
+            {
+                if (pfds[i].fd == listenfd)
+                {
+                    newfd = accept(listenfd, (struct sockaddr*)&client, (socklen_t*)&c);
+                    if (newfd != -1)
+                    {
+                        add_to_pfds(&pfds, newfd, &fd_count, &fd_size);
+                    }
+                    else
+                    {
+                        svcSleepThread(1e+9L);
+                        close(listenfd);
+                        listenfd = setupServerSocket();
+                        pfds[0].fd = listenfd;
+                        pfds[0].events = POLLIN;
+                        break;
+                    }
+                }
+                else
+                {
+                    bool readEnd = false;
+                    int readBytesSoFar = 0;
+                    while (!readEnd)
+                    {
+                        int len = recv(pfds[i].fd, &linebuf[readBytesSoFar], 1, 0);
+                        if (len <= 0)
+                        {
+                            close(pfds[i].fd);
+                            del_from_pfds(pfds, i, &fd_count);
+                            readEnd = true;
+                        }
+                        else
+                        {
+                            readBytesSoFar += len;
+                            if (linebuf[readBytesSoFar - 1] == '\n')
+                            {
+                                readEnd = true;
+                                linebuf[readBytesSoFar - 1] = 0;
+
+                                fflush(stdout);
+                                dup2(pfds[i].fd, STDOUT_FILENO);
+
+                                parseArgs(linebuf, &argmain);
+
+                                if (echoCommands)
+                                {
+                                    printf("%s\n", linebuf);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        fr_count = getFreezeCount(false);
+        if (fr_count == 0)
+            freeze_thr_state = Idle;
+        mutexUnlock(&freezeMutex);
+        svcSleepThread(mainLoopSleepTime * 1e+6L);
+    }
+}
+
+void usbMainLoop()
+{
+    USBResponse response;
+    flashLed();
+
+    while (appletMainLoop())
+    {
+        int lenUSB;
+        usbCommsRead(&lenUSB, sizeof(lenUSB)); //Should use malloc
+        char linebufUSB[lenUSB + 1];
+
+        mutexLock(&freezeMutex);
+        for (int i = 0; i < lenUSB + 1; i++)
+            linebufUSB[i] = 0;
+
+        usbCommsRead(&linebufUSB, lenUSB);
+
+        //Adds necessary escape characters for pasrser
+        linebufUSB[lenUSB - 1] = '\n';
+        linebufUSB[lenUSB - 2] = '\r';
+
+        fflush(stdout);
+        parseArgs(linebufUSB, &argmain);
+
+        if (echoCommands)
+        {
+            response.size = sizeof(linebufUSB);
+            response.data = &linebufUSB;
+            sendUsbResponse(response);
+        }
+
+        fr_count = getFreezeCount(false);
+        if (fr_count == 0)
+            freeze_thr_state = Idle;
+        mutexUnlock(&freezeMutex);
+        svcSleepThread(mainLoopSleepTime * 1e+6L);
+    }
 }
 
 void sub_freeze(void *arg)
