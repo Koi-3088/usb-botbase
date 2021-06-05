@@ -17,7 +17,6 @@ HiddbgHdlsDeviceInfo controllerDevice = {0};
 HiddbgHdlsState controllerState = {0};
 time_t curTime = 0;
 time_t origTime = 0;
-int resetSkips = 0;
 
 //Keyboard:
 HiddbgKeyboardAutoPilotState dummyKeyboardState = {0};
@@ -477,7 +476,7 @@ void clickSequence(char* seq, u8* token)
     }
 }
 
-void dateSkip(int resetTimeAfterSkips, int resetNTP)
+void dateSkip()
 {
     if (origTime == 0)
     {
@@ -493,12 +492,6 @@ void dateSkip(int resetTimeAfterSkips, int resetNTP)
     Result ts = timeSetCurrentTime(TimeType_NetworkSystemClock, (uint64_t)(curTime + 86400)); //Set new time
     if (R_FAILED(ts))
         fatalThrow(ts);
-
-    resetSkips++;
-    if (resetNTP == 0 && resetTimeAfterSkips != 0 && (resetTimeAfterSkips == resetSkips)) //Reset time after # of skips
-        resetTime();
-    else if (resetNTP != 0 && resetTimeAfterSkips != 0 && (resetTimeAfterSkips == resetSkips))
-        resetTimeNTP();
 }
 
 void resetTime()
@@ -510,13 +503,19 @@ void resetTime()
             fatalThrow(ct);
     }
 
+    if (origTime == 0)
+    {
+        Result ct = timeGetCurrentTime(TimeType_UserSystemClock, (u64*)&origTime);
+        if (R_FAILED(ct))
+            fatalThrow(ct);
+    }
+
     struct tm currentTime = *localtime(&curTime);
     struct tm timeReset = *localtime(&origTime);
     timeReset.tm_hour = currentTime.tm_hour;
     timeReset.tm_min = currentTime.tm_min;
     timeReset.tm_sec = currentTime.tm_sec;
     Result rt = timeSetCurrentTime(TimeType_NetworkSystemClock, mktime(&timeReset));
-    resetSkips = 0;
     curTime = 0;
     origTime = 0;
     if (R_FAILED(rt))
@@ -525,7 +524,6 @@ void resetTime()
 
 void resetTimeNTP()
 {
-    resetSkips = 0;
     curTime = 0;
     origTime = 0;
     Result ts = timeSetCurrentTime(TimeType_NetworkSystemClock, ntpGetTime());
