@@ -599,7 +599,7 @@ int argmain(int argc, char **argv)
     // possibly redundant between the one above, one needs to go eventually. (little endian, flip it yourself if required)
 	if (!strcmp(argv[0], "pointerAll"))
 	{
-		if(argc < 3)
+        if (argc < 3)
             return 0;
         s64 finalJump = parseStringToSignedLong(argv[argc-1]);
         u64 count = argc - 2;
@@ -993,9 +993,7 @@ int main()
     mutexInit(&clickMutex);
     res = threadCreate(&clickThread, sub_click, (void*)currentClick, NULL, THREAD_SIZE, 0x2C, -2);
     if (R_SUCCEEDED(res))
-    {
         res = threadStart(&clickThread);
-    } // curly brackets remove compiler warning
 
     if (USB)
         usbMainLoop();
