@@ -25,6 +25,7 @@ u64 buttonClickSleepTime = 50;
 u64 keyPressSleepTime = 25;
 u64 pollRate = 17; // polling is linked to screen refresh rate (system UI) or game framerate. Most cases this is 1/60 or 1/30
 u32 fingerDiameter = 50;
+HiddbgHdlsSessionId sessionId = { 0 };
 
 void attach()
 {
@@ -39,6 +40,22 @@ void attach()
     rc = svcDebugActiveProcess(&debughandle, pid);
     if (R_FAILED(rc) && debugResultCodes)
         printf("svcDebugActiveProcess: %d\n", rc);
+}
+
+void detachController()
+{
+    initController();
+
+    Result rc = hiddbgDetachHdlsVirtualDevice(controllerHandle);
+    if (R_FAILED(rc) && debugResultCodes)
+        printf("hiddbgDetachHdlsVirtualDevice: %d\n", rc);
+    rc = hiddbgReleaseHdlsWorkBuffer(sessionId);
+    if (R_FAILED(rc) && debugResultCodes)
+        printf("hiddbgReleaseHdlsWorkBuffer: %d\n", rc);
+    hiddbgExit();
+    bControllerIsInitialised = false;
+
+    sessionId.id = 0;
 }
 
 void detach(){
@@ -144,7 +161,7 @@ void initController()
     controllerState.analog_stick_l.y = -0x0;
     controllerState.analog_stick_r.x = 0x0;
     controllerState.analog_stick_r.y = -0x0;
-    rc = hiddbgAttachHdlsWorkBuffer();
+    rc = hiddbgAttachHdlsWorkBuffer(&sessionId);
     if (R_FAILED(rc) && debugResultCodes)
         printf("hiddbgAttachHdlsWorkBuffer: %d\n", rc);
     rc = hiddbgAttachHdlsVirtualDevice(&controllerHandle, &controllerDevice);
