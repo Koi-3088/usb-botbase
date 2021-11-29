@@ -11,7 +11,6 @@
 #include "commands.h"
 #include "args.h"
 #include "util.h"
-#include "pm_ams.h"
 #include "freeze.h"
 #include <poll.h>
 #include "time.h"
@@ -53,9 +52,7 @@ u8 clickThreadState = 0; // 1 = break thread
 KeyData currentKeyEvent = {0};
 TouchData currentTouchEvent = {0};
 char* currentClick = NULL;
-bool USB;
-int fr_count = 0;
-Result res;
+bool usb = true;
 
 // for cancelling the touch/click thread
 u8 touchToken = 0;
@@ -155,6 +152,7 @@ void __appExit(void)
     socketExit();
     viExit();
     lblExit();
+    usbCommsExit();
 }
 
 u64 mainLoopSleepTime = 50;
@@ -193,11 +191,10 @@ void makeClickSeq(char* seq)
 
 int argmain(int argc, char **argv)
 {
-    USBResponse response;
     if (argc == 0)
         return 0;
 
-
+    USBResponse response;
     //peek <address in hex or dec> <amount of bytes in hex or dec>
     if (!strcmp(argv[0], "peek"))
     {
@@ -208,15 +205,16 @@ int argmain(int argc, char **argv)
         u64 offset = parseStringToInt(argv[1]);
         u64 size = parseStringToInt(argv[2]);
 
-		if (USB)
+        //u8 data[size];
+        u8* out = malloc(sizeof(u8) * size);
+        peek(out, meta.heap_base + offset, size);
+		if (usb)
 		{
-            u8 data[size];
-			peekUSB(data, meta.heap_base + offset, size);
 			response.size = size;
-			response.data = &data[0];
+			response.data = &out[0];
 			sendUsbResponse(response);
 		}
-		else peek(meta.heap_base + offset, size);
+        free(out);
     }
 
     if (!strcmp(argv[0], "peekMulti"))
@@ -235,7 +233,20 @@ int argmain(int argc, char **argv)
             offsets[i] = meta.heap_base + parseStringToInt(argv[(i*2)+1]);
             sizes[i] = parseStringToInt(argv[(i*2)+2]);
         }
-        peekMulti(offsets, sizes, itemCount);
+
+        u64 totalSize = 0;
+        for (int i = 0; i < itemCount; i++)
+            totalSize += sizes[i];
+
+        u8* out = malloc(sizeof(u8) * totalSize);
+        peekMulti(out, offsets, sizes, itemCount, totalSize);
+        if (usb)
+        {
+            response.size = totalSize;
+            response.data = &out[0];
+            sendUsbResponse(response);
+        }
+        free(out);
     }
 
     if (!strcmp(argv[0], "peekAbsolute"))
@@ -245,16 +256,15 @@ int argmain(int argc, char **argv)
 
         u64 offset = parseStringToInt(argv[1]);
         u64 size = parseStringToInt(argv[2]);
+        u8 data[size];
 
-		if (USB)
+        peek(data, offset, size);
+		if (usb)
 		{
-            u8 data[size];
-			peekUSB(data, offset, size);
 			response.size = size;
 			response.data = &data[0];
 			sendUsbResponse(response);
 		}
-        else peek(offset, size);
     }
 
     if (!strcmp(argv[0], "peekAbsoluteMulti"))
@@ -271,7 +281,20 @@ int argmain(int argc, char **argv)
             offsets[i] = parseStringToInt(argv[(i*2)+1]);
             sizes[i] = parseStringToInt(argv[(i*2)+2]);
         }
-        peekMulti(offsets, sizes, itemCount);
+
+        u64 totalSize = 0;
+        for (int i = 0; i < itemCount; i++)
+            totalSize += sizes[i];
+
+        u8* out = malloc(sizeof(u8) * totalSize);
+        peekMulti(out, offsets, sizes, itemCount, totalSize);
+        if (usb)
+        {
+            response.size = totalSize;
+            response.data = &out[0];
+            sendUsbResponse(response);
+        }
+        free(out);
     }
 
     if (!strcmp(argv[0], "peekMain"))
@@ -282,16 +305,15 @@ int argmain(int argc, char **argv)
         MetaData meta = getMetaData();
         u64 offset = parseStringToInt(argv[1]);
         u64 size = parseStringToInt(argv[2]);
+        u8 data[size];
 
-		if (USB)
+        peek(data, meta.main_nso_base + offset, size);
+		if (usb)
 		{
-            u8 data[size];
-			peekUSB(data, meta.main_nso_base + offset, size);
 			response.size = size;
 			response.data = &data[0];
 			sendUsbResponse(response);
 		}
-        else peek(meta.main_nso_base + offset, size);
     }
 
     if (!strcmp(argv[0], "peekMainMulti"))
@@ -310,7 +332,20 @@ int argmain(int argc, char **argv)
             offsets[i] = meta.main_nso_base + parseStringToInt(argv[(i*2)+1]);
             sizes[i] = parseStringToInt(argv[(i*2)+2]);
         }
-        peekMulti(offsets, sizes, itemCount);
+
+        u64 totalSize = 0;
+        for (int i = 0; i < itemCount; i++)
+            totalSize += sizes[i];
+
+        u8* out = malloc(sizeof(u8) * totalSize);
+        peekMulti(out, offsets, sizes, itemCount, totalSize);
+        if (usb)
+        {
+            response.size = totalSize;
+            response.data = &out[0];
+            sendUsbResponse(response);
+        }
+        free(out);
     }
 
     //poke <address in hex or dec> <data in hex or dec>
@@ -324,9 +359,7 @@ int argmain(int argc, char **argv)
         u64 size = 0;
         u8* data = parseStringToByteBuffer(argv[2], &size);
 
-		if (USB)
-			pokeUSB(meta.heap_base + offset, size, data);
-        else poke(meta.heap_base + offset, size, data);
+        poke(meta.heap_base + offset, size, data);
         free(data);
     } 
     
@@ -339,9 +372,7 @@ int argmain(int argc, char **argv)
         u64 size = 0;
         u8* data = parseStringToByteBuffer(argv[2], &size);
 
-		if (USB)
-			pokeUSB(offset, size, data);
-        else poke(offset, size, data);
+        poke(offset, size, data);
         free(data);
     }
         
@@ -355,9 +386,7 @@ int argmain(int argc, char **argv)
         u64 size = 0;
         u8* data = parseStringToByteBuffer(argv[2], &size);
 
-		if (USB)
-			pokeUSB(meta.main_nso_base + offset, size, data);
-        else poke(meta.main_nso_base + offset, size, data);
+        poke(meta.main_nso_base + offset, size, data);
         free(data);
     } 
 
@@ -489,7 +518,7 @@ int argmain(int argc, char **argv)
 
     if(!strcmp(argv[0], "getTitleID")){
         MetaData meta = getMetaData();
-		if (USB)
+		if (usb)
 		{
 			response.size = sizeof(meta.titleID);
 			response.data = &meta.titleID;
@@ -505,7 +534,7 @@ int argmain(int argc, char **argv)
         SetLanguage language = SetLanguage_ENUS;
         setGetSystemLanguage(&languageCode);   
         setMakeLanguage(languageCode, &language);
-		if (USB)
+		if (usb)
 		{
 			response.size = sizeof(language);
 			response.data = &language;
@@ -516,7 +545,7 @@ int argmain(int argc, char **argv)
  
     if(!strcmp(argv[0], "getMainNsoBase")){
         MetaData meta = getMetaData();
-		if (USB)
+		if (usb)
 		{
 			response.size = sizeof(meta.main_nso_base);
 			response.data = &meta.main_nso_base;
@@ -527,7 +556,7 @@ int argmain(int argc, char **argv)
     
     if(!strcmp(argv[0], "getBuildID")){
         MetaData meta = getMetaData();
-		if (USB)
+		if (usb)
 		{
 			response.size = sizeof(u8);
 			response.data = &meta.buildID;
@@ -539,7 +568,7 @@ int argmain(int argc, char **argv)
 
     if(!strcmp(argv[0], "getHeapBase")){
         MetaData meta = getMetaData();
-		if (USB)
+		if (usb)
 		{
 			response.size = sizeof(meta.heap_base);
 			response.data = &meta.heap_base;
@@ -553,7 +582,13 @@ int argmain(int argc, char **argv)
             return 0;
         u64 programId = parseStringToInt(argv[1]);
         bool isRunning = getIsProgramOpen(programId);
-        printf("%d\n", isRunning);
+		if (usb)
+		{
+			response.size = sizeof(isRunning);
+			response.data = &isRunning;
+			sendUsbResponse(response);
+		}
+        else printf("%d\n", isRunning);
     }
 
     if(!strcmp(argv[0], "pixelPeek")){
@@ -563,11 +598,10 @@ int argmain(int argc, char **argv)
         u64 outSize = 0;
 
         Result rc = capsscCaptureForDebug(buf, bSize, &outSize);
-
         if (R_FAILED(rc) && debugResultCodes)
             printf("capssc, 1204: %d\n", rc);
 
-		if (USB)
+		if (usb)
 		{
 			response.data = &buf[0];
 			response.size = outSize;
@@ -587,7 +621,14 @@ int argmain(int argc, char **argv)
     }
 
     if(!strcmp(argv[0], "getVersion")){
-        printf("2.1\n");
+        if (usb)
+        {
+            char* buf = malloc(sizeof("2.1\n"));
+            response.data = &buf[0];
+            response.size = sizeof(buf);
+            sendUsbResponse(response);
+        }
+        else printf("2.1\n");
     }
 	
 	// follow pointers and print absolute offset (little endian, flip it yourself if required)
@@ -599,8 +640,15 @@ int argmain(int argc, char **argv)
 		s64 jumps[argc-1];
 		for (int i = 1; i < argc; i++)
 			jumps[i-1] = parseStringToSignedLong(argv[i]);
+
 		u64 solved = followMainPointer(jumps, argc-1);
-		printf("%016lX\n", solved);
+        if (usb)
+        {
+            response.data = &solved;
+            response.size = sizeof(solved);
+            sendUsbResponse(response);
+        }
+		else printf("%016lX\n", solved);
 	}
 
     // pointerAll <first (main) jump> <additional jumps> <final jump in pointerexpr> 
@@ -614,10 +662,18 @@ int argmain(int argc, char **argv)
 		s64 jumps[count];
 		for (int i = 1; i < argc-1; i++)
 			jumps[i-1] = parseStringToSignedLong(argv[i]);
+
 		u64 solved = followMainPointer(jumps, count);
         if (solved != 0)
             solved += finalJump;
-		printf("%016lX\n", solved);
+
+        if (usb)
+        {
+            response.data = &solved;
+            response.size = sizeof(solved);
+            sendUsbResponse(response);
+        }
+        else printf("%016lX\n", solved);
 	}
 	
 	// pointerRelative <first (main) jump> <additional jumps> <final jump in pointerexpr> 
@@ -638,7 +694,14 @@ int argmain(int argc, char **argv)
             MetaData meta = getMetaData();
             solved -= meta.heap_base;
         }
-		printf("%016lX\n", solved);
+		
+        if (usb)
+        {
+            response.data = &solved;
+            response.size = sizeof(solved);
+            sendUsbResponse(response);
+        }
+        else printf("%016lX\n", solved);
 	}
 
     // pointerPeek <amount of bytes in hex or dec> <first (main) jump> <additional jumps> <final jump in pointerexpr>
@@ -656,7 +719,15 @@ int argmain(int argc, char **argv)
 			jumps[i-2] = parseStringToSignedLong(argv[i]);
 		u64 solved = followMainPointer(jumps, count);
         solved += finalJump;
-        peek(solved, size);
+
+        u8 data[size];
+        peek(data, solved, size);
+        if (usb)
+        {
+            response.size = size;
+            response.data = &data[0];
+            sendUsbResponse(response);
+        }
 	}
 
     // pointerPeekMulti <amount of bytes in hex or dec> <first (main) jump> <additional jumps> <final jump in pointerexpr> split by asterisks (*)
@@ -705,7 +776,19 @@ int argmain(int argc, char **argv)
             lastIndex = currIndex;
         }
         
-        peekMulti(offsets, sizes, itemCount);
+        u64 totalSize = 0;
+        for (int i = 0; i < itemCount; i++)
+            totalSize += sizes[i];
+
+        u8* out = malloc(sizeof(u8) * totalSize);
+        peekMulti(out, offsets, sizes, itemCount, totalSize);
+        if (usb)
+        {
+            response.size = totalSize;
+            response.data = &out[0];
+            sendUsbResponse(response);
+        }
+        free(out);
 	}
 
     // pointerPoke <data to be sent> <first (main) jump> <additional jumps> <final jump in pointerexpr>
@@ -928,7 +1011,14 @@ int argmain(int argc, char **argv)
         if (R_FAILED(rc))
             fatalThrow(rc);
         psmGetBatteryChargePercentage(&charge);
-        printf("%d\n", charge);
+
+        if (usb)
+        {
+            response.size = sizeof(u32);
+            response.data = &charge;
+            sendUsbResponse(response);
+        }
+        else printf("%d\n", charge);
         psmExit();
     }
 
@@ -973,41 +1063,42 @@ int main()
     {
         fscanf(config, "%[^\n]", str);
         fclose(config);
-        if (strcmp(strlwr(str), "usb") == 0)
-            USB = true;
+        if (strcmp(strlwr(str), "wifi") == 0)
+            usb = false;
     }
 
+    Result rc;
     initFreezes();
 
     // freeze thread
     mutexInit(&freezeMutex);
-    res = threadCreate(&freezeThread, sub_freeze, (void*)&freeze_thr_state, NULL, THREAD_SIZE, 0x2C, -2);
-    if (R_SUCCEEDED(res))
-        res = threadStart(&freezeThread);
+    rc = threadCreate(&freezeThread, sub_freeze, (void*)&freeze_thr_state, NULL, THREAD_SIZE, 0x2C, -2);
+    if (R_SUCCEEDED(rc))
+        rc = threadStart(&freezeThread);
 
     // touch thread
     mutexInit(&touchMutex);
-    res = threadCreate(&touchThread, sub_touch, (void*)&currentTouchEvent, NULL, THREAD_SIZE, 0x2C, -2);
-    if (R_SUCCEEDED(res))
-        res = threadStart(&touchThread);
+    rc = threadCreate(&touchThread, sub_touch, (void*)&currentTouchEvent, NULL, THREAD_SIZE, 0x2C, -2);
+    if (R_SUCCEEDED(rc))
+        rc = threadStart(&touchThread);
 
     // key thread
     mutexInit(&keyMutex);
-    res = threadCreate(&keyboardThread, sub_key, (void*)&currentKeyEvent, NULL, THREAD_SIZE, 0x2C, -2);
-    if (R_SUCCEEDED(res))
-        res = threadStart(&keyboardThread);
+    rc = threadCreate(&keyboardThread, sub_key, (void*)&currentKeyEvent, NULL, THREAD_SIZE, 0x2C, -2);
+    if (R_SUCCEEDED(rc))
+        rc = threadStart(&keyboardThread);
 
     // click sequence thread
     mutexInit(&clickMutex);
-    res = threadCreate(&clickThread, sub_click, (void*)currentClick, NULL, THREAD_SIZE, 0x2C, -2);
-    if (R_SUCCEEDED(res))
-        res = threadStart(&clickThread);
+    rc = threadCreate(&clickThread, sub_click, (void*)currentClick, NULL, THREAD_SIZE, 0x2C, -2);
+    if (R_SUCCEEDED(rc))
+        rc = threadStart(&clickThread);
 
-    if (USB)
+    if (usb)
         usbMainLoop();
     else wifiMainLoop();
 
-    if (R_SUCCEEDED(res))
+    if (R_SUCCEEDED(rc))
     {
         freeze_thr_state = Exit;
         threadWaitForExit(&freezeThread);
@@ -1024,7 +1115,6 @@ int main()
 
     clearFreezes();
     freeFreezes();
-
     return 0;
 }
 
@@ -1045,6 +1135,7 @@ void wifiMainLoop()
     fd_count = 1;
 
     int newfd;
+    int fr_count = 0;
     flashLed();
 
     while (appletMainLoop())
@@ -1120,6 +1211,7 @@ void wifiMainLoop()
 void usbMainLoop()
 {
     USBResponse response;
+    int fr_count = 0;
     flashLed();
 
     while (appletMainLoop())

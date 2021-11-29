@@ -190,15 +190,6 @@ void poke(u64 offset, u64 size, u8* val)
     detach();
 }
 
-void pokeUSB(u64 offset, u64 size, u8* val)
-{
-    attach();
-    Result rc = svcWriteDebugProcessMemory(debughandle, val, offset, size);
-    if (R_FAILED(rc) && debugResultCodes)
-        fatalThrow(rc);
-    detach();
-}
-
 void writeMem(u64 offset, u64 size, u8* val)
 {
 	Result rc = svcWriteDebugProcessMemory(debughandle, val, offset, size);
@@ -206,29 +197,25 @@ void writeMem(u64 offset, u64 size, u8* val)
         printf("svcWriteDebugProcessMemory: %d\n", rc);
 }
 
-void peek(u64 offset, u64 size)
+void peek(u8* out, u64 offset, u64 size)
 {
-    u8 *out = malloc(sizeof(u8) * size);
     attach();
     readMem(out, offset, size);
     detach();
 
-    u64 i;
-    for (i = 0; i < size; i++)
+    if (!usb)
     {
-        printf("%02X", out[i]);
+        u64 i;
+        for (i = 0; i < size; i++)
+        {
+            printf("%02X", out[i]);
+        }
+        printf("\n");
     }
-    printf("\n");
-    free(out);
 }
 
-void peekMulti(u64* offset, u64* size, u64 count)
+void peekMulti(u8* out, u64* offset, u64* size, u64 count, u64 totalSize)
 {
-    u64 totalSize = 0;
-    for (int i = 0; i < count; i++)
-        totalSize += size[i];
-    
-    u8 *out = malloc(sizeof(u8) * totalSize);
     u64 ofs = 0;
     attach();
     for (int i = 0; i < count; i++)
@@ -238,21 +225,15 @@ void peekMulti(u64* offset, u64* size, u64 count)
     }
     detach();
 
-    u64 i;
-    for (i = 0; i < totalSize; i++)
+    if (!usb)
     {
-        printf("%02X", out[i]);
+        u64 i;
+        for (i = 0; i < totalSize; i++)
+        {
+            printf("%02X", out[i]);
+        }
+        printf("\n");
     }
-    printf("\n");
-    free(out);
-
-void peekUSB(u8 outData[], u64 offset, u64 size)
-{
-    attach();
-    Result rc = svcReadDebugProcessMemory(outData, debughandle, offset, size);
-    if(R_FAILED(rc) && debugResultCodes)
-        fatalThrow(rc);
-    detach();
 }
 
 void readMem(u8* out, u64 offset, u64 size)
@@ -321,7 +302,7 @@ u64 followMainPointer(s64* jumps, size_t count)
 {
 	u64 offset;
     u64 size = sizeof offset;
-	u8 *out = malloc(size);
+    u8* out = malloc(size);
 	MetaData meta = getMetaData(); 
 	
 	attach();
