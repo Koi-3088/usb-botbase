@@ -13,6 +13,7 @@ extern u64 buttonClickSleepTime;
 extern u64 keyPressSleepTime;
 extern u64 pollRate;
 extern u32 fingerDiameter;
+extern bool usb;
 
 typedef struct {
     u64 main_nso_base;
@@ -48,11 +49,9 @@ void getBuildID(MetaData* meta, u64 pid);
 MetaData getMetaData(void);
 
 void poke(u64 offset, u64 size, u8* val);
-void pokeUSB(u64 offset, u64 size, u8* val);
 void writeMem(u64 offset, u64 size, u8* val);
-void peek(u64 offset, u64 size);
-void peekMulti(u64* offset, u64* size, u64 count);
-void peekUSB(u8* outData, u64 offset, u64 size);
+void peek(u8* out, u64 offset, u64 size);
+void peekMulti(u8* out, u64* offset, u64* size, u64 count, u64 totalSize);
 void readMem(u8* out, u64 offset, u64 size);
 void click(HidNpadButton btn);
 void press(HidNpadButton btn);
