@@ -1,4 +1,6 @@
 #include <switch.h>
+#include <time.h>
+#define TOUCHPOLLMIN 15000000L // touch screen polling rate seems to be 15ms (no idea how to change)
 
 extern Handle debughandle;
 extern bool bControllerIsInitialised;
@@ -11,6 +13,7 @@ extern u64 buttonClickSleepTime;
 extern u64 keyPressSleepTime;
 extern u64 pollRate;
 extern u32 fingerDiameter;
+extern bool usb;
 
 typedef struct {
     u64 main_nso_base;
@@ -48,8 +51,8 @@ bool getIsProgramOpen(u64 id);
 
 void poke(u64 offset, u64 size, u8* val);
 void writeMem(u64 offset, u64 size, u8* val);
-void peek(u64 offset, u64 size);
-void peekMulti(u64* offset, u64* size, u64 count);
+void peek(u8* out, u64 offset, u64 size);
+void peekMulti(u8* out, u64* offset, u64* size, u64 count, u64 totalSize);
 void readMem(u8* out, u64 offset, u64 size);
 void click(HidNpadButton btn);
 void press(HidNpadButton btn);
@@ -60,3 +63,6 @@ u64 followMainPointer(s64* jumps, size_t count);
 void touch(HidTouchState* state, u64 sequentialCount, u64 holdTime, bool hold, u8* token);
 void key(HiddbgKeyboardAutoPilotState* states, u64 sequentialCount);
 void clickSequence(char* seq, u8* token);
+void dateSkip();
+void resetTime();
+void resetTimeNTP();

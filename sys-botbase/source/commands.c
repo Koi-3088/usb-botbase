@@ -6,6 +6,8 @@
 #include <math.h>
 #include "commands.h"
 #include "util.h"
+#include "time.h"
+#include "ntp.h"
 
 //Controller:
 bool bControllerIsInitialised = false;
@@ -13,6 +15,8 @@ HidDeviceType controllerInitializedType = HidDeviceType_FullKey3;
 HiddbgHdlsHandle controllerHandle = {0};
 HiddbgHdlsDeviceInfo controllerDevice = {0};
 HiddbgHdlsState controllerState = {0};
+time_t curTime = 0;
+time_t origTime = 0;
 
 //Keyboard:
 HiddbgKeyboardAutoPilotState dummyKeyboardState = {0};
@@ -193,29 +197,25 @@ void writeMem(u64 offset, u64 size, u8* val)
         printf("svcWriteDebugProcessMemory: %d\n", rc);
 }
 
-void peek(u64 offset, u64 size)
+void peek(u8* out, u64 offset, u64 size)
 {
-    u8 *out = malloc(sizeof(u8) * size);
     attach();
     readMem(out, offset, size);
     detach();
 
-    u64 i;
-    for (i = 0; i < size; i++)
+    if (!usb)
     {
-        printf("%02X", out[i]);
+        u64 i;
+        for (i = 0; i < size; i++)
+        {
+            printf("%02X", out[i]);
+        }
+        printf("\n");
     }
-    printf("\n");
-    free(out);
 }
 
-void peekMulti(u64* offset, u64* size, u64 count)
+void peekMulti(u8* out, u64* offset, u64* size, u64 count, u64 totalSize)
 {
-    u64 totalSize = 0;
-    for (int i = 0; i < count; i++)
-        totalSize += size[i];
-    
-    u8 *out = malloc(sizeof(u8) * totalSize);
     u64 ofs = 0;
     attach();
     for (int i = 0; i < count; i++)
@@ -225,13 +225,15 @@ void peekMulti(u64* offset, u64* size, u64 count)
     }
     detach();
 
-    u64 i;
-    for (i = 0; i < totalSize; i++)
+    if (!usb)
     {
-        printf("%02X", out[i]);
+        u64 i;
+        for (i = 0; i < totalSize; i++)
+        {
+            printf("%02X", out[i]);
+        }
+        printf("\n");
     }
-    printf("\n");
-    free(out);
 }
 
 void readMem(u8* out, u64 offset, u64 size)
@@ -271,15 +273,15 @@ void setStickState(int side, int dxVal, int dyVal)
 {
     initController();
     if (side == JOYSTICK_LEFT)
-    {	
+    {
         controllerState.analog_stick_l.x = dxVal;
-		controllerState.analog_stick_l.y = dyVal;
-	}
-	else
-	{
-		controllerState.analog_stick_r.x = dxVal;
-		controllerState.analog_stick_r.y = dyVal;
-	}
+        controllerState.analog_stick_l.y = dyVal;
+    }
+    else
+    {
+        controllerState.analog_stick_r.x = dxVal;
+        controllerState.analog_stick_r.y = dyVal;
+    }
     hiddbgSetHdlsState(controllerHandle, &controllerState);
 }
 
@@ -300,7 +302,7 @@ u64 followMainPointer(s64* jumps, size_t count)
 {
 	u64 offset;
     u64 size = sizeof offset;
-	u8 *out = malloc(size);
+    u8* out = malloc(size);
 	MetaData meta = getMetaData(); 
 	
 	attach();
@@ -453,4 +455,59 @@ void clickSequence(char* seq, u8* token)
 
         command = strtok(NULL, &delim);
     }
+}
+
+void dateSkip()
+{
+    if (origTime == 0)
+    {
+        Result ot = timeGetCurrentTime(TimeType_UserSystemClock, (u64*)&origTime);
+        if (R_FAILED(ot))
+            fatalThrow(ot);
+    }
+
+    Result tg = timeGetCurrentTime(TimeType_UserSystemClock, (u64*)&curTime); //Current system time
+    if (R_FAILED(tg))
+        fatalThrow(tg);
+
+    Result ts = timeSetCurrentTime(TimeType_NetworkSystemClock, (uint64_t)(curTime + 86400)); //Set new time
+    if (R_FAILED(ts))
+        fatalThrow(ts);
+}
+
+void resetTime()
+{
+    if (curTime == 0)
+    {
+        Result ct = timeGetCurrentTime(TimeType_UserSystemClock, (u64*)&curTime); //Current system time
+        if (R_FAILED(ct))
+            fatalThrow(ct);
+    }
+
+    if (origTime == 0)
+    {
+        Result ct = timeGetCurrentTime(TimeType_UserSystemClock, (u64*)&origTime);
+        if (R_FAILED(ct))
+            fatalThrow(ct);
+    }
+
+    struct tm currentTime = *localtime(&curTime);
+    struct tm timeReset = *localtime(&origTime);
+    timeReset.tm_hour = currentTime.tm_hour;
+    timeReset.tm_min = currentTime.tm_min;
+    timeReset.tm_sec = currentTime.tm_sec;
+    Result rt = timeSetCurrentTime(TimeType_NetworkSystemClock, mktime(&timeReset));
+    curTime = 0;
+    origTime = 0;
+    if (R_FAILED(rt))
+        fatalThrow(rt);
+}
+
+void resetTimeNTP()
+{
+    curTime = 0;
+    origTime = 0;
+    Result ts = timeSetCurrentTime(TimeType_NetworkSystemClock, ntpGetTime());
+    if (R_FAILED(ts))
+        fatalThrow(ts);
 }
