@@ -65,4 +65,3 @@ void key(HiddbgKeyboardAutoPilotState* states, u64 sequentialCount);
 void clickSequence(char* seq, u8* token);
 void dateSkip();
 void resetTime();
-void resetTimeNTP();

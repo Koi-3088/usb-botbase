@@ -7,7 +7,6 @@
 #include "commands.h"
 #include "util.h"
 #include "time.h"
-#include "ntp.h"
 
 //Controller:
 bool bControllerIsInitialised = false;
@@ -501,13 +500,4 @@ void resetTime()
     origTime = 0;
     if (R_FAILED(rt))
         fatalThrow(rt);
-}
-
-void resetTimeNTP()
-{
-    curTime = 0;
-    origTime = 0;
-    Result ts = timeSetCurrentTime(TimeType_NetworkSystemClock, ntpGetTime());
-    if (R_FAILED(ts))
-        fatalThrow(ts);
 }

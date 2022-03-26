@@ -1032,9 +1032,6 @@ int argmain(int argc, char **argv)
     if(!strcmp(argv[0], "resetTime"))
         resetTime();
 
-    if(!strcmp(argv[0], "resetTimeNTP"))
-        resetTimeNTP();
-
     return 0;
 }
 
