@@ -20,12 +20,6 @@
 #define THREAD_SIZE 0x1A000
 #define VERSION_S "2.41"
 
-typedef struct
-{
-    u64 size;
-    void* data;
-}USBResponse;
-
 typedef enum {
     Active = 0,
     Exit = 1,
@@ -54,7 +48,7 @@ u8 clickThreadState = 0; // 1 = break thread
 KeyData currentKeyEvent = { 0 };
 TouchData currentTouchEvent = { 0 };
 char* currentClick = NULL;
-bool usb = true;
+bool usb = false;
 
 // for cancelling the touch/click thread
 u8 touchToken = 0;
@@ -67,13 +61,6 @@ int fd_size = 5;
 // we aren't an applet
 u32 __nx_applet_type = AppletType_None;
 TimeServiceType __nx_time_service_type = TimeServiceType_System;
-
-void sendUsbResponse(USBResponse response)
-{
-    usbCommsWrite((void*)&response, 4);
-    if (response.size > 0)
-        usbCommsWrite(response.data, response.size);
-}
 
 // we override libnx internals to do a minimal init
 void __libnx_initheap(void)
@@ -216,12 +203,6 @@ int argmain(int argc, char** argv)
         u64 offset = parseStringToInt(argv[1]);
         u64 size = parseStringToInt(argv[2]);
         peekInfinite(meta.heap_base + offset, size);
-		/*if (usb)
-		{
-			response.size = size;
-			response.data = &out[0];
-			sendUsbResponse(response);
-		}*/
     }
 
     if (!strcmp(argv[0], "peekMulti"))
@@ -241,12 +222,6 @@ int argmain(int argc, char** argv)
             sizes[i] = parseStringToInt(argv[(i * 2) + 2]);
         }
         peekMulti(offsets, sizes, itemCount);
-        /*if (usb)
-        {
-            response.size = totalSize;
-            response.data = &out[0];
-            sendUsbResponse(response);
-        }*/
     }
 
     if (!strcmp(argv[0], "peekAbsolute"))
@@ -257,12 +232,6 @@ int argmain(int argc, char** argv)
         u64 offset = parseStringToInt(argv[1]);
         u64 size = parseStringToInt(argv[2]);
         peekInfinite(offset, size);
-		/*if (usb)
-		{
-			response.size = size;
-			response.data = &out[0];
-			sendUsbResponse(response);
-		}*/
     }
 
     if (!strcmp(argv[0], "peekAbsoluteMulti"))
@@ -280,12 +249,6 @@ int argmain(int argc, char** argv)
             sizes[i] = parseStringToInt(argv[(i * 2) + 2]);
         }
         peekMulti(offsets, sizes, itemCount);
-        /*if (usb)
-        {
-            response.size = totalSize;
-            response.data = &out[0];
-            sendUsbResponse(response);
-        }*/
     }
 
     if (!strcmp(argv[0], "peekMain"))
@@ -298,12 +261,6 @@ int argmain(int argc, char** argv)
         u64 offset = parseStringToInt(argv[1]);
         u64 size = parseStringToInt(argv[2]);
         peekInfinite(meta.main_nso_base + offset, size);
-		/*if (usb)
-		{
-			response.size = size;
-			response.data = &data[0];
-			sendUsbResponse(response);
-		}*/
     }
 
     if (!strcmp(argv[0], "peekMainMulti"))
@@ -323,12 +280,6 @@ int argmain(int argc, char** argv)
             sizes[i] = parseStringToInt(argv[(i * 2) + 2]);
         }
         peekMulti(offsets, sizes, itemCount);
-        /*if (usb)
-        {
-            response.size = totalSize;
-            response.data = &out[0];
-            sendUsbResponse(response);
-        }*/
     }
 
     //poke <address in hex or dec> <data in hex or dec>
@@ -796,12 +747,6 @@ int argmain(int argc, char** argv)
         u64 solved = followMainPointer(jumps, count);
         solved += finalJump;
         peek(solved, size);
-        /*if (usb)
-        {
-            response.size = size;
-            response.data = &data[0];
-            sendUsbResponse(response);
-        }*/
 	}
 
     // pointerPeekMulti <amount of bytes in hex or dec> <first (main) jump> <additional jumps> <final jump in pointerexpr> split by asterisks (*)
@@ -851,12 +796,6 @@ int argmain(int argc, char** argv)
         }
 
         peekMulti(offsets, sizes, itemCount);
-        /*if (usb)
-        {
-            response.size = totalSize;
-            response.data = &out[0];
-            sendUsbResponse(response);
-        }*/
 	}
 
     // pointerPoke <data to be sent> <first (main) jump> <additional jumps> <final jump in pointerexpr>
@@ -1502,8 +1441,8 @@ bool isUSB()
     {
         fscanf(config, "%[^\n]", str);
         fclose(config);
-        if (strcmp(strlwr(str), "wifi") == 0)
-            return false;
+        if (strcmp(strlwr(str), "usb") == 0)
+            return true;
     }
-    return true;
+    return false;
 }

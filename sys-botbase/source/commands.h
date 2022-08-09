@@ -37,6 +37,12 @@ typedef struct {
     u8 state;
 } KeyData;
 
+typedef struct
+{
+    u64 size;
+    void* data;
+}USBResponse;
+
 #define JOYSTICK_LEFT 0
 #define JOYSTICK_RIGHT 1
 
@@ -69,3 +75,4 @@ void key(HiddbgKeyboardAutoPilotState* states, u64 sequentialCount);
 void clickSequence(char* seq, u8* token);
 void dateSkip();
 void resetTime();
+void sendUsbResponse(USBResponse response);

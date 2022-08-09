@@ -16,6 +16,7 @@ HiddbgHdlsDeviceInfo controllerDevice = { 0 };
 HiddbgHdlsState controllerState = { 0 };
 time_t curTime = 0;
 time_t origTime = 0;
+USBResponse response;
 
 //Keyboard:
 HiddbgKeyboardAutoPilotState dummyKeyboardState = { 0 };
@@ -256,17 +257,20 @@ void peek(u64 offset, u64 size)
         return;
     }
 
-    if (!usb)
-    {
-        u64 i;
-        for (i = 0; i < size; i++)
-        {
-            printf("%02X", out[i]);
-        }
-    }
-
-    printf("\n");
-    detach();
+	if (usb)
+	{
+		response.size = size;
+		response.data = &out[0];
+		sendUsbResponse(response);
+	}
+    else
+	{
+		u64 i;
+		for (i = 0; i < size; i++)
+			printf("%02X", out[i]);
+	}
+	printf("\n");
+	detach();
     free(out);
 }
 
@@ -301,6 +305,14 @@ void peekInfinite(u64 offset, u64 size)
 
         totalFetched += thisBuffersize;
     }
+
+    if (usb)
+    {
+        response.size = totalFetched;
+        response.data = &out[0];
+        sendUsbResponse(response);
+    }
+
     detach();
     printf("\n");
     free(out);
@@ -328,14 +340,18 @@ void peekMulti(u64* offset, u64* size, u64 count)
         ofs += size[i];
     }
 
-    if (!usb)
-    {
-        u64 i;
-        for (i = 0; i < totalSize; i++)
-        {
-            printf("%02X", out[i]);
-        }
-    }
+	if (usb)
+	{
+        response.size = totalSize;
+        response.data = &out[0];
+        sendUsbResponse(response);
+	}
+	else
+	{
+		u64 i;
+		for (i = 0; i < totalSize; i++)
+			printf("%02X", out[i]);
+	}
     printf("\n");
     detach();
     free(out);
@@ -555,7 +571,7 @@ void clickSequence(char* seq, u8* token)
             // release
             currKey = parseStringToButton(&command[1]);
             release(currKey);
-        }
+        }  
         else if (!strncmp(command, &startWait, 1))
         {
             // wait
@@ -619,4 +635,11 @@ void resetTime()
     origTime = 0;
     if (R_FAILED(rt))
         fatalThrow(rt);
+}
+
+void sendUsbResponse(USBResponse response)
+{
+    usbCommsWrite((void*)&response, 4);
+    if (response.size > 0)
+        usbCommsWrite(response.data, response.size);
 }
