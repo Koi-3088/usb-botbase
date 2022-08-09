@@ -37,6 +37,12 @@ typedef struct {
     u8 state;
 } KeyData;
 
+typedef struct
+{
+    u64 size;
+    void* data;
+}USBResponse;
+
 #define JOYSTICK_LEFT 0
 #define JOYSTICK_RIGHT 1
 
@@ -54,9 +60,9 @@ bool getIsProgramOpen(u64 id);
 
 void poke(u64 offset, u64 size, u8* val);
 void writeMem(u64 offset, u64 size, u8* val);
-void peek(u8* out, u64 offset, u64 size);
-void peekInfinite(u8* out, u64 offset, u64 size);
-void peekMulti(u8* out, u64* offset, u64* size, u64 count, u64 totalSize);
+void peek(u64 offset, u64 size);
+void peekInfinite(u64 offset, u64 size);
+void peekMulti(u64* offset, u64* size, u64 count);
 void readMem(u8* out, u64 offset, u64 size);
 void click(HidNpadButton btn);
 void press(HidNpadButton btn);
@@ -69,3 +75,4 @@ void key(HiddbgKeyboardAutoPilotState* states, u64 sequentialCount);
 void clickSequence(char* seq, u8* token);
 void dateSkip();
 void resetTime();
+void sendUsbResponse(USBResponse response);
