@@ -19,12 +19,6 @@
 #define HEAP_SIZE 0x00C00000
 #define THREAD_SIZE 0x1A000
 
-typedef struct
-{
-    u64 size;
-    void* data;
-}USBResponse;
-
 typedef enum {
     Active = 0,
     Exit = 1,
@@ -53,7 +47,7 @@ u8 clickThreadState = 0; // 1 = break thread
 KeyData currentKeyEvent = {0};
 TouchData currentTouchEvent = {0};
 char* currentClick = NULL;
-bool usb = true;
+bool usb = false;
 
 // for cancelling the touch/click thread
 u8 touchToken = 0;
@@ -66,13 +60,6 @@ int fd_size = 5;
 // we aren't an applet
 u32 __nx_applet_type = AppletType_None;
 TimeServiceType __nx_time_service_type = TimeServiceType_System;
-
-void sendUsbResponse(USBResponse response)
-{
-    usbCommsWrite((void*)&response, 4);
-    if (response.size > 0)
-        usbCommsWrite(response.data, response.size);
-}
 
 // we override libnx internals to do a minimal init
 void __libnx_initheap(void)
@@ -213,16 +200,7 @@ int argmain(int argc, char **argv)
         MetaData meta = getMetaData();
         u64 offset = parseStringToInt(argv[1]);
         u64 size = parseStringToInt(argv[2]);
-
-        u8* out = malloc(sizeof(u8) * MAX_LINE_LENGTH);
-        peekInfinite(out, meta.heap_base + offset, size);
-		if (usb)
-		{
-			response.size = size;
-			response.data = &out[0];
-			sendUsbResponse(response);
-		}
-        free(out);
+        peekInfinite(meta.heap_base + offset, size);
     }
 
     if (!strcmp(argv[0], "peekMulti"))
@@ -241,20 +219,7 @@ int argmain(int argc, char **argv)
             offsets[i] = meta.heap_base + parseStringToInt(argv[(i*2)+1]);
             sizes[i] = parseStringToInt(argv[(i*2)+2]);
         }
-
-        u64 totalSize = 0;
-        for (int i = 0; i < itemCount; i++)
-            totalSize += sizes[i];
-
-        u8* out = malloc(sizeof(u8) * totalSize);
-        peekMulti(out, offsets, sizes, itemCount, totalSize);
-        if (usb)
-        {
-            response.size = totalSize;
-            response.data = &out[0];
-            sendUsbResponse(response);
-        }
-        free(out);
+        peekMulti(offsets, sizes, itemCount);
     }
 
     if (!strcmp(argv[0], "peekAbsolute"))
@@ -264,16 +229,7 @@ int argmain(int argc, char **argv)
 
         u64 offset = parseStringToInt(argv[1]);
         u64 size = parseStringToInt(argv[2]);
-        u8* out = malloc(sizeof(u8) * MAX_LINE_LENGTH);
-
-        peekInfinite(out, offset, size);
-		if (usb)
-		{
-			response.size = size;
-			response.data = &out[0];
-			sendUsbResponse(response);
-		}
-		free(out);
+        peekInfinite(offset, size);
     }
 
     if (!strcmp(argv[0], "peekAbsoluteMulti"))
@@ -290,20 +246,7 @@ int argmain(int argc, char **argv)
             offsets[i] = parseStringToInt(argv[(i*2)+1]);
             sizes[i] = parseStringToInt(argv[(i*2)+2]);
         }
-
-        u64 totalSize = 0;
-        for (int i = 0; i < itemCount; i++)
-            totalSize += sizes[i];
-
-        u8* out = malloc(sizeof(u8) * totalSize);
-        peekMulti(out, offsets, sizes, itemCount, totalSize);
-        if (usb)
-        {
-            response.size = totalSize;
-            response.data = &out[0];
-            sendUsbResponse(response);
-        }
-        free(out);
+        peekMulti(offsets, sizes, itemCount);
     }
 
     if (!strcmp(argv[0], "peekMain"))
@@ -314,16 +257,7 @@ int argmain(int argc, char **argv)
         MetaData meta = getMetaData();
         u64 offset = parseStringToInt(argv[1]);
         u64 size = parseStringToInt(argv[2]);
-        u8* out = malloc(sizeof(u8) * MAX_LINE_LENGTH);
-
-        peekInfinite(data, meta.main_nso_base + offset, size);
-		if (usb)
-		{
-			response.size = size;
-			response.data = &data[0];
-			sendUsbResponse(response);
-		}
-		free(out);
+        peekInfinite(meta.main_nso_base + offset, size);
     }
 
     if (!strcmp(argv[0], "peekMainMulti"))
@@ -342,20 +276,7 @@ int argmain(int argc, char **argv)
             offsets[i] = meta.main_nso_base + parseStringToInt(argv[(i*2)+1]);
             sizes[i] = parseStringToInt(argv[(i*2)+2]);
         }
-
-        u64 totalSize = 0;
-        for (int i = 0; i < itemCount; i++)
-            totalSize += sizes[i];
-
-        u8* out = malloc(sizeof(u8) * totalSize);
-        peekMulti(out, offsets, sizes, itemCount, totalSize);
-        if (usb)
-        {
-            response.size = totalSize;
-            response.data = &out[0];
-            sendUsbResponse(response);
-        }
-        free(out);
+        peekMulti(offsets, sizes, itemCount);
     }
 
     //poke <address in hex or dec> <data in hex or dec>
@@ -821,14 +742,7 @@ int argmain(int argc, char **argv)
 		u64 solved = followMainPointer(jumps, count);
         solved += finalJump;
 
-        u8 data[size];
-        peek(data, solved, size);
-        if (usb)
-        {
-            response.size = size;
-            response.data = &data[0];
-            sendUsbResponse(response);
-        }
+        peek(solved, size);
 	}
 
     // pointerPeekMulti <amount of bytes in hex or dec> <first (main) jump> <additional jumps> <final jump in pointerexpr> split by asterisks (*)
@@ -877,19 +791,7 @@ int argmain(int argc, char **argv)
             lastIndex = currIndex;
         }
         
-        u64 totalSize = 0;
-        for (int i = 0; i < itemCount; i++)
-            totalSize += sizes[i];
-
-        u8* out = malloc(sizeof(u8) * totalSize);
-        peekMulti(out, offsets, sizes, itemCount, totalSize);
-        if (usb)
-        {
-            response.size = totalSize;
-            response.data = &out[0];
-            sendUsbResponse(response);
-        }
-        free(out);
+        peekMulti(offsets, sizes, itemCount);
 	}
 
     // pointerPoke <data to be sent> <first (main) jump> <additional jumps> <final jump in pointerexpr>
@@ -1540,8 +1442,8 @@ bool isUSB()
     {
         fscanf(config, "%[^\n]", str);
         fclose(config);
-        if (strcmp(strlwr(str), "wifi") == 0)
-            return false;
+        if (strcmp(strlwr(str), "usb") == 0)
+            return true;
     }
-    return true;
+    return false;
 }
