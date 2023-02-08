@@ -571,7 +571,7 @@ void clickSequence(char* seq, u8* token)
             // release
             currKey = parseStringToButton(&command[1]);
             release(currKey);
-        }  
+        }
         else if (!strncmp(command, &startWait, 1))
         {
             // wait
