@@ -226,7 +226,6 @@ void detachController()
     hiddbgExit();
     free(workmem);
     bControllerIsInitialised = false;
-
     sessionId.id = 0;
 }
 
@@ -257,12 +256,12 @@ void peek(u64 offset, u64 size)
         return;
     }
 
-	if (usb)
-	{
-		response.size = size;
-		response.data = &out[0];
-		sendUsbResponse(response);
-	}
+    if (usb)
+    {
+        response.size = size;
+        response.data = &out[0];
+        sendUsbResponse(response);
+    }
     else
 	{
 		u64 i;
@@ -301,7 +300,7 @@ void peekInfinite(u64 offset, u64 size)
             {
                 printf("%02X", out[i]);
             }
-		}
+        }
 
         totalFetched += thisBuffersize;
     }
@@ -340,8 +339,8 @@ void peekMulti(u64* offset, u64* size, u64 count)
         ofs += size[i];
     }
 
-	if (usb)
-	{
+    if (usb)
+    {
         response.size = totalSize;
         response.data = &out[0];
         sendUsbResponse(response);

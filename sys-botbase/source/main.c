@@ -107,8 +107,8 @@ void __appInit(void)
     if (R_FAILED(rc))
         fatalThrow(rc);
     rc = pminfoInitialize();
-	if (R_FAILED(rc)) 
-		fatalThrow(rc);
+    if (R_FAILED(rc)) 
+        fatalThrow(rc);
     rc = fsInitialize();
     if (R_FAILED(rc))
         fatalThrow(rc);
@@ -118,17 +118,11 @@ void __appInit(void)
 
     usb = isUSB();
     if (usb)
-    {
         rc = usbCommsInitialize();
-        if (R_FAILED(rc))
-            fatalThrow(rc);
-    }
-    else
-    {
-        rc = socketInitializeDefault();
-        if (R_FAILED(rc))
-            fatalThrow(rc);
-    }
+    else rc = socketInitializeDefault();
+
+    if (R_FAILED(rc))
+        fatalThrow(rc);
 
     rc = capsscInitialize();
     if (R_FAILED(rc))
@@ -143,13 +137,13 @@ void __appExit(void)
     fsdevUnmountAll();
     fsExit();
     smExit();
-    nsExit();
     audoutExit();
     timeExit();
     viExit();
     if (usb)
         usbCommsExit();
     else socketExit();
+    free(hdlmem);
 }
 
 u64 mainLoopSleepTime = 50;
@@ -410,14 +404,14 @@ int argmain(int argc, char** argv)
                 u64 i;
                 for (i = 0; i < outsize - sizeof(buf->nacp); i++)
                 {
-                    char* ch = buf->icon[i];
+                    u8 ic = buf->icon[i];
                     if (usb)
-		            {
-			            response.size = sizeof(ch);
-			            response.data = &ch;
-			            sendUsbResponse(response);
-		            }
-                    else printf("%02X", ch);
+                    {
+                        response.size = sizeof(ic);
+                        response.data = &ic;
+                        sendUsbResponse(response);
+                    }
+                    else printf("%02X", ic);
                 }
                 printf("\n");
             }
@@ -428,22 +422,22 @@ int argmain(int argc, char** argv)
                 strncpy(version, buf->nacp.display_version, sizeof(version));
 
                 if (usb)
-		        {
-			        response.size = sizeof(version);
-			        response.data = &version;
-			        sendUsbResponse(response);
-		        }
+                {
+                    response.size = sizeof(version);
+                    response.data = &version;
+                    sendUsbResponse(response);
+                }
                 else printf("%s\n", version);
             }
             if (!strcmp(argv[1], "rating"))
             {
                 int rating = buf->nacp.rating_age[0];
                 if (usb)
-		        {
-			        response.size = sizeof(rating);
-			        response.data = &rating;
-			        sendUsbResponse(response);
-		        }
+                {
+                    response.size = sizeof(rating);
+                    response.data = &rating;
+                    sendUsbResponse(response);
+                }
                 else printf("%d\n", rating);
             }
             if (!strcmp(argv[1], "author"))
@@ -454,11 +448,11 @@ int argmain(int argc, char** argv)
                 strncpy(author, langentry->author, sizeof(author));
 
                 if (usb)
-		        {
-			        response.size = sizeof(author);
-			        response.data = &author;
-			        sendUsbResponse(response);
-		        }
+                {
+                    response.size = sizeof(author);
+                    response.data = &author;
+                    sendUsbResponse(response);
+                }
                 else printf("%s\n", author);
             }
             if (!strcmp(argv[1], "name"))
@@ -469,11 +463,11 @@ int argmain(int argc, char** argv)
                 strncpy(name, langentry->name, sizeof(name));
 
                 if (usb)
-		        {
-			        response.size = sizeof(name);
-			        response.data = &name;
-			        sendUsbResponse(response);
-		        }
+                {
+                    response.size = sizeof(name);
+                    response.data = &name;
+                    sendUsbResponse(response);
+                }
                 else printf("%s\n", name);
             }
         }
@@ -533,23 +527,23 @@ int argmain(int argc, char** argv)
 
     if (!strcmp(argv[0], "getTitleID")) {
         MetaData meta = getMetaData();
-		if (usb)
-		{
-			response.size = sizeof(meta.titleID);
-			response.data = &meta.titleID;
-			sendUsbResponse(response);
-		}
+        if (usb)
+        {
+            response.size = sizeof(meta.titleID);
+            response.data = &meta.titleID;
+            sendUsbResponse(response);
+        }
         else printf("%016lX\n", meta.titleID);
     }
 
     if (!strcmp(argv[0], "getTitleVersion")) {
         MetaData meta = getMetaData();
-		if (usb)
-		{
-			response.size = sizeof(meta.titleVersion);
-			response.data = &meta.titleVersion;
-			sendUsbResponse(response);
-		}
+        if (usb)
+        {
+            response.size = sizeof(meta.titleVersion);
+            response.data = &meta.titleVersion;
+            sendUsbResponse(response);
+        }
         else printf("%016lX\n", meta.titleVersion);
     }
 
@@ -560,46 +554,46 @@ int argmain(int argc, char** argv)
         SetLanguage language = SetLanguage_ENUS;
         setGetSystemLanguage(&languageCode);
         setMakeLanguage(languageCode, &language);
-		if (usb)
-		{
-			response.size = sizeof(language);
-			response.data = &language;
-			sendUsbResponse(response);
-		}
+        if (usb)
+        {
+            response.size = sizeof(language);
+            response.data = &language;
+            sendUsbResponse(response);
+        }
         else printf("%d\n", language);
     }
 
     if (!strcmp(argv[0], "getMainNsoBase")) {
         MetaData meta = getMetaData();
-		if (usb)
-		{
-			response.size = sizeof(meta.main_nso_base);
-			response.data = &meta.main_nso_base;
-			sendUsbResponse(response);
-		}
+        if (usb)
+        {
+            response.size = sizeof(meta.main_nso_base);
+            response.data = &meta.main_nso_base;
+            sendUsbResponse(response);
+        }
         else printf("%016lX\n", meta.main_nso_base);
     }
 
     if (!strcmp(argv[0], "getBuildID")) {
         MetaData meta = getMetaData();
-		if (usb)
-		{
-			response.size = sizeof(u8);
-			response.data = &meta.buildID;
-			sendUsbResponse(response);
-		}
+        if (usb)
+        {
+            response.size = sizeof(u8);
+            response.data = &meta.buildID;
+            sendUsbResponse(response);
+        }
         else printf("%02x%02x%02x%02x%02x%02x%02x%02x\n", meta.buildID[0], meta.buildID[1], meta.buildID[2], meta.buildID[3], meta.buildID[4], meta.buildID[5], meta.buildID[6], meta.buildID[7]);
 
     }
 
     if (!strcmp(argv[0], "getHeapBase")) {
         MetaData meta = getMetaData();
-		if (usb)
-		{
-			response.size = sizeof(meta.heap_base);
-			response.data = &meta.heap_base;
-			sendUsbResponse(response);
-		}
+        if (usb)
+        {
+            response.size = sizeof(meta.heap_base);
+            response.data = &meta.heap_base;
+            sendUsbResponse(response);
+        }
         else printf("%016lX\n", meta.heap_base);
     }
 
@@ -608,12 +602,12 @@ int argmain(int argc, char** argv)
             return 0;
         u64 programId = parseStringToInt(argv[1]);
         bool isRunning = getIsProgramOpen(programId);
-		if (usb)
-		{
-			response.size = sizeof(isRunning);
-			response.data = &isRunning;
-			sendUsbResponse(response);
-		}
+        if (usb)
+        {
+            response.size = sizeof(isRunning);
+            response.data = &isRunning;
+            sendUsbResponse(response);
+        }
         else printf("%d\n", isRunning);
     }
 
@@ -628,21 +622,21 @@ int argmain(int argc, char** argv)
         if (R_FAILED(rc) && debugResultCodes)
             printf("capssc, 1204: %d\n", rc);
 
-		if (usb)
-		{
-			response.data = &buf[0];
-			response.size = outSize;
-			sendUsbResponse(response);
-		}
-		else
-		{
-			u64 i;
-			for (i = 0; i < outSize; i++)
-			{
-				printf("%02X", buf[i]);
-			}
-			printf("\n");
-		}
+        if (usb)
+        {
+            response.data = &buf[0];
+            response.size = outSize;
+            sendUsbResponse(response);
+        }
+        else
+        {
+            u64 i;
+            for (i = 0; i < outSize; i++)
+            {
+                printf("%02X", buf[i]);
+            }
+            printf("\n");
+        }
 
         free(buf);
     }
@@ -676,13 +670,13 @@ int argmain(int argc, char** argv)
             response.size = sizeof(solved);
             sendUsbResponse(response);
         }
-		else printf("%016lX\n", solved);
-	}
+        else printf("%016lX\n", solved);
+    }
 
     // pointerAll <first (main) jump> <additional jumps> <final jump in pointerexpr> 
     // possibly redundant between the one above, one needs to go eventually. (little endian, flip it yourself if required)
-	if (!strcmp(argv[0], "pointerAll"))
-	{
+    if (!strcmp(argv[0], "pointerAll"))
+    {
         if (argc < 3)
             return 0;
         s64 finalJump = parseStringToSignedLong(argv[argc - 1]);
@@ -729,7 +723,7 @@ int argmain(int argc, char** argv)
             sendUsbResponse(response);
         }
         else printf("%016lX\n", solved);
-	}
+    }
 
     // pointerPeek <amount of bytes in hex or dec> <first (main) jump> <additional jumps> <final jump in pointerexpr>
     // warning: no validation
@@ -747,7 +741,7 @@ int argmain(int argc, char** argv)
         u64 solved = followMainPointer(jumps, count);
         solved += finalJump;
         peek(solved, size);
-	}
+    }
 
     // pointerPeekMulti <amount of bytes in hex or dec> <first (main) jump> <additional jumps> <final jump in pointerexpr> split by asterisks (*)
     // warning: no validation
@@ -796,7 +790,7 @@ int argmain(int argc, char** argv)
         }
 
         peekMulti(offsets, sizes, itemCount);
-	}
+    }
 
     // pointerPoke <data to be sent> <first (main) jump> <additional jumps> <final jump in pointerexpr>
     // warning: no validation
@@ -1040,13 +1034,13 @@ int argmain(int argc, char** argv)
     }
 
     if (!strcmp(argv[0], "fdCount"))
-	{
-		if (usb)
-		{
-			response.size = sizeof(int);
-			response.data = fd_count;
-			sendUsbResponse(response);
-		}
+    {
+        if (usb)
+        {
+            response.size = sizeof(int);
+            response.data = &fd_count;
+            sendUsbResponse(response);
+        }
         else printf("%d\n", fd_count);
     }
 
