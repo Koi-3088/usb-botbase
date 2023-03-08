@@ -16,6 +16,8 @@ HiddbgHdlsDeviceInfo controllerDevice = {0};
 HiddbgHdlsState controllerState = {0};
 time_t curTime = 0;
 time_t origTime = 0;
+u8* hdlmem = NULL;
+size_t hdlmem_size = 0x1000;
 USBResponse response;
 
 //Keyboard:
@@ -86,7 +88,7 @@ u64 GetTitleVersion(u64 pid){
     s32 out;
 
     Result rc = nsInitialize();
-	if (R_FAILED(rc)) 
+    if (R_FAILED(rc)) 
         fatalThrow(rc);
 
     NsApplicationContentMetaStatus *MetaStatus = malloc(sizeof(NsApplicationContentMetaStatus[100U]));
@@ -168,6 +170,13 @@ void initController()
     Result rc = hiddbgInitialize();
     if (R_FAILED(rc) && debugResultCodes)
         printf("hiddbgInitialize: %d\n", rc);
+
+    bool init = false;
+    hdlmem = aligned_alloc(0x1000, hdlmem_size);
+    if (hdlmem)
+        init = true;
+    else printf("initController: failed to alloc mem");
+
     // Set the controller type to Pro-Controller, and set the npadInterfaceType.
     controllerDevice.deviceType = controllerInitializedType;
     controllerDevice.npadInterfaceType = HidNpadInterfaceType_Bluetooth;
@@ -183,15 +192,19 @@ void initController()
     controllerState.analog_stick_l.y = -0x0;
     controllerState.analog_stick_r.x = 0x0;
     controllerState.analog_stick_r.y = -0x0;
-    rc = hiddbgAttachHdlsWorkBuffer(&sessionId);
-    if (R_FAILED(rc) && debugResultCodes)
-        printf("hiddbgAttachHdlsWorkBuffer: %d\n", rc);
-    rc = hiddbgAttachHdlsVirtualDevice(&controllerHandle, &controllerDevice);
-    if (R_FAILED(rc) && debugResultCodes)
-        printf("hiddbgAttachHdlsVirtualDevice: %d\n", rc);
-    //init a dummy keyboard state for assignment between keypresses
-    dummyKeyboardState.keys[3] = 0x800000000000000UL; // Hackfix found by Red: an unused key press (KBD_MEDIA_CALC) is required to allow sequential same-key presses. bitfield[3]
-    bControllerIsInitialised = true;
+
+    if (init)
+    {
+        rc = hiddbgAttachHdlsWorkBuffer(&sessionId, hdlmem, hdlmem_size);
+        if (R_FAILED(rc) && debugResultCodes)
+            printf("hiddbgAttachHdlsWorkBuffer: %d\n", rc);
+        rc = hiddbgAttachHdlsVirtualDevice(&controllerHandle, &controllerDevice);
+        if (R_FAILED(rc) && debugResultCodes)
+            printf("hiddbgAttachHdlsVirtualDevice: %d\n", rc);
+        //init a dummy keyboard state for assignment between keypresses
+        dummyKeyboardState.keys[3] = 0x800000000000000UL; // Hackfix found by Red: an unused key press (KBD_MEDIA_CALC) is required to allow sequential same-key presses. bitfield[3]
+        bControllerIsInitialised = true;
+    }
 }
 
 void detachController()
@@ -206,7 +219,7 @@ void detachController()
         printf("hiddbgReleaseHdlsWorkBuffer: %d\n", rc);
     hiddbgExit();
     bControllerIsInitialised = false;
-
+    free(hdlmem);
     sessionId.id = 0;
 }
 
@@ -219,7 +232,7 @@ void poke(u64 offset, u64 size, u8* val)
 
 void writeMem(u64 offset, u64 size, u8* val)
 {
-	Result rc = svcWriteDebugProcessMemory(debughandle, val, offset, size);
+    Result rc = svcWriteDebugProcessMemory(debughandle, val, offset, size);
     if (R_FAILED(rc) && debugResultCodes)
         printf("svcWriteDebugProcessMemory: %d\n", rc);
 }
@@ -231,19 +244,19 @@ void peek(u64 offset, u64 size)
     readMem(out, offset, size);
     detach();
 
-	if (usb)
-	{
-		response.size = size;
-		response.data = &out[0];
-		sendUsbResponse(response);
-	}
+    if (usb)
+    {
+        response.size = size;
+        response.data = &out[0];
+        sendUsbResponse(response);
+    }
     else
-	{
-		u64 i;
-		for (i = 0; i < size; i++)
-			printf("%02X", out[i]);
-		printf("\n");
-	}
+    {
+        u64 i;
+        for (i = 0; i < size; i++)
+            printf("%02X", out[i]);
+        printf("\n");
+    }
     free(out);
 }
 
@@ -259,14 +272,14 @@ void peekInfinite(u64 offset, u64 size)
         u64 thisBuffersize = sizeRemainder > MAX_LINE_LENGTH ? MAX_LINE_LENGTH : sizeRemainder;
         sizeRemainder -= thisBuffersize;
         readMem(out, offset + totalFetched, thisBuffersize);
-		if (!usb)
-		{
-		    u64 i;
+        if (!usb)
+        {
+            u64 i;
             for (i = 0; i < thisBuffersize; i++)
             {
                 printf("%02X", out[i]);
             }
-		}
+        }
 
         totalFetched += thisBuffersize;
     }
@@ -299,25 +312,25 @@ void peekMulti(u64* offset, u64* size, u64 count)
     }
     detach();
 
-	if (usb)
-	{
+    if (usb)
+    {
         response.size = totalSize;
         response.data = &out[0];
         sendUsbResponse(response);
-	}
-	else
-	{
-		u64 i;
-		for (i = 0; i < totalSize; i++)
-			printf("%02X", out[i]);
-		printf("\n");
-	}
+    }
+    else
+    {
+        u64 i;
+        for (i = 0; i < totalSize; i++)
+            printf("%02X", out[i]);
+        printf("\n");
+    }
     free(out);
 }
 
 void readMem(u8* out, u64 offset, u64 size)
 {
-	Result rc = svcReadDebugProcessMemory(out, debughandle, offset, size);
+    Result rc = svcReadDebugProcessMemory(out, debughandle, offset, size);
     if (R_FAILED(rc) && debugResultCodes)
         printf("svcReadDebugProcessMemory: %d\n", rc);
 }
@@ -379,26 +392,26 @@ void reverseArray(u8* arr, int start, int end)
 
 u64 followMainPointer(s64* jumps, size_t count) 
 {
-	u64 offset;
+    u64 offset;
     u64 size = sizeof offset;
     u8* out = malloc(size);
-	MetaData meta = getMetaData(); 
-	
-	attach();
-	readMem(out, meta.main_nso_base + jumps[0], size);
-	offset = *(u64*)out;
-	int i;
+    MetaData meta = getMetaData(); 
+    
+    attach();
+    readMem(out, meta.main_nso_base + jumps[0], size);
+    offset = *(u64*)out;
+    int i;
     for (i = 1; i < count; ++i)
-	{
-		readMem(out, offset + jumps[i], size);
-		offset = *(u64*)out;
+    {
+        readMem(out, offset + jumps[i], size);
+        offset = *(u64*)out;
         // this traversal resulted in an error
         if (offset == 0)
             break;
-	}
-	detach();
-	free(out);
-	
+    }
+    detach();
+    free(out);
+    
     return offset;
 }
 
