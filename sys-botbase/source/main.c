@@ -36,6 +36,8 @@ void sub_click(void *arg);
 void usbMainLoop();
 void wifiMainLoop();
 bool isUSB();
+bool handle_connection();
+void handle_disconnect();
 
 // locks for thread
 Mutex freezeMutex, touchMutex, keyMutex, clickMutex;
@@ -77,9 +79,11 @@ void __appInit(void)
 {
     Result rc;
     svcSleepThread(20000000000L);
+
     rc = smInitialize();
     if (R_FAILED(rc))
         fatalThrow(rc);
+
     if (hosversionGet() == 0) {
         rc = setsysInitialize();
         if (R_SUCCEEDED(rc)) {
@@ -90,6 +94,7 @@ void __appInit(void)
             setsysExit();
         }
     }
+
     rc = timeInitialize();
     if (R_FAILED(rc))
     {
@@ -99,33 +104,35 @@ void __appInit(void)
         if(R_FAILED(rc))
             fatalThrow(rc);
     }
+
     rc = pmdmntInitialize();
     if (R_FAILED(rc)) 
         fatalThrow(rc);
+
     rc = ldrDmntInitialize();
     if (R_FAILED(rc)) 
         fatalThrow(rc);
+
     rc = pminfoInitialize();
     if (R_FAILED(rc)) 
         fatalThrow(rc);
+
     rc = fsInitialize();
     if (R_FAILED(rc))
         fatalThrow(rc);
+
     rc = fsdevMountSdmc();
     if (R_FAILED(rc))
         fatalThrow(rc);
 
-    usb = isUSB();
-    if (usb)
-        rc = usbCommsInitialize();
-    else rc = socketInitializeDefault();
-
-    if (R_FAILED(rc))
+    bool success = handle_connection();
+    if (!success)
         fatalThrow(rc);
 
     rc = capsscInitialize();
     if (R_FAILED(rc))
         fatalThrow(rc);
+
     rc = viInitialize(ViServiceType_Default);
     if (R_FAILED(rc))
         fatalThrow(rc);
@@ -133,16 +140,16 @@ void __appInit(void)
 
 void __appExit(void)
 {
-    fsdevUnmountAll();
-    fsExit();
     smExit();
-    audoutExit();
     timeExit();
+    pmdmntExit();
+    ldrDmntExit();
+    pminfoExit();
+    fsExit();
+    fsdevUnmountAll();
+    handle_disconnect();
+    capsscExit();
     viExit();
-    if (usb)
-        usbCommsExit();
-    else socketExit();
-    free(hdlmem);
 }
 
 u64 mainLoopSleepTime = 50;
@@ -1249,16 +1256,28 @@ void usbMainLoop()
     while (appletMainLoop())
     {
         int lenUSB;
-        usbCommsRead(&lenUSB, sizeof(lenUSB)); //Should use malloc
-        char linebufUSB[lenUSB + 1];
+        size_t len = usbCommsRead(&lenUSB, sizeof(lenUSB)); //Should use malloc
+        if (len == 0)
+        {
+            svcSleepThread(mainLoopSleepTime * 1e+6L);
+            continue;
+        }
 
+        char linebufUSB[lenUSB + 1];
         mutexLock(&freezeMutex);
         for (int i = 0; i < lenUSB + 1; i++)
             linebufUSB[i] = 0;
 
-        usbCommsRead(&linebufUSB, lenUSB);
+        len = usbCommsRead(&linebufUSB, lenUSB);
+        bool failed = lenUSB - 2 > sizeof(linebufUSB) || len == 0;
+        if (failed)
+        {
+            svcSleepThread(mainLoopSleepTime * 1e+6L);
+            mutexUnlock(&freezeMutex);
+            continue;
+        }
 
-        //Adds necessary escape characters for pasrser
+        //Adds necessary escape characters for parser
         linebufUSB[lenUSB - 1] = '\n';
         linebufUSB[lenUSB - 2] = '\r';
 
@@ -1423,7 +1442,6 @@ void sub_click(void *arg)
         }
 
         clickToken = 0;
-
         svcSleepThread(1e+6L);
     }
 }
@@ -1440,4 +1458,24 @@ bool isUSB()
             return true;
     }
     return false;
+}
+
+bool handle_connection()
+{
+    Result rc;
+    usb = isUSB();
+    if (usb)
+        rc = usbCommsInitialize();
+    else rc = socketInitializeDefault();
+    
+    if (R_FAILED(rc))
+        return false;
+    return true;
+}
+
+void handle_disconnect()
+{
+    if (usb)
+        usbCommsExit();
+    else socketExit();
 }
