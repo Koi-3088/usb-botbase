@@ -265,6 +265,7 @@ void peekInfinite(u64 offset, u64 size)
     u64 sizeRemainder = size;
     u64 totalFetched = 0;
     u8 *out = malloc(sizeof(u8) * MAX_LINE_LENGTH);
+    u8 *usbOut = malloc(size);
 
     attach();
     while (sizeRemainder > 0)
@@ -272,28 +273,29 @@ void peekInfinite(u64 offset, u64 size)
         u64 thisBuffersize = sizeRemainder > MAX_LINE_LENGTH ? MAX_LINE_LENGTH : sizeRemainder;
         sizeRemainder -= thisBuffersize;
         readMem(out, offset + totalFetched, thisBuffersize);
-        if (!usb)
+
+        u64 i;
+        for (i = 0; i < thisBuffersize; i++)
         {
-            u64 i;
-            for (i = 0; i < thisBuffersize; i++)
-            {
-                printf("%02X", out[i]);
-            }
+            if (usb)
+                usbOut[totalFetched + i] = out[i];
+            else printf("%02X", out[i]);
         }
 
         totalFetched += thisBuffersize;
     }
 
+    detach();
     if (usb)
     {
-        response.size = totalFetched;
-        response.data = &out[0];
+        response.size = size;
+        response.data = &usbOut[0];
         sendUsbResponse(response);
     }
+    else printf("\n");
 
-    detach();
-    printf("\n");
     free(out);
+    free(usbOut);
 }
 
 void peekMulti(u64* offset, u64* size, u64 count)
