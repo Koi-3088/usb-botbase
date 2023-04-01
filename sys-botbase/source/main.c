@@ -404,19 +404,24 @@ int argmain(int argc, char **argv)
         NacpLanguageEntry* langentry = NULL;    
         if (outsize != 0) {
             if (!strcmp(argv[1], "icon")) {
+                u8* icon = malloc(outsize);
+
                 u64 i;
                 for (i = 0; i < outsize - sizeof(buf->nacp); i++)
                 {
                     u8 ic = buf->icon[i];
                     if (usb)
-                    {
-                        response.size = sizeof(ic);
-                        response.data = &ic;
-                        sendUsbResponse(response);
-                    }
+                        icon[i] = ic;
                     else printf("%02X", ic);
                 }
-                printf("\n");
+                if (usb)
+                {
+                    response.size = outsize;
+                    response.data = &icon[0];
+                    sendUsbResponse(response);
+                }
+                else printf("\n");
+                free(icon);
             }
             if (!strcmp(argv[1], "version"))
             {
