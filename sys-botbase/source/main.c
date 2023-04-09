@@ -1459,10 +1459,10 @@ bool isUSB()
     {
         fscanf(config, "%[^\n]", str);
         fclose(config);
-        if (strcmp(strlwr(str), "usb") == 0)
-            return true;
+        if (strcmp(strlwr(str), "wifi") == 0)
+            return false;
     }
-    return false;
+    return true;
 }
 
 bool handle_connection()
