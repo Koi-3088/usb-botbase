@@ -22,8 +22,9 @@ This project was created for the purpose of development for bot automation. The 
 ## Installation
 1. Download [latest release](https://github.com/Koi-3088/sys-usb-botbase/releases/latest) and extract into your Nintendo Switch SD card.
 2. Open the `config.cfg` located in `atmosphere/contents/43000000000B` using your favorite text editor.
-3. Change text to `wifi` if you want to connect wirelessly using sockets, or `usb` if you want to connect using a USB cable.
+3. Change text to `wifi` if you want to connect wirelessly using sockets, or `usb` if you want to connect using a USB cable. Defaults to `usb`.
 4. Restart your Switch.
+5. Follow [SysBot's USB setup guide](https://github.com/kwsch/SysBot.NET/wiki/Configuring-a-new-USB-Connection).
 
 When installed correctly, sys-botbase will make your docked joy-con's home button glow on switch bootup. If this does not happen, sys-botbase is not installed correctly.
 
