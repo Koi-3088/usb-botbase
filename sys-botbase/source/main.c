@@ -146,8 +146,6 @@ void __appExit(void)
     pmdmntExit();
     ldrDmntExit();
     pminfoExit();
-    fsExit();
-    fsdevUnmountAll();
     handle_disconnect();
     capsscExit();
     viExit();
@@ -161,7 +159,7 @@ bool echoCommands = false;
 void makeTouch(HidTouchState* state, u64 sequentialCount, u64 holdTime, bool hold)
 {
     mutexLock(&touchMutex);
-    memset(&currentTouchEvent, 0, sizeof currentTouchEvent);
+    memset(&currentTouchEvent, 0, sizeof(currentTouchEvent));
     currentTouchEvent.states = state;
     currentTouchEvent.sequentialCount = sequentialCount;
     currentTouchEvent.holdTime = holdTime;
@@ -173,7 +171,7 @@ void makeTouch(HidTouchState* state, u64 sequentialCount, u64 holdTime, bool hol
 void makeKeys(HiddbgKeyboardAutoPilotState* states, u64 sequentialCount)
 {
     mutexLock(&keyMutex);
-    memset(&currentKeyEvent, 0, sizeof currentKeyEvent);
+    memset(&currentKeyEvent, 0, sizeof(currentKeyEvent));
     currentKeyEvent.states = states;
     currentKeyEvent.sequentialCount = sequentialCount;
     currentKeyEvent.state = 1;
@@ -1154,35 +1152,7 @@ void wifiMainLoop()
     fd_count = 1;
 
     int newfd;
-
-    Result rc;
     int fr_count = 0;
-
-    initFreezes();
-
-    // freeze thread
-    mutexInit(&freezeMutex);
-    rc = threadCreate(&freezeThread, sub_freeze, (void*)&freeze_thr_state, NULL, THREAD_SIZE, 0x2C, -2);
-    if (R_SUCCEEDED(rc))
-        rc = threadStart(&freezeThread);
-
-    // touch thread
-    mutexInit(&touchMutex);
-    rc = threadCreate(&touchThread, sub_touch, (void*)&currentTouchEvent, NULL, THREAD_SIZE, 0x2C, -2);
-    if (R_SUCCEEDED(rc))
-        rc = threadStart(&touchThread);
-
-    // key thread
-    mutexInit(&keyMutex);
-    rc = threadCreate(&keyboardThread, sub_key, (void*)&currentKeyEvent, NULL, THREAD_SIZE, 0x2C, -2);
-    if (R_SUCCEEDED(rc))
-        rc = threadStart(&keyboardThread);
-
-    // click sequence thread
-    mutexInit(&clickMutex);
-    rc = threadCreate(&clickThread, sub_click, (void*)currentClick, NULL, THREAD_SIZE, 0x2C, -2);
-    if (R_SUCCEEDED(rc))
-        rc = threadStart(&clickThread);
 
     flashLed();
 
@@ -1255,8 +1225,8 @@ void usbMainLoop()
 {
     USBResponse response;
     int fr_count = 0;
-    flashLed();
 
+    flashLed();
     while (true)
     {
         int lenUSB;
@@ -1471,6 +1441,9 @@ bool handle_connection()
     if (usb)
         rc = usbCommsInitialize();
     else rc = socketInitializeDefault();
+
+    fsExit();
+    fsdevUnmountAll();
     
     if (R_FAILED(rc))
         return false;
