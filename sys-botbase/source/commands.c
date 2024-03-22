@@ -582,7 +582,7 @@ void dateSkip2()
     if (R_FAILED(tg))
         fatalThrow(tg);
 
-    Result ts = timeSetCurrentTime(TimeType_NetworkSystemClock, (uint64_t)(1687196634)); //Set new time
+    Result ts = timeSetCurrentTime(TimeType_NetworkSystemClock, (uint64_t)(curTime + 1)); //Set new time
     if (R_FAILED(ts))
         fatalThrow(ts);
 }
