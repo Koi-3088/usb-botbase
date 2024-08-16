@@ -3,6 +3,10 @@ name: C/C++ CI
 on:
   push:
     branches: [ "*" ]
+  pull_request:
+    branches: [ "master" ]
+  schedule:
+    - cron: "1 3 * * 0"
 
 jobs:
   build:
@@ -17,13 +21,15 @@ jobs:
         shell: bash
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     
     - name: Built
-      run: make all
+      run: |
+        sed -i "s/insert_date_here/$(date +%s)/g" sys-botbase/source/commands.c
+        make all
 
     - name: Upload built files
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: sdcard
         path: ./
