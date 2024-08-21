@@ -14,7 +14,7 @@ extern u64 keyPressSleepTime;
 extern u64 pollRate;
 extern u32 fingerDiameter;
 extern bool usb;
-extern u8 *hdlmem;
+extern u8* hdlmem;
 extern size_t hdlmem_size;
 
 typedef struct
