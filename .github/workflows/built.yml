@@ -1,4 +1,4 @@
-name: C/C++ CI
+name: Build sys-botbase
 
 on:
   push:
@@ -22,12 +22,10 @@ jobs:
     - uses: actions/checkout@v4
     
     - name: Built
-      run: |
-        sed -i "s/insert_date_here/$(date +%s)/g" sys-botbase/source/commands.c
-        make all
+      run: make all
 
     - name: Upload built files
       uses: actions/upload-artifact@v4
       with:
         name: sdcard
-        path: ./
+        path: ./sys-botbase/sys-botbase.*
