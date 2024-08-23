@@ -693,13 +693,13 @@ int argmain(int argc, char **argv)
     {
         if (usb)
         {
-            char buf[] = "2.353\n";
+            char buf[] = "insert_version_here\n";
             response.data = buf;
             response.size = sizeof(buf);
             sendUsbResponse(response);
         }
         else
-            printf("2.353\n");
+            printf("insert_version_here\n");
     }
 
     // follow pointers and print absolute offset (little endian, flip it yourself if required)
