@@ -24,15 +24,15 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    # Get current date for release naming
-    - name: Get current date
-      id: date
-      run: echo "DATE=$(date +'%y.%m.%d')" >> "$GITHUB_OUTPUT"
+    # Set current version for release naming
+    - name: Set current version
+      id: version
+      run: echo "VERSION=2.4${{ github.run_number }}" >> "$GITHUB_OUTPUT"
 
     # Replace version number and build
     - name: Built
       run: |
-        sed -i "s/insert_version_here/${{ steps.date.outputs.DATE }}.${{ github.run_number }}/g" sys-botbase/source/main.c
+        sed -i "s/insert_version_here/${{ steps.version.outputs.VERSION }}/g" sys-botbase/source/main.c
         make all
         cp ./sys-botbase/sys-botbase.nsp ./release/atmosphere/contents/430000000000000B/exefs.nsp
 
@@ -54,7 +54,7 @@ jobs:
       uses: softprops/action-gh-release@v1
       if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/develop' }}
       with:
-        tag_name: ${{ steps.date.outputs.DATE }}.${{ github.run_number }}
+        tag_name: ${{ steps.version.outputs.VERSION }}
         prerelease: true
         body: Pre-release, compare Git commits.
         files: release/atmosphere.zip
@@ -64,7 +64,7 @@ jobs:
       uses: softprops/action-gh-release@v1
       if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/master' }}
       with:
-        tag_name: ${{ steps.date.outputs.DATE }}.${{ github.run_number }}
+        tag_name: ${{ steps.version.outputs.VERSION }}
         prerelease: false
         body: Release, compare Git commits.
         files: release/atmosphere.zip
