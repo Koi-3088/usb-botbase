@@ -653,11 +653,9 @@ int argmain(int argc, char** argv)
 
     if(!strcmp(argv[0], "getVersion")){
         if (usb)
-        {
-            char buf[] = VERSION_S;
-            strcat(buf, "\n");
-            response.data = buf;
-            response.size = sizeof(buf);
+        {		
+            response.data = VERSION_S;
+            response.size = sizeof(VERSION_S);
             sendUsbResponse(response);
         }
         else printf("%s\n", VERSION_S);
