@@ -26,7 +26,7 @@ This project was created for the purpose of development for bot automation. The 
 4. Restart your Switch.
 5. Follow [SysBot's usb-botbase setup guide](https://github.com/kwsch/SysBot.NET/wiki/Configuring-a-new-USB-Connection).
 
-When installed correctly, usb-botbase will make your docked joy-con's home button glow on switch bootup. If this does not happen, sys-botbase is not installed correctly.
+When installed correctly, usb-botbase will make your docked joy-con's home button glow on switch bootup. If this does not happen, usb-botbase is not installed correctly.
 
 ![](joycon-glow.gif)
 
