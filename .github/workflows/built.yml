@@ -1,0 +1,70 @@
+name: Build sys-botbase
+
+on:
+  push:
+    branches: [ "*" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    container:
+      image: devkitpro/devkita64:latest
+
+    defaults:
+      run:
+        shell: bash
+
+    permissions:
+      contents: write
+
+    steps:
+    - uses: actions/checkout@v4
+
+    # Set current version for release naming
+    - name: Set current version
+      id: version
+      run: echo "VERSION=2.4${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+    # Replace version number and build
+    - name: Built
+      run: |
+        sed -i "s/insert_version_here/${{ steps.version.outputs.VERSION }}/g" sys-botbase/source/main.c
+        make all
+        cp ./sys-botbase/sys-botbase.nsp ./release/atmosphere/contents/430000000000000B/exefs.nsp
+
+    # ZIP release folder
+    - name: ZIP
+      run: cd release && zip -r atmosphere.zip ./*
+
+    # Upload  compiled files
+    - name: Upload built files
+      uses: actions/upload-artifact@v4
+      with:
+        name: sdcard
+        path: |
+          sys-botbase/sys-botbase*
+          release/atmosphere.zip
+
+    # Create pre-release
+    - name: Pre-Release 
+      uses: softprops/action-gh-release@v1
+      if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/develop' }}
+      with:
+        tag_name: ${{ steps.version.outputs.VERSION }}
+        prerelease: true
+        body: Pre-release, compare Git commits.
+        files: release/atmosphere.zip
+
+    # Create release
+    - name: Release 
+      uses: softprops/action-gh-release@v1
+      if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/master' }}
+      with:
+        tag_name: ${{ steps.version.outputs.VERSION }}
+        prerelease: false
+        body: Release, compare Git commits.
+        files: release/atmosphere.zip
