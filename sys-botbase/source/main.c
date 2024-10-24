@@ -56,6 +56,8 @@ int fd_size = 5;
 // we aren't an applet
 u32 __nx_applet_type = AppletType_None;
 
+TimeServiceType __nx_time_service_type = TimeServiceType_System;
+
 // we override libnx internals to do a minimal init
 void __libnx_initheap(void)
 {
@@ -84,6 +86,15 @@ void __appInit(void)
                 hosversionSet(MAKEHOSVERSION(fw.major, fw.minor, fw.micro));
             setsysExit();
         }
+    }
+    rc = timeInitialize();
+    if (R_FAILED(rc))
+    {
+        timeExit();
+        __nx_time_service_type = TimeServiceType_User;
+        rc = timeInitialize();
+        if (R_FAILED(rc))
+            fatalThrow(rc);
     }
     rc = pmdmntInitialize();
 	if (R_FAILED(rc)) 
