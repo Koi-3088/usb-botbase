@@ -6,7 +6,7 @@
 #include <math.h>
 #include "commands.h"
 #include "util.h"
-
+#include "ntp.h"
 
 //Controller:
 bool bControllerIsInitialised = false;
@@ -524,4 +524,72 @@ void clickSequence(char* seq, u8* token)
 
         command = strtok(NULL, &delim);
     }
+}
+
+void dateSet(uint64_t date)
+{
+    Result ts = timeSetCurrentTime(TimeType_NetworkSystemClock, date);
+    if (R_FAILED(ts))
+        fatalThrow(ts);
+}
+
+void resetTime()
+{
+    if (curTime == 0)
+    {
+        Result ct = timeGetCurrentTime(TimeType_UserSystemClock, (u64 *)&curTime); // Current system time
+        if (R_FAILED(ct))
+            fatalThrow(ct);
+    }
+
+    if (origTime == 0)
+    {
+        Result ct = timeGetCurrentTime(TimeType_UserSystemClock, (u64 *)&origTime);
+        if (R_FAILED(ct))
+            fatalThrow(ct);
+    }
+
+    struct tm currentTime = *localtime(&curTime);
+    struct tm timeReset = *localtime(&origTime);
+    timeReset.tm_hour = currentTime.tm_hour;
+    timeReset.tm_min = currentTime.tm_min;
+    timeReset.tm_sec = currentTime.tm_sec;
+    Result rt = timeSetCurrentTime(TimeType_NetworkSystemClock, mktime(&timeReset));
+    curTime = 0;
+    origTime = 0;
+    if (R_FAILED(rt))
+        fatalThrow(rt);
+}
+
+void resetTimeNTP()
+{
+    curTime = 0;
+    origTime = 0;
+    Result ts = timeSetCurrentTime(TimeType_NetworkSystemClock, ntpGetTime());
+    if (R_FAILED(ts))
+        fatalThrow(ts);
+}
+
+long getUnixTime()
+{
+    time_t unixTime = 0;
+    Result tg = timeGetCurrentTime(TimeType_UserSystemClock, (u64 *)&unixTime);
+    if (R_FAILED(tg))
+    {
+        fatalThrow(tg);
+        return -1;
+    }
+    return unixTime;
+}
+
+long getCurrentTime()
+{
+    time_t curTime = 0;
+    Result tg = timeGetCurrentTime(TimeType_UserSystemClock, (u64 *)&curTime); // Current system time
+    if (R_FAILED(tg))
+    {
+        fatalThrow(tg);
+        return -1;
+    }
+    return curTime;
 }

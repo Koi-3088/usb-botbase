@@ -1,4 +1,5 @@
 #include <switch.h>
+#include <time.h>
 
 extern Handle debughandle;
 extern bool bControllerIsInitialised;
@@ -64,3 +65,9 @@ u64 followMainPointer(s64* jumps, size_t count);
 void touch(HidTouchState* state, u64 sequentialCount, u64 holdTime, bool hold, u8* token);
 void key(HiddbgKeyboardAutoPilotState* states, u64 sequentialCount);
 void clickSequence(char* seq, u8* token);
+
+void dateSet(uint64_t date);
+void resetTime();
+void resetTimeNTP();
+long getUnixTime();
+long getCurrentTime();
