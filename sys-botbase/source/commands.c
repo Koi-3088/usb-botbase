@@ -15,6 +15,10 @@ HiddbgHdlsHandle controllerHandle = {0};
 HiddbgHdlsDeviceInfo controllerDevice = {0};
 HiddbgHdlsState controllerState = {0};
 
+time_t curTime = 0;
+time_t origTime = 0;
+time_t unixTime = 0;
+
 //Keyboard:
 HiddbgKeyboardAutoPilotState dummyKeyboardState = {0};
 
