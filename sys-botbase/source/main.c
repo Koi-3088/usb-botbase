@@ -883,6 +883,27 @@ int argmain(int argc, char **argv)
         printf("%d\n", fd_count);
     }
 
+    if(!strcmp(argv[0], "dateSet"))
+        dateSet(parseStringToInt(argv[1]));
+
+    if (!strcmp(argv[0], "resetTime"))
+        resetTime();
+
+    if (!strcmp(argv[0], "resetTimeNTP"))
+        resetTimeNTP();
+
+    if (!strcmp(argv[0], "getCurrentTime"))
+    {
+        long time = getCurrentTime();
+        printf("%016lX\n", time);
+    }
+
+    if (!strcmp(argv[0], "getUnixTime"))
+    {
+        long time = getUnixTime();
+        printf("%016lX\n", time);
+    }
+
     return 0;
 }
 
