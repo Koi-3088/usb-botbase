@@ -8,7 +8,7 @@
 #include "util.h"
 #include "ntp.h"
 
-// Controller:
+//Controller:
 bool bControllerIsInitialised = false;
 HidDeviceType controllerInitializedType = HidDeviceType_FullKey3;
 HiddbgHdlsHandle controllerHandle = {0};
@@ -19,7 +19,11 @@ time_t origTime = 0;
 time_t unixTime = 0;
 USBResponse response;
 
-// Keyboard:
+time_t curTime = 0;
+time_t origTime = 0;
+time_t unixTime = 0;
+
+//Keyboard:
 HiddbgKeyboardAutoPilotState dummyKeyboardState = {0};
 
 Handle debughandle = 0;
@@ -583,63 +587,9 @@ void clickSequence(char *seq, u8 *token)
     }
 }
 
-void dateSkip()
-{
-    if (origTime == 0)
-    {
-        Result ot = timeGetCurrentTime(TimeType_UserSystemClock, (u64 *)&origTime);
-        if (R_FAILED(ot))
-            fatalThrow(ot);
-    }
-
-    Result tg = timeGetCurrentTime(TimeType_UserSystemClock, (u64 *)&curTime); // Current system time
-    if (R_FAILED(tg))
-        fatalThrow(tg);
-
-    Result ts = timeSetCurrentTime(TimeType_NetworkSystemClock, (uint64_t)(curTime + 86400)); // Set new time
-    if (R_FAILED(ts))
-        fatalThrow(ts);
-}
-
 void dateSet(uint64_t date)
 {
     Result ts = timeSetCurrentTime(TimeType_NetworkSystemClock, date);
-    if (R_FAILED(ts))
-        fatalThrow(ts);
-}
-
-void timeSkipBack()
-{
-    if (origTime == 0)
-    {
-        Result ot = timeGetCurrentTime(TimeType_UserSystemClock, (u64 *)&origTime);
-        if (R_FAILED(ot))
-            fatalThrow(ot);
-    }
-
-    Result tg = timeGetCurrentTime(TimeType_UserSystemClock, (u64 *)&curTime); // Current system time
-    if (R_FAILED(tg))
-        fatalThrow(tg);
-
-    Result ts = timeSetCurrentTime(TimeType_NetworkSystemClock, (uint64_t)(curTime - 3600)); // Set new time
-    if (R_FAILED(ts))
-        fatalThrow(ts);
-}
-
-void timeSkipForward()
-{
-    if (origTime == 0)
-    {
-        Result ot = timeGetCurrentTime(TimeType_UserSystemClock, (u64 *)&origTime);
-        if (R_FAILED(ot))
-            fatalThrow(ot);
-    }
-
-    Result tg = timeGetCurrentTime(TimeType_UserSystemClock, (u64 *)&curTime); // Current system time
-    if (R_FAILED(tg))
-        fatalThrow(tg);
-
-    Result ts = timeSetCurrentTime(TimeType_NetworkSystemClock, (uint64_t)(curTime + 3600)); // Set new time
     if (R_FAILED(ts))
         fatalThrow(ts);
 }
@@ -672,6 +622,15 @@ void resetTime()
         fatalThrow(rt);
 }
 
+void resetTimeNTP()
+{
+    curTime = 0;
+    origTime = 0;
+    Result ts = timeSetCurrentTime(TimeType_NetworkSystemClock, ntpGetTime());
+    if (R_FAILED(ts))
+        fatalThrow(ts);
+}
+
 long getUnixTime()
 {
     time_t unixTime = 0;
@@ -694,27 +653,4 @@ long getCurrentTime()
         return -1;
     }
     return curTime;
-}
-
-void setCurrentTime(u64 time)
-{
-    Result ts = timeSetCurrentTime(TimeType_NetworkSystemClock, (time_t)time);
-    if (R_FAILED(ts))
-        fatalThrow(ts);
-}
-
-void resetTimeNTP()
-{
-    curTime = 0;
-    origTime = 0;
-    Result ts = timeSetCurrentTime(TimeType_NetworkSystemClock, ntpGetTime());
-    if (R_FAILED(ts))
-        fatalThrow(ts);
-}
-
-void sendUsbResponse(USBResponse response)
-{
-    usbCommsWrite((void *)&response, 4);
-    if (response.size > 0)
-        usbCommsWrite(response.data, response.size);
 }

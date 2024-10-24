@@ -17,6 +17,7 @@
 #define TITLE_ID 0x430000000000000B
 #define HEAP_SIZE 0x00480000
 #define THREAD_SIZE 0x1A000
+#define VERSION_S "insert_version_here"
 
 typedef enum
 {
@@ -96,7 +97,6 @@ void __appInit(void)
             setsysExit();
         }
     }
-
     rc = timeInitialize();
     if (R_FAILED(rc))
     {
@@ -106,7 +106,6 @@ void __appInit(void)
         if (R_FAILED(rc))
             fatalThrow(rc);
     }
-
     rc = pmdmntInitialize();
     if (R_FAILED(rc))
         fatalThrow(rc);
@@ -689,17 +688,8 @@ int argmain(int argc, char **argv)
         free(buf);
     }
 
-    if (!strcmp(argv[0], "getVersion"))
-    {
-        if (usb)
-        {
-            char buf[] = "insert_version_here\n";
-            response.data = buf;
-            response.size = sizeof(buf);
-            sendUsbResponse(response);
-        }
-        else
-            printf("insert_version_here\n");
+    if(!strcmp(argv[0], "getVersion")){
+        printf("%s\n", VERSION_S);
     }
 
     // follow pointers and print absolute offset (little endian, flip it yourself if required)
@@ -1153,6 +1143,27 @@ int argmain(int argc, char **argv)
             printf("%016lX\n", time);
     }
 
+    if(!strcmp(argv[0], "dateSet"))
+        dateSet(parseStringToInt(argv[1]));
+
+    if (!strcmp(argv[0], "resetTime"))
+        resetTime();
+
+    if (!strcmp(argv[0], "resetTimeNTP"))
+        resetTimeNTP();
+
+    if (!strcmp(argv[0], "getCurrentTime"))
+    {
+        long time = getCurrentTime();
+        printf("%016lX\n", time);
+    }
+
+    if (!strcmp(argv[0], "getUnixTime"))
+    {
+        long time = getUnixTime();
+        printf("%016lX\n", time);
+    }
+
     return 0;
 }
 
@@ -1249,6 +1260,7 @@ void wifiMainLoop()
     int fr_count = 0;
 
     flashLed();
+
     while (true)
     {
         poll(pfds, fd_count, -1);
