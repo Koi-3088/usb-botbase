@@ -13,7 +13,8 @@
 #include "util.h"
 #include "freeze.h"
 #include <poll.h>
-#include "time.h"
+#include <time.h>
+#include "ntp.h"
 
 #define TITLE_ID 0x430000000000000B
 #define HEAP_SIZE 0x00480000
@@ -39,6 +40,8 @@ void wifiMainLoop();
 bool isUSB();
 bool handle_connection();
 void handle_disconnect();
+bool isConnectedToInternet(USBResponse* response);
+void sendResult(uint16_t success, USBResponse* response);
 
 // locks for thread
 Mutex freezeMutex, touchMutex, keyMutex, clickMutex;
@@ -102,7 +105,7 @@ void __appInit(void)
         timeExit();
         __nx_time_service_type = TimeServiceType_User;
         rc = timeInitialize();
-        if(R_FAILED(rc))
+        if (R_FAILED(rc))
             fatalThrow(rc);
     }
 
@@ -115,7 +118,7 @@ void __appInit(void)
         fatalThrow(rc);
 
     rc = pminfoInitialize();
-    if (R_FAILED(rc)) 
+    if (R_FAILED(rc))
         fatalThrow(rc);
 
     rc = fsInitialize();
@@ -651,9 +654,9 @@ int argmain(int argc, char** argv)
         free(buf);
     }
 
-    if(!strcmp(argv[0], "getVersion")){
+    if (!strcmp(argv[0], "getVersion")) {
         if (usb)
-        {		
+        {
             response.data = VERSION_S;
             response.size = sizeof(VERSION_S);
             sendUsbResponse(response);
@@ -1052,11 +1055,108 @@ int argmain(int argc, char** argv)
         else printf("%d\n", fd_count);
     }
 
-    if(!strcmp(argv[0], "daySkip"))
-        dateSkip();
+    if (!strcmp(argv[0], "getSwitchTime"))
+    {
+        time_t posix = 0;
+        Result res = timeGetCurrentTime(TimeType_UserSystemClock, (u64*)&posix);
+        if (R_FAILED(res))
+        {
+            sendResult(0, &response);
+            return 0;
+        }
 
-    if(!strcmp(argv[0], "resetTime"))
-        resetTime();
+        struct tm* time = localtime(&posix);
+        if (time->tm_year >= 160)
+        {
+            time->tm_year = 100;
+            time->tm_mon = 0;
+            time->tm_mday = 1;
+
+            res = timeSetCurrentTime(TimeType_NetworkSystemClock, mktime(time));
+            if (R_FAILED(res))
+            {
+                sendResult(0, &response);
+                return 0;
+            }
+
+            posix = mktime(time);
+        }
+
+        if (usb)
+        {
+            response.size = sizeof(long);
+            response.data = &posix;
+            sendUsbResponse(response);
+        }
+        else
+        {
+            printf("%ld\n", posix);
+        }
+    }
+
+    if (!strcmp(argv[0], "setSwitchTime"))
+    {
+        if (argc != 2)
+            return 0;
+
+        time_t input = (time_t)strtoull(argv[1], NULL, 10);
+        struct tm* toSet = localtime(&input);
+        if (toSet->tm_year >= 160)
+        {
+            int fail = 0;
+            if (usb)
+            {
+                response.size = sizeof(fail);
+                response.data = &fail;
+                sendUsbResponse(response);
+            }
+            else
+            {
+                printf("%d\n", fail);
+            }
+
+            return 0;
+        }
+
+        Result res = timeSetCurrentTime(TimeType_NetworkSystemClock, input);
+        if (R_FAILED(res))
+        {
+            sendResult(0, &response);
+            return 0;
+        }
+
+        sendResult(1, &response);
+    }
+
+    if (!strcmp(argv[0], "resetSwitchTime"))
+    {
+        bool sync;
+        Result res = setsysInitialize();
+        if (R_FAILED(res))
+        {
+            sendResult(0, &response);
+            return 0;
+        }
+
+        res = setsysIsUserSystemClockAutomaticCorrectionEnabled(&sync);
+        if (R_FAILED(res) || !sync)
+        {
+            setsysExit();
+            sendResult(0, &response);
+            return 0;
+        }
+
+        setsysExit();
+        if (!isConnectedToInternet(&response))
+            return 0;
+
+        time_t ntp = ntpGetTime();
+        res = timeSetCurrentTime(TimeType_NetworkSystemClock, ntp);
+        if (R_FAILED(res))
+            sendResult(0, &response);
+
+        sendResult(1, &response);
+    }
 
     return 0;
 }
@@ -1229,7 +1329,7 @@ void usbMainLoop()
     {
         int lenUSB;
         size_t len = usbCommsRead(&lenUSB, sizeof(lenUSB)); //Should use malloc
-        if (len == 0)
+        if (len <= 0)
         {
             svcSleepThread(mainLoopSleepTime * 1e+6L);
             continue;
@@ -1241,7 +1341,7 @@ void usbMainLoop()
             linebufUSB[i] = 0;
 
         len = usbCommsRead(&linebufUSB, lenUSB);
-        bool failed = lenUSB - 2 > sizeof(linebufUSB) || len == 0;
+        bool failed = lenUSB - 2 > sizeof(linebufUSB) || len <= 0;
         if (failed)
         {
             svcSleepThread(mainLoopSleepTime * 1e+6L);
@@ -1442,7 +1542,7 @@ bool handle_connection()
 
     fsExit();
     fsdevUnmountAll();
-    
+
     if (R_FAILED(rc))
         return false;
     return true;
@@ -1453,4 +1553,39 @@ void handle_disconnect()
     if (usb)
         usbCommsExit();
     else socketExit();
+}
+
+bool isConnectedToInternet(USBResponse* response)
+{
+    Result res = nifmInitialize(NifmServiceType_User);
+    if (R_FAILED(res))
+    {
+        sendResult(0, response);
+        return false;
+    }
+
+    NifmInternetConnectionStatus status;
+    res = nifmGetInternetConnectionStatus(NULL, NULL, &status);
+    if (R_FAILED(res) || status != NifmInternetConnectionStatus_Connected)
+    {
+        sendResult(0, response);
+        nifmExit();
+        return false;
+    }
+
+    return true;
+}
+
+void sendResult(uint16_t success, USBResponse* response)
+{
+    if (usb)
+    {
+        response->size = sizeof(uint16_t);
+        response->data = &success;
+        sendUsbResponse(*response);
+    }
+    else
+    {
+        printf("%u\n", success);
+    }
 }

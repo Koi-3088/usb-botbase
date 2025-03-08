@@ -14,8 +14,6 @@ HidDeviceType controllerInitializedType = HidDeviceType_FullKey3;
 HiddbgHdlsHandle controllerHandle = { 0 };
 HiddbgHdlsDeviceInfo controllerDevice = { 0 };
 HiddbgHdlsState controllerState = { 0 };
-time_t curTime = 0;
-time_t origTime = 0;
 USBResponse response;
 
 //Keyboard:
@@ -589,52 +587,6 @@ void clickSequence(char* seq, u8* token)
 
         command = strtok(NULL, &delim);
     }
-}
-
-void dateSkip()
-{
-    if (origTime == 0)
-    {
-        Result ot = timeGetCurrentTime(TimeType_UserSystemClock, (u64*)&origTime);
-        if (R_FAILED(ot))
-            fatalThrow(ot);
-    }
-
-    Result tg = timeGetCurrentTime(TimeType_UserSystemClock, (u64*)&curTime); //Current system time
-    if (R_FAILED(tg))
-        fatalThrow(tg);
-
-    Result ts = timeSetCurrentTime(TimeType_NetworkSystemClock, (uint64_t)(curTime + 86400)); //Set new time
-    if (R_FAILED(ts))
-        fatalThrow(ts);
-}
-
-void resetTime()
-{
-    if (curTime == 0)
-    {
-        Result ct = timeGetCurrentTime(TimeType_UserSystemClock, (u64*)&curTime); //Current system time
-        if (R_FAILED(ct))
-            fatalThrow(ct);
-    }
-
-    if (origTime == 0)
-    {
-        Result ct = timeGetCurrentTime(TimeType_UserSystemClock, (u64*)&origTime);
-        if (R_FAILED(ct))
-            fatalThrow(ct);
-    }
-
-    struct tm currentTime = *localtime(&curTime);
-    struct tm timeReset = *localtime(&origTime);
-    timeReset.tm_hour = currentTime.tm_hour;
-    timeReset.tm_min = currentTime.tm_min;
-    timeReset.tm_sec = currentTime.tm_sec;
-    Result rt = timeSetCurrentTime(TimeType_NetworkSystemClock, mktime(&timeReset));
-    curTime = 0;
-    origTime = 0;
-    if (R_FAILED(rt))
-        fatalThrow(rt);
 }
 
 void sendUsbResponse(USBResponse response)
