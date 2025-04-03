@@ -1,24 +1,24 @@
 #pragma once
 
+#include <vector>
 #include <stdio.h>
-#include <atomic>
 #include <switch.h>
+#include "util.h"
 
 namespace Connection {
 	class ConnectionHandler {
 	public:
-		ConnectionHandler() : m_usb(isUSB()) {}
+		ConnectionHandler() {}
 		virtual ~ConnectionHandler() {}
 
-		virtual bool initialize() = 0;
+		virtual Result initialize(Result& res) = 0;
 		virtual void connect() = 0;
 		virtual void disconnect() = 0;
-		virtual int sendData(void* data, u64 length, int sockfd = 0) = 0;
-		bool usb() { return m_usb; }
+		virtual std::vector<char> receive_data(int sockfd = 0) = 0;
+		virtual void sendData(const std::vector<char>& data, size_t data_size, int sockfd = 0) = 0;
 
-	private:
-		bool isUSB();
-		std::atomic<bool> m_usb;
+	protected:
+		virtual int argmain(std::string cmd, const std::vector<std::string>&, int sockfd = 0) = 0;
 
 	protected:
 		const int m_port = 6000;

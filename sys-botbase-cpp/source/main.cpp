@@ -2,10 +2,10 @@
 #include "connection.h"
 #include "socketConnection.h"
 #include "usbConnection.h"
-#include "commandUtil.h"
+#include "util.h"
 
 using namespace Connection;
-using namespace CommandUtil;
+using namespace Util;
 
 #define TITLE_ID 0x430000000000000B
 #define HEAP_SIZE 0x00480000
@@ -16,6 +16,7 @@ ConnectionHandler* m_connection;
 
 extern "C" {
     u32 __nx_applet_type = AppletType_None;
+    TimeServiceType __nx_time_service_type = TimeServiceType_System;
 
     void __libnx_initheap(void)
     {
@@ -27,17 +28,12 @@ extern "C" {
         fake_heap_start = inner_heap;
         fake_heap_end = inner_heap + sizeof(inner_heap);
     }
-}
-
-extern "C" {
-    TimeServiceType __nx_time_service_type = TimeServiceType_System;
 
     void __appInit(void)
     {
-        Result rc;
         svcSleepThread(20000000000L);
 
-        rc = smInitialize();
+        Result rc = smInitialize();
         if (R_FAILED(rc))
             fatalThrow(rc);
 
@@ -82,11 +78,15 @@ extern "C" {
         if (R_FAILED(rc))
             fatalThrow(rc);
 
-        if (m_connection->usb())
-            m_connection = new UsbConnection::UsbConnection{};
-        else m_connection = new SocketConnection::SocketConnection{};
+        bool usb = Utils::isUSB();
+        if (usb) {
+            m_connection = new UsbConnection::UsbConnection();
+        }
+        else {
+            m_connection = new SocketConnection::SocketConnection();
+        }
 
-        if (!m_connection->initialize())
+        if (R_FAILED(m_connection->initialize(rc)))
             fatalThrow(rc);
 
         rc = capsscInitialize();
@@ -97,26 +97,23 @@ extern "C" {
         if (R_FAILED(rc))
             fatalThrow(rc);
     }
-}
 
-extern "C" void __appExit(void)
-{
-    smExit();
-    timeExit();
-    pmdmntExit();
-    ldrDmntExit();
-    pminfoExit();
-    m_connection->disconnect();
-    delete(m_connection);
-    capsscExit();
-    viExit();
+    void __appExit(void)
+    {
+        smExit();
+        timeExit();
+        pmdmntExit();
+        ldrDmntExit();
+        pminfoExit();
+        m_connection->disconnect();
+        delete m_connection;
+        capsscExit();
+        viExit();
+    }
 }
 
 int main()
 {
     m_connection->connect();
-    CommandUtils* utils = new CommandUtils();
-    utils->flashLed();
-    delete(utils);
     return 0;
 }

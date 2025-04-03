@@ -1,7 +1,10 @@
 #include "defines.h"
-#include "commandUtil.h"
+#include "util.h"
+#include "log.h"
+#include <sstream>
 
-namespace CommandUtil {
+namespace Util {
+    using namespace SbbLog;
     // taken from sys-httpd (thanks jolan!)
     static const HidsysNotificationLedPattern breathingpattern = {
         0x8,       // 100ms (baseMiniCycleDuration)
@@ -46,7 +49,7 @@ namespace CommandUtil {
         },
     };
 
-    bool CommandUtils::flashLed() {
+    bool Utils::flashLed() {
         Result rc = hidsysInitialize();
         if (R_FAILED(rc))
             return false;
@@ -57,7 +60,7 @@ namespace CommandUtil {
         return true;
     }
 
-    void CommandUtils::sendPatternStatic(const HidsysNotificationLedPattern* pattern, const HidNpadIdType idType) {
+    void Utils::sendPatternStatic(const HidsysNotificationLedPattern* pattern, const HidNpadIdType idType) {
         s32 total_entries;
         HidsysUniquePadId unique_pad_ids[2] = { 0 };
 
@@ -67,5 +70,38 @@ namespace CommandUtil {
 
         for (int i = 0; i < total_entries; i++)
             hidsysSetNotificationLedPattern(pattern, unique_pad_ids[i]);
+    }
+
+    bool Utils::isUSB()
+    {
+        char str[4];
+        FILE* config = fopen("sdmc:/atmosphere/contents/430000000000000B/config.cfg", "r");
+        if (config) {
+            fscanf(config, "%[^\n]", str);
+        }
+
+        fclose(config);
+        return strcmp(strlwr(str), "wifi") != 0;
+    }
+
+    void Utils::parseArgs(const std::vector<char>& argstr, std::function<void(const std::string&, const std::vector<std::string>&)> callback)
+    {
+        std::string cmdStr(argstr.begin(), argstr.end());
+        std::istringstream stream(cmdStr);
+
+        std::vector<std::string> params;
+        std::copy(std::istream_iterator<std::string>(stream),
+            std::istream_iterator<std::string>(),
+            std::back_inserter(params));
+
+        if (params.empty()) {
+            callback("", {});
+            return;
+        }
+
+        std::string command = params[0];
+        std::vector<std::string> parameters(params.begin() + 1, params.end());
+
+        callback(command, params);
     }
 }

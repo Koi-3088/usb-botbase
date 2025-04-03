@@ -1,17 +1,31 @@
 #pragma once
 
 #include <switch.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <poll.h>
+#include <iostream> 
 #include "connection.h"
+#include "util.h"
 
 namespace SocketConnection {
 	class SocketConnection : public Connection::ConnectionHandler {
 	public:
-		SocketConnection() {}
-		~SocketConnection() {}
+		SocketConnection() : ConnectionHandler() {}
+		~SocketConnection() {
+			close(sockfd);
+		}
 
-		bool initialize() override;
+		Result initialize(Result& res) override;
 		void connect() override;
 		void disconnect() override;
-		int sendData(void* data, u64 length, int sockfd) override;
+		std::vector<char> receive_data(int sockfd) override;
+		void sendData(const std::vector<char>& data, size_t data_size, int sockfd) override;
+
+	protected:
+		int argmain(std::string cmd, const std::vector<std::string>&, int sockfd) override;
+
+	private:
+		int sockfd;
 	};
 }
