@@ -1,9 +1,8 @@
 #pragma once
 
-#include <vector>
-#include <stdio.h>
+#include <string>
 #include <switch.h>
-#include "util.h"
+#include <vector>
 
 namespace Connection {
 	class ConnectionHandler {
@@ -17,8 +16,8 @@ namespace Connection {
 		virtual std::vector<char> receive_data(int sockfd = 0) = 0;
 		virtual void sendData(const std::vector<char>& data, size_t data_size, int sockfd = 0) = 0;
 
-	protected:
-		virtual int argmain(std::string cmd, const std::vector<std::string>&, int sockfd = 0) = 0;
+	/*protected:
+		virtual int argmain(std::string cmd, const std::vector<std::string>&, int sockfd = 0) = 0;*/
 
 	protected:
 		const int m_port = 6000;

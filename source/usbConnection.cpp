@@ -1,10 +1,13 @@
 #include "defines.h"
+#include "logger.h"
 #include "usbConnection.h"
-#include "log.h"
+#include "util.h"
+#include "commands.h"
 
 namespace UsbConnection {
     using namespace Util;
     using namespace SbbLog;
+    using namespace Commands;
 
     Result UsbConnection::initialize(Result& res) {
         res = usbCommsInitialize();
@@ -16,13 +19,22 @@ namespace UsbConnection {
 
         while (appletMainLoop()) {
             auto buffer = UsbConnection::receive_data();
-            Utils::parseArgs(buffer, [this](std::string x, const std::vector<std::string>& y) { return UsbConnection::argmain(x, y); });
+            Utils::parseArgs(buffer, [&](std::string x, const std::vector<std::string>& y) {
+                CommandHandler command;
+                auto buffer = command.HandleCommand(x, y);
+                if (buffer.empty()) {
+                    return;
+                }
+
+                Logger::logToFile("Sending data...");
+                UsbConnection::sendData(buffer, buffer.size());
+            });
             svcSleepThread(1e+6L);
         }
 	}
 
-    int UsbConnection::argmain(std::string cmd, const std::vector<std::string>& params, int sockfd) {
-        if (cmd == "")
+    /*int UsbConnection::argmain(std::string cmd, const std::vector<std::string>& params, int sockfd) {
+        if (cmd.empty())
             return 0;
 
         std::string msg = "cmd: " + cmd;
@@ -43,13 +55,13 @@ namespace UsbConnection {
         }
 
         return 0;
-    }
+    }*/
 
-	extern "C" void UsbConnection::disconnect() {
+	void UsbConnection::disconnect() {
 		usbCommsExit();
 	}
 
-    extern "C" std::vector<char> UsbConnection::receive_data(int sockfd) {
+    std::vector<char> UsbConnection::receive_data(int sockfd) {
         size_t size = 0;
         std::string msg = "Size before read: " + std::to_string(size);
         Logger::logToFile(msg);
@@ -72,13 +84,14 @@ namespace UsbConnection {
         return buffer;
     }
 
-    extern "C" void UsbConnection::sendData(const std::vector<char>& data, size_t data_size, int sockfd) {
+    void UsbConnection::sendData(const std::vector<char>& data, size_t size, int sockfd) {
         USBResponse response {
-            data_size,
+            size,
             (void*)data.data(),
         };
 
 		usbCommsWrite(&response, 4);
+        Logger::logToFile("Send response size: " + std::to_string(response.size));
 		if (response.size > 0) {
             usbCommsWrite(response.data, response.size);
 		}

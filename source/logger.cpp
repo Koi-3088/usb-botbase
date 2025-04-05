@@ -1,7 +1,7 @@
-#include <iostream>
-#include <fstream>
-#include "log.h"
 #include "defines.h"
+#include "logger.h"
+#include <fstream>
+#include <iostream>
 
 namespace SbbLog {
     // Add creating a file, and max line length per file per day. Add std debug output?

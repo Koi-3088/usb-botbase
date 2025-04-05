@@ -1,8 +1,11 @@
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/errno.h>
 #include "defines.h"
 #include "socketConnection.h"
+#include <arpa/inet.h>
+#include <iostream> 
+#include <poll.h>
+#include <sys/errno.h>
+#include <sys/socket.h>
+#include <sys/types.h>
 
 namespace SocketConnection {
 	Result SocketConnection::initialize(Result& res) {
@@ -14,9 +17,9 @@ namespace SocketConnection {
 
 	}
 
-	int SocketConnection::argmain(std::string cmd, const std::vector<std::string>&, int sockfd) {
+	/*int SocketConnection::argmain(std::string cmd, const std::vector<std::string>&, int sockfd) {
 		return 0;
-	}
+	}*/
 
 	void SocketConnection::disconnect() {
 		socketExit();

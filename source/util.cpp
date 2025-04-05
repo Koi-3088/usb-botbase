@@ -1,7 +1,6 @@
 #include "defines.h"
+#include "logger.h"
 #include "util.h"
-#include "log.h"
-#include <sstream>
 
 namespace Util {
     using namespace SbbLog;

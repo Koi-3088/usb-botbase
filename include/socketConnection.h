@@ -1,12 +1,9 @@
 #pragma once
 
-#include <switch.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <poll.h>
-#include <iostream> 
 #include "connection.h"
-#include "util.h"
+#include <string>
+#include <unistd.h>
+#include <vector>
 
 namespace SocketConnection {
 	class SocketConnection : public Connection::ConnectionHandler {
@@ -22,8 +19,8 @@ namespace SocketConnection {
 		std::vector<char> receive_data(int sockfd) override;
 		void sendData(const std::vector<char>& data, size_t data_size, int sockfd) override;
 
-	protected:
-		int argmain(std::string cmd, const std::vector<std::string>&, int sockfd) override;
+	/*protected:
+		int argmain(std::string cmd, const std::vector<std::string>&, int sockfd) override;*/
 
 	private:
 		int sockfd;

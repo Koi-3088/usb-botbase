@@ -3,6 +3,8 @@
 #include "socketConnection.h"
 #include "usbConnection.h"
 #include "util.h"
+#include <switch.h>
+#include <memory>
 
 using namespace Connection;
 using namespace Util;
@@ -107,6 +109,7 @@ extern "C" {
         pminfoExit();
         m_connection->disconnect();
         delete m_connection;
+        m_connection = nullptr;
         capsscExit();
         viExit();
     }
