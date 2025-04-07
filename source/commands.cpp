@@ -1,14 +1,25 @@
 #include "defines.h"
 #include "commands.h"
 #include "logger.h"
+#include "util.h"
 #include <switch.h>
 #include <cstring>
 
 namespace Commands {
 	using namespace SbbLog;
+	using namespace Util;
 
 	std::vector<char> CommandHandler::HandleCommand(const std::string& cmd, const std::vector<std::string>& params, int sockfd) {
 		Logger::logToFile("HandleCommand cmd: " + cmd);
+		Logger::logToFile("HandleCommand params#: " + std::to_string(params.size()));
+		for (int i = 0; i < params.size(); i++) {
+			if (params.at(i).empty()) {
+				continue;
+			}
+
+			Logger::logToFile("HandleCommand param " + std::to_string(i) + ": " + params.at(i));
+		}
+
 		std::vector<char> buffer;
 		if (cmd.empty()) {
 			return buffer;
@@ -50,6 +61,21 @@ namespace Commands {
 		case CommandEnum::Configure: {
 			break;
 		}
+		case CommandEnum::Peek: {
+			if (params.size() != 2) {
+				return buffer;
+			}
+
+			MetaData meta = getMetaData();
+			u64 offset = Utils::parseStringToInt(params.at(0));
+			Logger::logToFile("Peek parseStringToInt() offset: " + std::to_string(offset));
+
+			u64 size = Utils::parseStringToInt(params.at(1));
+			Logger::logToFile("Peek parseStringToInt() size: " + std::to_string(size));
+
+			buffer = peekInfinite(meta.heap_base + offset, size);
+			Logger::logToFile("Peek buffer after peekInfinite(): " + std::string(buffer.data()));
+		}
 		}
 		return buffer;
 	}
@@ -84,14 +110,19 @@ namespace Commands {
 			printf("pmdmntGetApplicationProcessId: %d\n", rc);
 
 		Logger::logToFile("getMetaData() pmdmntGetApplicationProcessId().");
+
 		meta.main_nso_base = getMainNsoBase(pid);
 		Logger::logToFile("getMetaData() main_nso_base.");
+
 		meta.heap_base = getHeapBase(debughandle);
 		Logger::logToFile("getMetaData() heap_base.");
+
 		meta.titleID = getTitleId(pid);
 		Logger::logToFile("getMetaData() titleID.");
+
 		meta.titleVersion = GetTitleVersion(pid, meta.titleID);
 		Logger::logToFile("getMetaData() titleVersion.");
+
 		getBuildID(&meta, pid);
 		Logger::logToFile("getMetaData() buildID.");
 
@@ -178,7 +209,7 @@ namespace Commands {
 	u64 CommandHandler::getoutsize(NsApplicationControlData* buf) {
 		Result rc = nsInitialize();
 		if (R_FAILED(rc))
-			Logger::logToFile("getoutsize() nsInitialize() failed.");//fatalThrow(rc);
+			Logger::logToFile("getoutsize() nsInitialize() failed.");
 		u64 outsize = 0;
 		u64 pid = 0;
 		pmdmntGetApplicationProcessId(&pid);
@@ -190,45 +221,21 @@ namespace Commands {
 		return outsize;
 	}
 
-	void CommandHandler::peekInfinite(u64 offset, u64 size)
+	std::vector<char> CommandHandler::peekInfinite(u64 offset, u64 size)
 	{
-		u64 remainder = size;
-		u64 total = 0;
-		std::vector<char> out;
-		//u8* out[65535];
+		std::vector<char> buffer(size);
 
 		attach();
-		while (remainder > 0)
-		{
-			u64 size = remainder > 65535 ? 65535 : remainder;
-			remainder -= size;
-			readMem(out.get(), offset + total, size);
-
-			u64 i;
-			for (i = 0; i < thisBuffersize; i++)
-			{
-				if (usb)
-					usbOut[totalFetched + i] = out[i];
-				else printf("%02X", out[i]);
-			}
-
-			total += size;
-		}
-
+		readMem(buffer, offset, size);
 		detach();
-		if (usb)
-		{
-			response.size = size;
-			response.data = &usbOut[0];
-			sendUsbResponse(response);
-		}
-		else printf("\n");
+		return buffer;
 	}
 
-	void CommandHandler::readMem(u64* out, u64 offset, u64 size)
+	void CommandHandler::readMem(const std::vector<char>& data, u64 offset, u64 size)
 	{
-		Result rc = svcReadDebugProcessMemory(out, debughandle, offset, size);
+		Result rc = svcReadDebugProcessMemory((void*)data.data(), debughandle, offset, size);
 		if (R_FAILED(rc))
-			printf("svcReadDebugProcessMemory: %d\n", rc);
+			Logger::logToFile("readMem() svcReadDebugProcessMemory() failed.");
+		else Logger::logToFile("readMem() data returned: " + std::string(data.data()));
 	}
 }

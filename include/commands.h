@@ -44,8 +44,8 @@ namespace Commands {
 		u64 getTitleId(u64 pid);
 		u64 GetTitleVersion(u64 pid, u64 titleID);
 		u64 getoutsize(NsApplicationControlData* buf);
-		void peekInfinite(u64 offset, u64 size);
-		void readMem(u64* out, u64 offset, u64 size);
+		std::vector<char> peekInfinite(u64 offset, u64 size);
+		void readMem(const std::vector<char>& data, u64 offset, u64 size);
 
 		enum class CommandEnum {
 			Peek,

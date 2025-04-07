@@ -1,6 +1,7 @@
 #include "defines.h"
 #include "logger.h"
 #include "util.h"
+#include <algorithm>
 
 namespace Util {
     using namespace SbbLog;
@@ -100,7 +101,21 @@ namespace Util {
 
         std::string command = params[0];
         std::vector<std::string> parameters(params.begin() + 1, params.end());
+        parameters.erase(std::remove_if(parameters.begin(), parameters.end(), [](const std::string& s) {
+                return s.empty() || s.data() == nullptr;
+            }),
+            parameters.end()
+        );
 
-        callback(command, params);
+        callback(command, parameters);
+    }
+
+    u64 Utils::parseStringToInt(const std::string& arg) {
+        if (arg.length() > 2) {
+            if (arg[1] == 'x') {
+                return strtoul(arg.c_str(), NULL, 16);
+            }
+        }
+        return strtoul(arg.c_str(), NULL, 10);
     }
 }
