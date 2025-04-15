@@ -65,16 +65,20 @@
   <ItemGroup>
     <ClInclude Include="include\commands.h" />
     <ClInclude Include="include\connection.h" />
+    <ClInclude Include="include\controllerCommands.h" />
     <ClInclude Include="include\defines.h" />
     <ClInclude Include="include\logger.h" />
+    <ClInclude Include="include\moduleBase.h" />
     <ClInclude Include="include\socketConnection.h" />
     <ClInclude Include="include\usbConnection.h" />
     <ClInclude Include="include\util.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="source\commands.cpp" />
+    <ClCompile Include="source\controllerCommands.cpp" />
     <ClCompile Include="source\logger.cpp" />
     <ClCompile Include="source\main.cpp" />
+    <ClCompile Include="source\moduleBase.cpp" />
     <ClCompile Include="source\socketConnection.cpp" />
     <ClCompile Include="source\usbConnection.cpp" />
     <ClCompile Include="source\util.cpp" />

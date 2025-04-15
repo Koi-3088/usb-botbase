@@ -2,11 +2,14 @@
 #include "logger.h"
 #include "util.h"
 #include <algorithm>
+#include <fstream>
+#include <iostream>
 
 namespace Util {
     using namespace SbbLog;
+
     // taken from sys-httpd (thanks jolan!)
-    static const HidsysNotificationLedPattern breathingpattern = {
+    static const HidsysNotificationLedPattern breathingPattern = {
         0x8,       // 100ms (baseMiniCycleDuration)
         0x2,       // 3 mini cycles. Last one 12.5ms (totalMiniCycles)
         0x2,       // 2 full cycles (totalFullCycles)
@@ -27,8 +30,7 @@ namespace Util {
         },
     };
 
-    // beeg flash for wireless controller
-    static const HidsysNotificationLedPattern flashpattern = {
+    static const HidsysNotificationLedPattern flashPattern = {
         0xF,       // 200ms (baseMiniCycleDuration)
         0x2,       // 3 mini cycles. Last one 12.5ms (totalMiniCycles)
         0x2,       // 2 full cycles (totalFullCycles)
@@ -51,11 +53,12 @@ namespace Util {
 
     bool Utils::flashLed() {
         Result rc = hidsysInitialize();
-        if (R_FAILED(rc))
+        if (R_FAILED(rc)) {
             return false;
+        }
 
-        sendPatternStatic(&breathingpattern, HidNpadIdType_Handheld); // glow in and out x2 for docked joycons
-        sendPatternStatic(&flashpattern, HidNpadIdType_No1); // big hard single glow for wireless/wired joycons or controllers
+        sendPatternStatic(&breathingPattern, HidNpadIdType_Handheld); // glow in and out x2 for docked joycons
+        sendPatternStatic(&flashPattern, HidNpadIdType_No1); // big hard single glow for wireless/wired joycons or controllers
         hidsysExit();
         return true;
     }
@@ -65,27 +68,33 @@ namespace Util {
         HidsysUniquePadId unique_pad_ids[2] = { 0 };
 
         Result rc = hidsysGetUniquePadsFromNpad(idType, unique_pad_ids, 2, &total_entries);
-        if (R_FAILED(rc))
+        if (R_FAILED(rc)) {
             return; // probably incompatible or no pads connected
+        }
 
-        for (int i = 0; i < total_entries; i++)
+        for (int i = 0; i < total_entries; i++) {
             hidsysSetNotificationLedPattern(pattern, unique_pad_ids[i]);
+        }
     }
 
     bool Utils::isUSB()
     {
-        char str[4];
-        FILE* config = fopen("sdmc:/atmosphere/contents/430000000000000B/config.cfg", "r");
-        if (config) {
-            fscanf(config, "%[^\n]", str);
+        char str[10];
+        std::ifstream cfg("sdmc:/atmosphere/contents/430000000000000B/config.cfg");
+        if (cfg.is_open()) {
+            cfg.getline(str, 10, '\n');
+            cfg.close();
+
+            if (std::string(str) == "usb") {
+                return true;
+            }
         }
 
-        fclose(config);
-        return strcmp(strlwr(str), "wifi") != 0;
+        cfg.close();
+        return false;
     }
 
-    void Utils::parseArgs(const std::vector<char>& argstr, std::function<void(const std::string&, const std::vector<std::string>&)> callback)
-    {
+    void Utils::parseArgs(const std::vector<char>& argstr, std::function<void(const std::string&, const std::vector<std::string>&)> callback) {
         std::string cmdStr(argstr.begin(), argstr.end());
         std::istringstream stream(cmdStr);
 
@@ -102,20 +111,26 @@ namespace Util {
         std::string command = params[0];
         std::vector<std::string> parameters(params.begin() + 1, params.end());
         parameters.erase(std::remove_if(parameters.begin(), parameters.end(), [](const std::string& s) {
-                return s.empty() || s.data() == nullptr;
-            }),
-            parameters.end()
+            return s.empty() || s == "\0" || s == "\n";
+            }), parameters.end()
         );
 
+        parameters.pop_back();
         callback(command, parameters);
     }
 
     u64 Utils::parseStringToInt(const std::string& arg) {
-        if (arg.length() > 2) {
-            if (arg[1] == 'x') {
-                return strtoul(arg.c_str(), NULL, 16);
-            }
+        if (arg.length() > 2 && arg[1] == 'x') {
+            return std::stoull(arg, NULL, 16);
         }
-        return strtoul(arg.c_str(), NULL, 10);
+
+        return std::stoull(arg, NULL, 10);
+    }
+
+    s64 Utils::parseStringToSignedLong(const std::string& arg) {
+        if (arg.length() > 2 && (arg[1] == 'x' || arg[2] == 'x')) {
+            return std::stoul(arg, NULL, 16);
+        }
+        return std::stoul(arg, NULL, 10);
     }
 }

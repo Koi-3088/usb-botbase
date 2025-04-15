@@ -8,6 +8,11 @@ namespace SbbLog {
 		Logger() {}
 		~Logger() {}
 
-		static void logToFile(const std::string& message, const std::string& filename = "sdmc:/atmosphere/contents/430000000000000B/log.txt");
+	public:
+		static void logToFile(const std::string& message);
+
+	private:
+		static std::string getCurrentDate();
+		static std::string getCurrentTimestamp();
 	};
 }

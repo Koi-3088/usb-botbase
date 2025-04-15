@@ -14,10 +14,12 @@ namespace Util {
 		Utils() {}
 		~Utils() {}
 
+	public:
 		static bool flashLed();
 		static bool isUSB();
 		static void parseArgs(const std::vector<char>& argstr, std::function<void(const std::string&, const std::vector<std::string>&)> callback);
 		static u64 parseStringToInt(const std::string& arg);
+		static s64 parseStringToSignedLong(const std::string& arg);
 
 	private:
 		static void sendPatternStatic(const HidsysNotificationLedPattern* pattern, const HidNpadIdType idType);

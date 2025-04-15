@@ -17,10 +17,6 @@ namespace SocketConnection {
 
 	}
 
-	/*int SocketConnection::argmain(std::string cmd, const std::vector<std::string>&, int sockfd) {
-		return 0;
-	}*/
-
 	void SocketConnection::disconnect() {
 		socketExit();
 	}

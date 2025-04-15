@@ -7,46 +7,19 @@
 #include <memory>
 #include <switch.h>
 #include "connection.h"
+#include "controllerCommands.h"
 
 namespace Commands {
 	using namespace Connection;
-	class CommandHandler {
+	class CommandHandler : ControllerCommands::Controller {
 	public:
-		CommandHandler() {}
+		CommandHandler() : Controller() {}
+		~CommandHandler() override {}
 
-		~CommandHandler() {
-			//delete m_connection;
-			//m_connection = nullptr;
-			//m_connection.reset();
-		}
-
-		typedef struct {
-			u64 main_nso_base;
-			u64 heap_base;
-			u64 titleID;
-			u64 titleVersion;
-			u8 buildID[0x20];
-		} MetaData;
-
+	public:
 		std::vector<char> HandleCommand(const std::string& cmd, const std::vector<std::string>& params, int sockfd = 0);
 
 	private:
-		//ConnectionHandler* m_connection;
-		Handle debughandle = 0;
-		const std::string m_sbbVersion = "2.4.1\n";
-
-		void attach();
-		void detach();
-		MetaData getMetaData();
-		void getBuildID(MetaData* meta, u64 pid);
-		u64 getMainNsoBase(u64 pid);
-		u64 getHeapBase(Handle handle);
-		u64 getTitleId(u64 pid);
-		u64 GetTitleVersion(u64 pid, u64 titleID);
-		u64 getoutsize(NsApplicationControlData* buf);
-		std::vector<char> peekInfinite(u64 offset, u64 size);
-		void readMem(const std::vector<char>& data, u64 offset, u64 size);
-
 		enum class CommandEnum {
 			Peek,
 			PeekMulti,
