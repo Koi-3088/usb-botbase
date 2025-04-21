@@ -25,6 +25,7 @@
     <ConfigurationType>Makefile</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v143</PlatformToolset>
+    <CLRSupport>false</CLRSupport>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
@@ -48,36 +49,42 @@
     <NMakeBuildCommandLine>make -j42</NMakeBuildCommandLine>
     <NMakeCleanCommandLine>make clean</NMakeCleanCommandLine>
     <NMakeReBuildCommandLine>make clean all</NMakeReBuildCommandLine>
-    <NMakePreprocessorDefinitions>NDEBUG;$(NMakePreprocessorDefinitions)</NMakePreprocessorDefinitions>
-    <ExternalIncludePath>C:\devkitPro\devkitA64\include;C:\devkitPro\libnx\include;C:\devkitPro\devkitA64\aarch64-none-elf\include;$(ProjectDir)\include;$(ExternalIncludePath)</ExternalIncludePath>
-    <NMakeIncludeSearchPath>$(IncludePath);C:\devkitPro\libnx\include;C:\devkitPro\devkitA64\aarch64-none-elf\include;C:\devkitPro\devkitA64\include;$(ProjectDir)\include</NMakeIncludeSearchPath>
-    <IncludePath>C:\devkitPro\devkitA64\include;C:\devkitPro\libnx\include;C:\devkitPro\devkitA64\aarch64-none-elf\include;$(ProjectDir)\include;$(IncludePath)</IncludePath>
+    <NMakePreprocessorDefinitions>$(NMakePreprocessorDefinitions)</NMakePreprocessorDefinitions>
+    <ExternalIncludePath>C:\devkitPro\devkitA64\include;C:\devkitPro\libnx\include;C:\devkitPro\devkitA64\aarch64-none-elf\include;$(ExternalIncludePath)</ExternalIncludePath>
+    <NMakeIncludeSearchPath>$(IncludePath);$(ProjectDir)\include</NMakeIncludeSearchPath>
+    <IncludePath>$(ProjectDir)\include;$(IncludePath)</IncludePath>
     <AdditionalOptions>-std=gnu++20</AdditionalOptions>
-    <SourcePath>D:\Programming\source\sys-botbase-cpp\source;$(SourcePath)</SourcePath>
+    <SourcePath>$(ProjectDir)\source;$(SourcePath)</SourcePath>
   </PropertyGroup>
-  <ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <NMakeCompile>
+      <NMakeCompileFileCommandLine>
+      </NMakeCompileFileCommandLine>
+    </NMakeCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
     <Text Include="Makefile">
-      <FileType>Document</FileType>
+      <FileType>Makefile</FileType>
     </Text>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="include\commands.h" />
+    <ClInclude Include="include\commandHandler.h" />
     <ClInclude Include="include\connection.h" />
     <ClInclude Include="include\controllerCommands.h" />
     <ClInclude Include="include\defines.h" />
     <ClInclude Include="include\logger.h" />
+    <ClInclude Include="include\memoryCommands.h" />
     <ClInclude Include="include\moduleBase.h" />
     <ClInclude Include="include\socketConnection.h" />
     <ClInclude Include="include\usbConnection.h" />
     <ClInclude Include="include\util.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="source\commands.cpp" />
+    <ClCompile Include="source\commandHandler.cpp" />
     <ClCompile Include="source\controllerCommands.cpp" />
     <ClCompile Include="source\logger.cpp" />
     <ClCompile Include="source\main.cpp" />
+    <ClCompile Include="source\memoryCommands.cpp" />
     <ClCompile Include="source\moduleBase.cpp" />
     <ClCompile Include="source\socketConnection.cpp" />
     <ClCompile Include="source\usbConnection.cpp" />

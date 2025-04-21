@@ -1,7 +1,7 @@
+#include "defines.h"
 #include "controllerCommands.h"
 #include "logger.h"
 #include "util.h"
-#include <stdlib.h>
 #include <switch.h>
 
 namespace ControllerCommands {
@@ -77,7 +77,7 @@ namespace ControllerCommands {
         hiddbgExit();
         if (m_workMem != nullptr) {
             free(m_workMem);
-            m_workMem == nullptr;
+            m_workMem = nullptr;
         }
 
         sessionId.id = 0;
@@ -109,9 +109,9 @@ namespace ControllerCommands {
         }
     }
 
-    void Controller::setStickState(int side, int dxVal, int dyVal) {
+    void Controller::setStickState(Controller::Joystick stick, int dxVal, int dyVal) {
         initController();
-        if (side == JOYSTICK_LEFT) {
+        if (stick == Joystick::Left) {
             controllerState.analog_stick_l.x = dxVal;
             controllerState.analog_stick_l.y = dyVal;
         }
@@ -218,7 +218,7 @@ namespace ControllerCommands {
                     y = JOYSTICK_MIN;
                 }
 
-                setStickState(JOYSTICK_LEFT, (s32)x, (s32)y);
+                setStickState(Joystick::Left, (s32)x, (s32)y);
             }
             else if (!strncmp(command, &startRStick, 1)) {
                 // r stick
@@ -245,16 +245,16 @@ namespace ControllerCommands {
                     y = JOYSTICK_MIN;
                 }
 
-                setStickState(JOYSTICK_RIGHT, (s32)x, (s32)y);
+                setStickState(Joystick::Right, (s32)x, (s32)y);
             }
             else if (!strncmp(command, &startPress, 1)) {
                 // press
-                //currKey = parseStringToButton(&command[1]);
+                currKey = (HidNpadButton)parseStringToButton(&command[1]);
                 press(currKey);
             }
             else if (!strncmp(command, &startRelease, 1)) {
                 // release
-                //currKey = parseStringToButton(&command[1]);
+                currKey = (HidNpadButton)parseStringToButton(&command[1]);
                 release(currKey);
             }
             else if (!strncmp(command, &startWait, 1)) {
@@ -264,7 +264,7 @@ namespace ControllerCommands {
             }
             else {
                 // click
-                //currKey = parseStringToButton(command);
+                currKey = (HidNpadButton)parseStringToButton(command);
                 press(currKey);
                 svcSleepThread(buttonClickSleepTime * 1e+6L);
                 release(currKey);

@@ -1,12 +1,14 @@
 #include "defines.h"
-#include "connection.h"
 #include "socketConnection.h"
 #include "usbConnection.h"
 #include "util.h"
+#include "connection.h"
 #include <switch.h>
+#include "logger.h"
 
 using namespace Connection;
 using namespace Util;
+using namespace SbbLog;
 
 #define TITLE_ID 0x430000000000000B
 #define HEAP_SIZE 0x00480000
@@ -124,5 +126,6 @@ extern "C" {
 
 int main() {
     m_connection->connect();
+    Logger::logToFile("Exiting main()...");
     return 0;
 }

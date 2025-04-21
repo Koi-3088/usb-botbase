@@ -6,12 +6,8 @@
 #include <vector>
 #include <unordered_map>
 
-// Change this to enum later on.
-#define JOYSTICK_LEFT 0
-#define JOYSTICK_RIGHT 1
-
 namespace ControllerCommands {
-	class Controller : protected ModuleBase::BaseCommands {
+	class Controller : protected virtual ModuleBase::BaseCommands {
 	public:
 		Controller() : BaseCommands() {
 			m_workMem = (u8*)aligned_alloc(0x1000, m_workMem_size);
@@ -37,7 +33,7 @@ namespace ControllerCommands {
 		void click(HidNpadButton btn);
 		void press(HidNpadButton btn);
 		void release(HidNpadButton btn);
-		void setStickState(int side, int dxVal, int dyVal);
+		void setStickState(Joystick stick, int dxVal, int dyVal);
 		void touch(HidTouchState* state, u64 sequentialCount, u64 holdTime, bool hold, u8* token);
 		void key(HiddbgKeyboardAutoPilotState* states, u64 sequentialCount);
 		void clickSequence(char* seq, u8* token);

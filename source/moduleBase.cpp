@@ -127,8 +127,8 @@ namespace ModuleBase {
 			Logger::logToFile("GetTitleVersion() nsInitialize() failed.");
 		}
 
-		NsApplicationContentMetaStatus* metaStatus;
-		rc = nsListApplicationContentMetaStatus(pid, 0, metaStatus, 100, &out); // This always fails. Check if sbb also fails.
+		NsApplicationContentMetaStatus* metaStatus {};
+		rc = nsListApplicationContentMetaStatus(titleID, 0, metaStatus, 100, &out); // This always fails. Check if sbb also fails.
 		if (R_FAILED(rc)) {
 			Logger::logToFile("GetTitleVersion() nsListApplicationContentMetaStatus() failed.");
 		}
@@ -147,7 +147,7 @@ namespace ModuleBase {
 		return (titleV / 0x10000);
 	}
 
-	u64 BaseCommands::getoutsize(NsApplicationControlData* buf) {
+	u64 BaseCommands::getOutSize(NsApplicationControlData* buf) {
 		Result rc = nsInitialize();
 		if (R_FAILED(rc)) {
 			Logger::logToFile("getoutsize() nsInitialize() failed.");
@@ -163,26 +163,6 @@ namespace ModuleBase {
 
 		nsExit();
 		return outsize;
-	}
-
-	std::vector<char> BaseCommands::peekInfinite(u64 offset, u64 size)
-	{
-		std::vector<char> buffer(size);
-		attach();
-		readMem(buffer, offset, size);
-		detach();
-		return buffer;
-	}
-
-	void BaseCommands::readMem(const std::vector<char>& data, u64 offset, u64 size)
-	{
-		Result rc = svcReadDebugProcessMemory((void*)data.data(), m_debugHandle, offset, size);
-		if (R_FAILED(rc)) {
-			Logger::logToFile("readMem() svcReadDebugProcessMemory() failed.");
-		}
-		else {
-			Logger::logToFile("readMem() data returned: " + std::string(data.data()));
-		}
 	}
 
 	void BaseCommands::setScreen(const ViPowerState& state) {
@@ -212,5 +192,11 @@ namespace ModuleBase {
 
 			lblExit();
 		}
+	}
+
+	bool BaseCommands::getIsProgramOpen(u64 id) {
+		u64 pid = 0;
+		Result rc = pmdmntGetProcessId(&pid, id);
+		return !(pid == 0 || R_FAILED(rc));
 	}
 }

@@ -2,12 +2,12 @@
 #include "logger.h"
 #include "usbConnection.h"
 #include "util.h"
-#include "commands.h"
+#include "commandHandler.h"
 
 namespace UsbConnection {
     using namespace Util;
     using namespace SbbLog;
-    using namespace Commands;
+    using namespace CommandHandler;
 
     Result UsbConnection::initialize(Result& res) {
         res = usbCommsInitialize();
@@ -17,15 +17,23 @@ namespace UsbConnection {
 	void UsbConnection::connect() {
         Utils::flashLed();
 
-        CommandHandler command;
+        Handler handler;
+        std::vector<std::string> dummyVec;
+        std::string dummyBtn("UNUSED");
+        dummyVec.emplace_back(dummyBtn);
+
+        handler.HandleCommand("click", dummyVec);
+        dummyVec.clear();
+        dummyBtn.clear();
+
         while (appletMainLoop()) {
-            auto buffer = UsbConnection::receive_data();
+            auto buffer = UsbConnection::receiveData();
             if (buffer.empty() || buffer.size() <= 1) {
                 continue;
             }
 
             Utils::parseArgs(buffer, [&](std::string x, const std::vector<std::string>& y) {
-                auto buffer = command.HandleCommand(x, y);
+                auto buffer = handler.HandleCommand(x, y);
                 if (buffer.empty()) {
                     return;
                 }
@@ -42,7 +50,7 @@ namespace UsbConnection {
 		usbCommsExit();
 	}
 
-    std::vector<char> UsbConnection::receive_data(int sockfd) {
+    std::vector<char> UsbConnection::receiveData(int sockfd) {
         size_t size = 0;
         Logger::logToFile("Size before read: " + std::to_string(size));
 
@@ -60,10 +68,6 @@ namespace UsbConnection {
             svcSleepThread(1e+6L);
             return std::vector<char>();
         }
-
-        // Can yeet this if client adds line terminators. No more crlf checks.
-        //buffer[size - 1] = '\n';
-        //buffer[size - 2] = '\r';
 
         Logger::logToFile("Read buffer: " + std::string(buffer.data()));
 
