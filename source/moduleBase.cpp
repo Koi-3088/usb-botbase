@@ -1,12 +1,9 @@
 #include "logger.h"
 #include "moduleBase.h"
-#include <iterator>
 #include <switch.h>
 
 namespace ModuleBase {
     using namespace SbbLog;
-
-	//Handle BaseCommands::m_debugHandle = 0;
 
 	void BaseCommands::attach() {
         uint64_t pid = 0;
@@ -47,13 +44,13 @@ namespace ModuleBase {
 		meta.main_nso_base = getMainNsoBase(pid);
 		Logger::logToFile("getMetaData() main_nso_base: " + std::to_string(meta.main_nso_base));
 
-		meta.heap_base = getHeapBase(m_debugHandle);
+		meta.heap_base = getHeapBase();
 		Logger::logToFile("getMetaData() heap_base: " + std::to_string(meta.heap_base));
 
 		meta.titleID = getTitleId(pid);
 		Logger::logToFile("getMetaData() titleID: " + std::to_string(meta.titleID));
 
-		meta.titleVersion = GetTitleVersion(pid, meta.titleID);
+		meta.titleVersion = GetTitleVersion(meta.titleID);
 		Logger::logToFile("getMetaData() titleVersion: " + std::to_string(meta.titleVersion));
 
 		meta.buildID = getBuildID(pid);
@@ -98,7 +95,7 @@ namespace ModuleBase {
 		return proc_module->base_address;
 	}
 
-	u64 BaseCommands::getHeapBase(Handle handle) {
+	u64 BaseCommands::getHeapBase() {
 		u64 heap_base = 0;
 		Result rc = svcGetInfo(&heap_base, InfoType_HeapRegionAddress, m_debugHandle, 0);
 		if (R_FAILED(rc)) {
@@ -118,7 +115,7 @@ namespace ModuleBase {
 		return titleId;
 	}
 
-	u64 BaseCommands::GetTitleVersion(u64 pid, u64 titleID) {
+	u64 BaseCommands::GetTitleVersion(u64 titleID) {
 		u64 titleV = 0;
 		s32 out = 0;
 
@@ -127,22 +124,21 @@ namespace ModuleBase {
 			Logger::logToFile("GetTitleVersion() nsInitialize() failed.");
 		}
 
-		NsApplicationContentMetaStatus* metaStatus {};
+		NsApplicationContentMetaStatus* metaStatus = (NsApplicationContentMetaStatus*)malloc(sizeof(NsApplicationContentMetaStatus[100U]));
 		rc = nsListApplicationContentMetaStatus(titleID, 0, metaStatus, 100, &out); // This always fails. Check if sbb also fails.
 		if (R_FAILED(rc)) {
 			Logger::logToFile("GetTitleVersion() nsListApplicationContentMetaStatus() failed.");
 		}
 
 		Logger::logToFile("GetTitleVersion() out: " + std::to_string(out));
-
-		nsExit();
 		for (int i = 0; i < out; i++) {
 			if (titleV < metaStatus[i].version) {
 				titleV = metaStatus[i].version;
 			}
 		}
 
-		delete metaStatus;
+		nsExit();
+		free(metaStatus);
 		metaStatus = nullptr;
 		return (titleV / 0x10000);
 	}
@@ -198,5 +194,41 @@ namespace ModuleBase {
 		u64 pid = 0;
 		Result rc = pmdmntGetProcessId(&pid, id);
 		return !(pid == 0 || R_FAILED(rc));
+	}
+
+	void BaseCommands::setMainLoopSleepTime(const std::vector<std::string>& params) {
+		//mainLoopSleepTime = delay;
+	}
+
+	void BaseCommands::setButtonClickSleepTime(const std::vector<std::string>& params) {
+
+	}
+
+	void BaseCommands::setEchoCommands(const std::vector<std::string>& params) {
+
+	}
+
+	void BaseCommands::setPrintDebugResultCodes(const std::vector<std::string>& params) {
+
+	}
+
+	void BaseCommands::setKeySleepTime(const std::vector<std::string>& params) {
+
+	}
+
+	void BaseCommands::setFingerDiameter(const std::vector<std::string>& params) {
+
+	}
+
+	void BaseCommands::setPollRate(const std::vector<std::string>& params) {
+
+	}
+
+	void BaseCommands::setFreezeRate(const std::vector<std::string>& params) {
+
+	}
+
+	void BaseCommands::setControllerType(const std::vector<std::string>& params) {
+
 	}
 }

@@ -3,7 +3,6 @@
 #include "defines.h"
 #include "moduleBase.h"
 #include <switch.h>
-#include <vector>
 #include <unordered_map>
 
 namespace ControllerCommands {
@@ -17,6 +16,7 @@ namespace ControllerCommands {
 			sessionId = { 0 };
 			dummyKeyboardState = { 0 };
 			bControllerIsInitialised = false;
+			controllerInitializedType = HidDeviceType_FullKey3;
 		};
 
 		~Controller() override {
@@ -38,6 +38,8 @@ namespace ControllerCommands {
 		void key(HiddbgKeyboardAutoPilotState* states, u64 sequentialCount);
 		void clickSequence(char* seq, u8* token);
 
+		HidDeviceType controllerInitializedType;
+
 	private:
 		bool bControllerIsInitialised;
 		HiddbgHdlsHandle controllerHandle;
@@ -46,27 +48,22 @@ namespace ControllerCommands {
 		HiddbgKeyboardAutoPilotState dummyKeyboardState;
 		HiddbgHdlsSessionId sessionId;
 
-		const u64 buttonClickSleepTime = 50;
-		const u64 keyPressSleepTime = 25;
-		const u64 pollRate = 17;
-		const u32 fingerDiameter = 50;
-
 		u8* m_workMem = nullptr;
 		const size_t m_workMem_size = 0x1000;
 
-		typedef struct {
+		struct TouchData {
 			HidTouchState* states;
 			u64 sequentialCount;
 			u64 holdTime;
 			bool hold;
 			u8 state;
-		} TouchData;
+		};
 
-		typedef struct {
+		struct KeyData {
 			HiddbgKeyboardAutoPilotState* states;
 			u64 sequentialCount;
 			u8 state;
-		} KeyData;
+		};
 
 		static std::unordered_map<std::string, int> m_button;
     };

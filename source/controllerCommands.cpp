@@ -109,7 +109,7 @@ namespace ControllerCommands {
         }
     }
 
-    void Controller::setStickState(Controller::Joystick stick, int dxVal, int dyVal) {
+    void Controller::setStickState(Joystick stick, int dxVal, int dyVal) {
         initController();
         if (stick == Joystick::Left) {
             controllerState.analog_stick_l.x = dxVal;

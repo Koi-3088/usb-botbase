@@ -68,6 +68,8 @@ namespace SocketConnection {
 						Logger::logToFile("Receiving data...");
 						clientFd = pfds[i].fd;
 						auto buffer = receiveData(clientFd);
+						fflush(stdout);
+						dup2(pfds[i].fd, STDOUT_FILENO);
 
 						if (!buffer.empty()) {
 							Utils::parseArgs(buffer, [&](std::string x, const std::vector<std::string>& y) {
@@ -75,9 +77,6 @@ namespace SocketConnection {
 								if (buffer.empty()) {
 									return;
 								}
-
-								fflush(stdout);
-								dup2(pfds[i].fd, STDOUT_FILENO);
 
 								Logger::logToFile("Sending data...");
 								SocketConnection::sendData(buffer, buffer.size(), clientFd);
@@ -95,6 +94,8 @@ namespace SocketConnection {
 		}
 
 		Logger::logToFile("Closing server connection...");
+		free(pfds);
+		pfds = nullptr;
 		close(sockfd);
 	}
 
