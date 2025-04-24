@@ -23,11 +23,8 @@ namespace ControllerCommands {
             m_workMem = (u8*)aligned_alloc(0x1000, m_workMem_size);
         }
 
-        if (m_workMem) {
-            Logger::logToFile("initController() aligned_alloc() success.");
-        }
-        else {
-            Logger::logToFile("initController() aligned_alloc() failed.");
+        if (!m_workMem) {
+            Logger::logToFile("initController() _aligned_malloc() failed.");
         }
 
         // Set the controller type to Pro-Controller, and set the npadInterfaceType.
@@ -272,6 +269,11 @@ namespace ControllerCommands {
 
             command = strtok(NULL, &delim);
         }
+    }
+
+    void Controller::setControllerType(const std::vector<std::string>& params) {
+        detachController();
+        controllerInitializedType = (HidDeviceType)Utils::parseStringToInt(params[1]);
     }
 
     int Controller::parseStringToButton(const std::string& arg) {

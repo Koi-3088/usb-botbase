@@ -2,6 +2,7 @@
 
 #include "defines.h"
 #include "moduleBase.h"
+#include <malloc.h>
 #include <switch.h>
 #include <unordered_map>
 
@@ -37,11 +38,12 @@ namespace ControllerCommands {
 		void touch(HidTouchState* state, u64 sequentialCount, u64 holdTime, bool hold, u8* token);
 		void key(HiddbgKeyboardAutoPilotState* states, u64 sequentialCount);
 		void clickSequence(char* seq, u8* token);
-
-		HidDeviceType controllerInitializedType;
+		void setControllerType(const std::vector<std::string>& params);
 
 	private:
 		bool bControllerIsInitialised;
+		HidDeviceType controllerInitializedType;
+
 		HiddbgHdlsHandle controllerHandle;
 		HiddbgHdlsDeviceInfo controllerDevice;
 		HiddbgHdlsState controllerState;

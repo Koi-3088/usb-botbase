@@ -10,6 +10,9 @@
 #define REGISTER_CFG_CMD(name, function) \
     (m_configure)[(name)] = [this](const std::vector<std::string>& params) { this->function(params); }
 
+#define REGISTER_GAME_CMD(name, function) \
+    (m_game)[(name)] = [this](std::vector<char>& buffer) { this->function(buffer); }
+
 namespace ModuleBase {
 	class BaseCommands {
 	public:
@@ -22,7 +25,12 @@ namespace ModuleBase {
 			REGISTER_CFG_CMD("fingerDiameter", setFingerDiameter);
 			REGISTER_CFG_CMD("pollRate", setPollRate);
 			REGISTER_CFG_CMD("freezeRate", setFreezeRate);
-			REGISTER_CFG_CMD("controllerType", setControllerType);
+
+			REGISTER_GAME_CMD("icon", getGameIcon);
+			REGISTER_GAME_CMD("version", getGameVersion);
+			REGISTER_GAME_CMD("rating", getGameRating);
+			REGISTER_GAME_CMD("author", getGameAuthor);
+			REGISTER_GAME_CMD("name", getGameName);
 		};
 
 		virtual ~BaseCommands() {}
@@ -52,9 +60,11 @@ namespace ModuleBase {
 			Right = 1,
 		};
 
+		std::unordered_map<std::string, std::function<void(const std::vector<std::string>&)>> m_configure;
+		std::unordered_map<std::string, std::function<void(std::vector<char>&)>> m_game;
+
 	private:
 		const std::string m_sbbVersion = "2.4.1\r\n";
-		std::unordered_map<std::string, std::function<void(const std::vector<std::string>&)>> m_configure;
 
 		void setMainLoopSleepTime(const std::vector<std::string>& params);
 		void setButtonClickSleepTime(const std::vector<std::string>& params);
@@ -64,7 +74,12 @@ namespace ModuleBase {
 		void setFingerDiameter(const std::vector<std::string>& params);
 		void setPollRate(const std::vector<std::string>& params);
 		void setFreezeRate(const std::vector<std::string>& params);
-		void setControllerType(const std::vector<std::string>& params);
+
+		void getGameIcon(std::vector<char>& buffer);
+		void getGameVersion(std::vector<char>& buffer);
+		void getGameRating(std::vector<char>& buffer);
+		void getGameAuthor(std::vector<char>& buffer);
+		void getGameName(std::vector<char>& buffer);
 
 	protected:
 		std::string getSbbVersion() {

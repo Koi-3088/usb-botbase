@@ -1,8 +1,12 @@
 #include "logger.h"
 #include "moduleBase.h"
+#include "util.h"
+#include "controllerCommands.h"
 #include <switch.h>
 
 namespace ModuleBase {
+	using namespace Util;
+	using namespace ControllerCommands;
     using namespace SbbLog;
 
 	void BaseCommands::attach() {
@@ -197,38 +201,94 @@ namespace ModuleBase {
 	}
 
 	void BaseCommands::setMainLoopSleepTime(const std::vector<std::string>& params) {
-		//mainLoopSleepTime = delay;
+		mainLoopSleepTime = Utils::parseStringToInt(params[1]);
 	}
 
 	void BaseCommands::setButtonClickSleepTime(const std::vector<std::string>& params) {
-
+		buttonClickSleepTime = Utils::parseStringToInt(params[1]);
 	}
 
 	void BaseCommands::setEchoCommands(const std::vector<std::string>& params) {
-
+		echoCommands = Utils::parseStringToInt(params[1]) == 1;
 	}
 
 	void BaseCommands::setPrintDebugResultCodes(const std::vector<std::string>& params) {
-
+		debugResultCodes = Utils::parseStringToInt(params[1]) == 1;
 	}
 
 	void BaseCommands::setKeySleepTime(const std::vector<std::string>& params) {
-
+		keyPressSleepTime = Utils::parseStringToInt(params[1]);
 	}
 
 	void BaseCommands::setFingerDiameter(const std::vector<std::string>& params) {
-
+		fingerDiameter = Utils::parseStringToInt(params[1]);
 	}
 
 	void BaseCommands::setPollRate(const std::vector<std::string>& params) {
-
+		pollRate = Utils::parseStringToInt(params[1]);
 	}
 
 	void BaseCommands::setFreezeRate(const std::vector<std::string>& params) {
-
+		freezeRate = Utils::parseStringToInt(params[1]);
 	}
 
-	void BaseCommands::setControllerType(const std::vector<std::string>& params) {
+	void BaseCommands::getGameIcon(std::vector<char>& buffer) {
+		NsApplicationControlData* buf = new(NsApplicationControlData);
+		u64 outsize = getOutSize(buf);
 
+		buffer.resize(sizeof(outsize));
+		std::copy(reinterpret_cast<const char*>(&buf->icon),
+			reinterpret_cast<const char*>(&buf->icon) + sizeof(outsize),
+			buffer.begin());
+
+		free(buf);
+	}
+
+	void BaseCommands::getGameVersion(std::vector<char>& buffer) {
+		NsApplicationControlData* buf = new(NsApplicationControlData);
+		u64 outsize = getOutSize(buf);
+		std::string ver(buf->nacp.display_version);
+
+		buffer.insert(buffer.begin(), ver.begin(), ver.end());
+		free(buf);
+	}
+
+	void BaseCommands::getGameRating(std::vector<char>& buffer) {
+		NsApplicationControlData* buf = new(NsApplicationControlData);
+		getOutSize(buf);
+		int rating = buf->nacp.rating_age[0];
+
+		buffer.resize(sizeof(rating));
+		std::copy(reinterpret_cast<const char*>(&rating),
+			reinterpret_cast<const char*>(&rating) + sizeof(rating),
+			buffer.begin());
+
+		free(buf);
+	}
+
+	void BaseCommands::getGameAuthor(std::vector<char>& buffer) {
+		NsApplicationControlData* buf = new(NsApplicationControlData);
+		u64 outsize = getOutSize(buf);
+
+		NacpLanguageEntry* lang = nullptr;
+		nacpGetLanguageEntry(&buf->nacp, &lang);
+
+		std::string author(lang->author);
+		buffer.insert(buffer.begin(), author.begin(), author.end());
+		free(buf);
+		free(lang);
+	}
+
+	void BaseCommands::getGameName(std::vector<char>& buffer) {
+		NsApplicationControlData* buf = new(NsApplicationControlData);
+		u64 outsize = getOutSize(buf);
+
+		NacpLanguageEntry* lang = nullptr;
+		nacpGetLanguageEntry(&buf->nacp, &lang);
+
+		std::string name(lang->name);
+		buffer.insert(buffer.begin(), name.begin(), name.end());
+		free(buf);
+		free(lang);
 	}
 }

@@ -125,6 +125,7 @@ extern "C" {
 }
 
 int main() {
+    Logger::logToFile("\n##########\r\n");
     m_connection->connect();
     Logger::logToFile("Exiting main()...");
     return 0;

@@ -61,7 +61,7 @@ namespace CommandHandler {
 			REGISTER_CMD_BUFFER("getBuildID", getBuildID_cmd);
 			REGISTER_CMD_BUFFER("getTitleVersion", getTitleVersion_cmd);
 			REGISTER_CMD_BUFFER("getSystemLanguage", getSystemLanguage_cmd);
-			REGISTER_CMD_PARAMS("isProgramRunning", isProgramRunning_cmd);
+			REGISTER_CMD("isProgramRunning", isProgramRunning_cmd);
 			REGISTER_CMD_BUFFER("getMainNsoBase", getMainNsoBase_cmd);
 			REGISTER_CMD_BUFFER("getHeapBase", getHeapBase_cmd);
 			REGISTER_CMD_BUFFER("charge", charge_cmd);
@@ -114,7 +114,7 @@ namespace CommandHandler {
 		void getBuildID_cmd(std::vector<char>& buffer);
 		void getTitleVersion_cmd(std::vector<char>& buffer);
 		void getSystemLanguage_cmd(std::vector<char>& buffer);
-		void isProgramRunning_cmd(const std::vector<std::string>& params);
+		void isProgramRunning_cmd(const std::vector<std::string>& params, std::vector<char>& buffer);
 		void getMainNsoBase_cmd(std::vector<char>& buffer);
 		void getHeapBase_cmd(std::vector<char>& buffer);
 		void charge_cmd(std::vector<char>& buffer);

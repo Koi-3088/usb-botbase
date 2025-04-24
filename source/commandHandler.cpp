@@ -209,13 +209,19 @@ namespace CommandHandler {
 	}
 #pragma endregion Various controller commands.
 #pragma region Base
-	// Add remaining game subcommands
 	void Handler::game_cmd(const std::vector<std::string>& params, std::vector<char>& buffer) {
-		NsApplicationControlData* buf = (NsApplicationControlData*)malloc(sizeof(NsApplicationControlData));
-		getOutSize(buf);
-		std::string ver(buf->nacp.display_version);
-		buffer.insert(buffer.begin(), ver.begin(), ver.end());
-		free(buf);
+		if (params.size() != 1) {
+			return;
+		}
+
+		auto it = BaseCommands::m_game.find(params[0]);
+		if (it != BaseCommands::m_game.end()) {
+			it->second(buffer);
+		}
+		else {
+			Logger::logToFile("game_cmd() subcommand not found.");
+			return;
+		}
 	}
 
 	void Handler::getTitleID_cmd(std::vector<char>& buffer) {
@@ -249,13 +255,31 @@ namespace CommandHandler {
 	}
 
 	void Handler::getSystemLanguage_cmd(std::vector<char>& buffer) {
+		setInitialize();
+		u64 languageCode = 0;
+		SetLanguage language = SetLanguage_ENUS;
+		setGetSystemLanguage(&languageCode);
+		setMakeLanguage(languageCode, &language);
+		setExit();
 
+		buffer.resize(sizeof(language));
+		std::copy(reinterpret_cast<const char*>(&language),
+			reinterpret_cast<const char*>(&language) + sizeof(language),
+			buffer.begin());
 	}
 
-	void Handler::isProgramRunning_cmd(const std::vector<std::string>& params) {
+	void Handler::isProgramRunning_cmd(const std::vector<std::string>& params, std::vector<char>& buffer) {
 		if (params.size() != 1) {
 			return;
 		}
+
+		u64 programID = Utils::parseStringToInt(params[0]);
+		bool isRunning = getIsProgramOpen(programID);
+
+		buffer.resize(sizeof(isRunning));
+		std::copy(reinterpret_cast<const char*>(&isRunning),
+			reinterpret_cast<const char*>(&isRunning) + sizeof(isRunning),
+			buffer.begin());
 	}
 
 	void Handler::pixelPeek_cmd(std::vector<char>& buffer) {
@@ -278,15 +302,36 @@ namespace CommandHandler {
 	}
 
 	void Handler::getMainNsoBase_cmd(std::vector<char>& buffer) {
-
+		MetaData meta = getMetaData();
+		buffer.resize(sizeof(meta.main_nso_base));
+		std::copy(reinterpret_cast<const char*>(&meta.main_nso_base),
+			reinterpret_cast<const char*>(&meta.main_nso_base) + sizeof(meta.main_nso_base),
+			buffer.begin());
 	}
 
 	void Handler::getHeapBase_cmd(std::vector<char>& buffer) {
-
+		MetaData meta = getMetaData();
+		buffer.resize(sizeof(meta.heap_base));
+		std::copy(reinterpret_cast<const char*>(&meta.heap_base),
+			reinterpret_cast<const char*>(&meta.heap_base) + sizeof(meta.heap_base),
+			buffer.begin());
 	}
 
 	void Handler::charge_cmd(std::vector<char>& buffer) {
+		Result rc = psmInitialize();
+		if (R_FAILED(rc)) {
+			Logger::logToFile("charge_cmd() psmInitialize() failed.");
+			return;
+		}
 
+		u32 charge;
+		psmGetBatteryChargePercentage(&charge);
+		psmExit();
+
+		buffer.resize(sizeof(charge));
+		std::copy(reinterpret_cast<const char*>(&charge),
+			reinterpret_cast<const char*>(&charge) + sizeof(charge),
+			buffer.begin());
 	}
 #pragma endregion Various base libnx commands.
 #pragma region Misc
@@ -297,7 +342,22 @@ namespace CommandHandler {
 	}
 
 	void Handler::configure_cmd(const std::vector<std::string>& params) {
-		return;
+		if (params.size() != 2) {
+			return;
+		}
+
+		if (params[0] == "controllerType") {
+			setControllerType(params);
+			return;
+		}
+
+		auto it = BaseCommands::m_configure.find(params[0]);
+		if (it != BaseCommands::m_configure.end()) {
+			it->second(params);
+		}
+		else {
+			Logger::logToFile("configure_cmd() subfunction not found.");
+		}
 	}
 #pragma endregion Miscellaneous commands that get/set parameters.
 }
