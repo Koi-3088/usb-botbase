@@ -75,6 +75,7 @@
     <ClInclude Include="include\logger.h" />
     <ClInclude Include="include\memoryCommands.h" />
     <ClInclude Include="include\moduleBase.h" />
+    <ClInclude Include="include\ntp.h" />
     <ClInclude Include="include\socketConnection.h" />
     <ClInclude Include="include\usbConnection.h" />
     <ClInclude Include="include\util.h" />
@@ -86,6 +87,7 @@
     <ClCompile Include="source\main.cpp" />
     <ClCompile Include="source\memoryCommands.cpp" />
     <ClCompile Include="source\moduleBase.cpp" />
+    <ClCompile Include="source\ntp.cpp" />
     <ClCompile Include="source\socketConnection.cpp" />
     <ClCompile Include="source\usbConnection.cpp" />
     <ClCompile Include="source\util.cpp" />

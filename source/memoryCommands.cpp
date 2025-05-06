@@ -1,18 +1,25 @@
+#include "defines.h"
 #include "memoryCommands.h"
 #include "logger.h"
+#include <cstring>
 
 namespace MemoryCommands {
 	using namespace SbbLog;
 
 	void Vision::peek(u64 offset, u64 size, std::vector<char>& buffer) {
+		u64 total = 0;
+		u64 remainder = size;
 		buffer.resize(size);
-		attach();
-		readMem(buffer, offset, size);
-		detach();
+
+		while (remainder > 0) {
+			u64 receive = remainder > MAX_LINE_LENGTH ? MAX_LINE_LENGTH : remainder;
+			remainder -= receive;
+			readMem(buffer, offset + total, receive);
+			total += receive;
+		}
 	}
 
-	void Vision::peekMulti(u64* offset, u64* size, u64 count) {
-		std::vector<char> buffer;
+	void Vision::peekMulti(u64* offset, u64* size, u64 count, std::vector<char>& buffer) {
 		u64 totalSize = 0;
 		for (int i = 0; i < (int)count; i++) {
 			totalSize += size[i];
@@ -20,58 +27,52 @@ namespace MemoryCommands {
 
 		buffer.resize(totalSize);
 		u64 ofs = 0;
-		attach();
-		for (int i = 0; i < (int)count; i++)
-		{
+		for (int i = 0; i < (int)count; i++) {
 			readMem(buffer, offset[i], size[i], ofs);
 			ofs += size[i];
 		}
-
-		detach();
 	}
 
-	void Vision::poke(u64 offset, u64 size, u8* val) {
-		attach();
-		writeMem(offset, size, val);
-		detach();
+	void Vision::poke(u64 offset, u64 size, const std::vector<char>& buffer) {
+		writeMem(offset, size, buffer);
 	}
 
-	u64 Vision::followMainPointer(s64* jumps, size_t count) {
-		u64 offset;
-		u64 size = sizeof(offset);
-		std::vector<char> buffer(size);
-		MetaData meta = getMetaData();
+	u64 Vision::followMainPointer(const s64& main, const std::vector<s64>& jumps, std::vector<char>& buffer) {
+		u64 offset = 0;
+		u64 size = sizeof(u64);
+		buffer.resize(size);
 
-		attach();
-		readMem(buffer, meta.main_nso_base + jumps[0], size);
-		offset = *(u64*)buffer.data();
+		readMem(buffer, m_metaData.main_nso_base + main, size);
+		std::memcpy(&offset, buffer.data(), size);
+		Logger::logToFile("followMainPointer() first offset memcpy(): " + std::to_string(offset));
 
-		for (int i = 1; i < (int)count; ++i) {
+		for (int i = 0; i < jumps.size(); i++) {
 			readMem(buffer, offset + jumps[i], size);
-			offset = *(u64*)buffer.data();
+			std::memcpy(&offset, buffer.data(), size);
+			Logger::logToFile("followMainPointer() jump #" + std::to_string(i) + " memcpy(): " + std::to_string(offset));
 			if (offset == 0) {
 				break;
 			}
 		}
 
-		detach();
 		return offset;
 	}
 
-	void Vision::readMem(const std::vector<char>& data, u64 offset, u64 size, u64 multi) {
-		Result rc = svcReadDebugProcessMemory((void*)(data.data() + multi), m_debugHandle, offset, size);
+	void Vision::readMem(const std::vector<char>& buffer, u64 offset, u64 size, u64 multi) {
+		attach();
+		Result rc = svcReadDebugProcessMemory((void*)(buffer.data()), m_debugHandle, offset, size);
 		if (R_FAILED(rc)) {
-			Logger::logToFile("readMem() svcReadDebugProcessMemory() failed.");
+			Logger::logToFile("readMem() svcReadDebugProcessMemory() failed.", rc);
 		}
-		else {
-			Logger::logToFile("readMem() data returned: " + std::string(data.data()));
-		}
+		detach();
 	}
 
-	void Vision::writeMem(u64 offset, u64 size, u8* val) {
-		Result rc = svcWriteDebugProcessMemory(m_debugHandle, val, offset, size);
+	void Vision::writeMem(u64 offset, u64 size, const std::vector<char>& buffer) {
+		attach();
+		Result rc = svcWriteDebugProcessMemory(m_debugHandle, (void*)buffer.data(), offset, size);
 		if (R_FAILED(rc)) {
-			Logger::logToFile("writedMem() svcWriteDebugProcessMemory() failed.");
+			Logger::logToFile("writedMem() svcWriteDebugProcessMemory() failed.", rc);
 		}
+		detach();
 	}
 }

@@ -1,15 +1,11 @@
 #pragma once
 
-#include "defines.h"
+#include "memoryCommands.h"
+#include "controllerCommands.h"
 #include <string>
 #include <functional>
 #include <unordered_map>
 #include <vector>
-#include <memory>
-#include <switch.h>
-#include "connection.h"
-#include "controllerCommands.h"
-#include "memoryCommands.h"
 
 #define REGISTER_CMD(name, function) \
     (m_cmd)[(name)] = [this](const std::vector<std::string>& params, std::vector<char>& buffer) { this->function(params, buffer); }
@@ -31,21 +27,20 @@ namespace CommandHandler {
 		Handler() : Controller() {
 			REGISTER_CMD("peek", peek_cmd);
 			REGISTER_CMD("peekMulti", peekMulti_cmd);
-			REGISTER_CMD_PARAMS("peekAbsolute", peekAbsolute_cmd);
-			REGISTER_CMD_PARAMS("peekAbsoluteMulti", peekAbsoluteMulti_cmd);
-			REGISTER_CMD_PARAMS("peekMain", peekMain_cmd);
-			REGISTER_CMD_PARAMS("peekMainMulti", peekMainMulti_cmd);
+			REGISTER_CMD("peekAbsolute", peekAbsolute_cmd);
+			REGISTER_CMD("peekAbsoluteMulti", peekAbsoluteMulti_cmd);
+			REGISTER_CMD("peekMain", peekMain_cmd);
+			REGISTER_CMD("peekMainMulti", peekMainMulti_cmd);
 
 			REGISTER_CMD_PARAMS("poke", poke_cmd);
 			REGISTER_CMD_PARAMS("pokeAbsolute", pokeAbsolute_cmd);
 			REGISTER_CMD_PARAMS("pokeMain", pokeMain_cmd);
 
-			REGISTER_CMD_PARAMS("pointer", pointer_cmd);
-			REGISTER_CMD_PARAMS("pointerAll", pointerAll_cmd);
-			REGISTER_CMD_PARAMS("pointerRelative", pointerRelative_cmd);
-			REGISTER_CMD_PARAMS("pointerPeek", pointerPeek_cmd);
-			REGISTER_CMD_PARAMS("pointerPeekMulti", pointerPeekMulti_cmd);
-			REGISTER_CMD_PARAMS("pointerPoke", pointerPoke_cmd);
+			REGISTER_CMD("pointerAll", pointerAll_cmd);
+			REGISTER_CMD("pointerRelative", pointerRelative_cmd);
+			REGISTER_CMD("pointerPeek", pointerPeek_cmd);
+			REGISTER_CMD("pointerPeekMulti", pointerPeekMulti_cmd);
+			REGISTER_CMD("pointerPoke", pointerPoke_cmd);
 
 			REGISTER_CMD_PARAMS("clickSeq", clickSeq_cmd);
 			REGISTER_CMD_NOARGS("clickCancel", clickCancel_cmd);
@@ -73,7 +68,7 @@ namespace CommandHandler {
 			REGISTER_CMD_NOARGS("screenOn", screenOn_cmd);
 			REGISTER_CMD_NOARGS("screenOff", screenOff_cmd);
 			REGISTER_CMD_NOARGS("detachController", detachController_cmd);
-			REGISTER_CMD_BUFFER("pixelPeek", pixelPeek_cmd);
+			//REGISTER_CMD_BUFFER("pixelPeek", pixelPeek_cmd);
 		};
 
 		~Handler() override {}
@@ -84,21 +79,20 @@ namespace CommandHandler {
 	private:
 		void peek_cmd(const std::vector<std::string>& params, std::vector<char>& buffer);
 		void peekMulti_cmd(const std::vector<std::string>& params, std::vector<char>& buffer);
-		void peekAbsolute_cmd(const std::vector<std::string>& params);
-		void peekAbsoluteMulti_cmd(const std::vector<std::string>& params);
-		void peekMain_cmd(const std::vector<std::string>& params);
-		void peekMainMulti_cmd(const std::vector<std::string>& params);
+		void peekAbsolute_cmd(const std::vector<std::string>& params, std::vector<char>& buffer);
+		void peekAbsoluteMulti_cmd(const std::vector<std::string>& params, std::vector<char>& buffer);
+		void peekMain_cmd(const std::vector<std::string>& params, std::vector<char>& buffer);
+		void peekMainMulti_cmd(const std::vector<std::string>& params, std::vector<char>& buffer);
 
 		void poke_cmd(const std::vector<std::string>& params);
 		void pokeAbsolute_cmd(const std::vector<std::string>& params);
 		void pokeMain_cmd(const std::vector<std::string>& params);
 
-		void pointer_cmd(const std::vector<std::string>& params);
-		void pointerAll_cmd(const std::vector<std::string>& params);
-		void pointerRelative_cmd(const std::vector<std::string>& params);
-		void pointerPeek_cmd(const std::vector<std::string>& params);
-		void pointerPeekMulti_cmd(const std::vector<std::string>& params);
-		void pointerPoke_cmd(const std::vector<std::string>& params);
+		void pointerAll_cmd(const std::vector<std::string>& params, std::vector<char>& buffer);
+		void pointerRelative_cmd(const std::vector<std::string>& params, std::vector<char>& buffer);
+		void pointerPeek_cmd(const std::vector<std::string>& params, std::vector<char>& buffer);
+		void pointerPeekMulti_cmd(const std::vector<std::string>& params, std::vector<char>& buffer);
+		void pointerPoke_cmd(const std::vector<std::string>& params, std::vector<char>& buffer);
 
 		void clickSeq_cmd(const std::vector<std::string>& params);
 		void clickCancel_cmd();
@@ -126,7 +120,7 @@ namespace CommandHandler {
 		void screenOn_cmd();
 		void screenOff_cmd();
 		void detachController_cmd();
-		void pixelPeek_cmd(std::vector<char>& buffer);
+		//void pixelPeek_cmd(std::vector<char>& buffer);
 
 		std::unordered_map<std::string, CmdFunc> m_cmd;
 	};

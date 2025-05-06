@@ -1,37 +1,35 @@
 #pragma once
 
 #include "connection.h"
+#include "commandHandler.h"
 #include <string>
-#include <unistd.h>
 #include <vector>
-#include <arpa/inet.h>
-#include <iostream> 
-#include <poll.h>
-#include <sys/errno.h>
-#include <sys/socket.h>
-#include <sys/types.h>
+#include <memory>
 
 namespace SocketConnection {
 	class SocketConnection : public Connection::ConnectionHandler {
 	public:
-		SocketConnection() : ConnectionHandler() {}
+		SocketConnection() : ConnectionHandler() {
+			m_handler = std::make_unique<CommandHandler::Handler>();
+		};
+
 		~SocketConnection() override {
-			close(sockfd);
-		}
+			if (m_handler) {
+				m_handler.reset();
+			}
+		};
 
 	public:
 		Result initialize(Result& res) override;
 		void connect() override;
 		void disconnect() override;
-		std::vector<char> receiveData(int sockfd) override;
-		void sendData(const std::vector<char>& data, size_t data_size, int sockfd) override;
+		std::vector<std::string> receiveData(std::string& persistentBuffer, int sockfd = 0) override;
+		void sendData(std::vector<char>& data, size_t data_size, int sockfd) override;
 
 	private:
-		int sockfd = -1;
 		const int m_port = 6000;
+		std::unique_ptr<CommandHandler::Handler> m_handler;
 
-		void setupServerSocket();
-		void addToPfds(struct pollfd* pfds[], int clientFd, int* fdCount, int* fdSize);
-		void delFromPfds(struct pollfd pfds[], int i, int* fdCount);
+		int setupServerSocket();
 	};
 }

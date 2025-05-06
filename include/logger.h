@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <switch.h>
 
 namespace SbbLog {
 	class Logger {
@@ -9,7 +10,7 @@ namespace SbbLog {
 		~Logger() {}
 
 	public:
-		static void logToFile(const std::string& message);
+		static void logToFile(const std::string& message, const Result res = 0);
 
 	private:
 		static std::string getCurrentDate();

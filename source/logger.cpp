@@ -33,14 +33,18 @@ namespace SbbLog {
         return oss.str();
     }
 
-    void Logger::logToFile(const std::string& message) {
+    void Logger::logToFile(const std::string& message, const Result res) {
         std::string date = getCurrentDate();
         std::string filename = "sdmc:/atmosphere/contents/430000000000000B/log_" + date + ".txt";
+		std::string errorMessage = "Error: " + std::to_string(R_DESCRIPTION(res));
         std::ofstream logFile(filename, std::ios::app);
         if (logFile.is_open()) {
             if (message == "\n##########\r\n") {
                 logFile << message << std::endl;
-            }
+			}
+			else if (res != 0) {
+				logFile << "[" << getCurrentTimestamp() << "] " << message << " " << errorMessage << std::endl;
+			}
             else {
                 logFile << "[" << getCurrentTimestamp() << "] " << message << std::endl;
             }

@@ -11,7 +11,7 @@ using namespace Util;
 using namespace SbbLog;
 
 #define TITLE_ID 0x430000000000000B
-#define HEAP_SIZE 0x00480000
+#define HEAP_SIZE 0x300000
 #define THREAD_SIZE 0x1A000
 #define VERSION_S "2.4.1"
 
@@ -87,8 +87,7 @@ extern "C" {
             fatalThrow(rc);
         }
 
-        bool usb = Utils::isUSB();
-        if (usb) {
+        if (Utils::isUSB()) {
             m_connection = new UsbConnection::UsbConnection();
         }
         else {
@@ -127,6 +126,8 @@ extern "C" {
 int main() {
     Logger::logToFile("\n##########\r\n");
     m_connection->connect();
+    delete m_connection;
+    m_connection = nullptr;
     Logger::logToFile("Exiting main()...");
     return 0;
 }

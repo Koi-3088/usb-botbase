@@ -26,23 +26,23 @@ namespace UsbConnection {
         dummyVec.clear();
         dummyBtn.clear();
 
+        std::string persistentBuffer;
+
         while (appletMainLoop()) {
-            auto buffer = UsbConnection::receiveData();
-            if (buffer.empty() || buffer.size() <= 1) {
-                continue;
+            auto commands = UsbConnection::receiveData(persistentBuffer);
+            for (const auto& command : commands) {
+                Utils::parseArgs(command, [=](std::string x, const std::vector<std::string>& y) {
+                    auto sendBuffer = m_handler->HandleCommand(x, y);
+                    if (sendBuffer.empty()) {
+                        return;
+                    }
+
+                    Logger::logToFile("Sending data...");
+                    UsbConnection::sendData(sendBuffer, sendBuffer.size());
+                    });
             }
 
-            Utils::parseArgs(buffer, [&](std::string x, const std::vector<std::string>& y) {
-                auto buffer = handler.HandleCommand(x, y);
-                if (buffer.empty()) {
-                    return;
-                }
-
-                Logger::logToFile("Sending data...");
-                UsbConnection::sendData(buffer, buffer.size());
-            });
-
-            svcSleepThread(1e+6L);
+            //svcSleepThread(1e+6L);
         }
 	}
 
@@ -50,32 +50,27 @@ namespace UsbConnection {
 		usbCommsExit();
 	}
 
-    std::vector<char> UsbConnection::receiveData(int sockfd) {
+    std::vector<std::string> UsbConnection::receiveData(std::string& persistentBuffer, int sockfd) {
         size_t size = 0;
         Logger::logToFile("Size before read: " + std::to_string(size));
-
-        int len = usbCommsRead(&size, sizeof(size));
+        return {};
+        /*int len = usbCommsRead(&size, sizeof(size));
         if (len <= 0) {
-            svcSleepThread(1e+6L);
-            return std::vector<char>();
+            return {};
         }
 
-        auto buffer = std::vector<char>(size + 1);
         Logger::logToFile("Size after initial read: " + std::to_string(size));
-
+		std::vector<std::string> buffer(size);
         len = usbCommsRead((void*)buffer.data(), size);
         if (size - 2 > buffer.size() || len <= 0) {
-            svcSleepThread(1e+6L);
-            return std::vector<char>();
+            return buffer;
         }
 
-        Logger::logToFile("Read buffer: " + std::string(buffer.data()));
-
-        fflush(stdout);
-        return buffer;
+        Logger::logToFile("Read buffer: " + std::string(buffer.begin(), buffer.end()));
+        return buffer;*/
     }
 
-    void UsbConnection::sendData(const std::vector<char>& data, size_t size, int sockfd) {
+    void UsbConnection::sendData(std::vector<char>& data, size_t size, int sockfd) {
         USBResponse response {
             size,
             (void*)data.data(),

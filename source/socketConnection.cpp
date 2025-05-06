@@ -1,9 +1,14 @@
-#include "commandHandler.h"
 #include "defines.h"
 #include "logger.h"
 #include "socketConnection.h"
 #include "util.h"
-#include <malloc.h>
+#include <cstring>
+#include <exception>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <poll.h>
+#include <sys/errno.h>
+#include <sys/socket.h>
 
 namespace SocketConnection {
 	using namespace Util;
@@ -18,16 +23,11 @@ namespace SocketConnection {
 	void SocketConnection::connect() {
 		Utils::flashLed();
 
-		Handler handler;
-		std::vector<std::string> dummyVec;
-		std::string dummyBtn("UNUSED");
-		dummyVec.emplace_back(dummyBtn);
-
-		handler.HandleCommand("click", dummyVec);
+		std::vector<std::string> dummyVec(1, "UNUSED");
+		m_handler->HandleCommand("click", dummyVec);
 		dummyVec.clear();
-		dummyBtn.clear();
 
-		setupServerSocket();
+		int sockfd = setupServerSocket();
 		if (sockfd < 0) {
 			Logger::logToFile("Socket error.");
 			return;
@@ -35,67 +35,87 @@ namespace SocketConnection {
 
 		struct sockaddr_in clientAddr {};
 		socklen_t clientSize = sizeof(clientAddr);
-		int clientFd = -1;
 
-		int fdCount = 1;
-		int fdSize = 5;
-		struct pollfd* pfds = (struct pollfd*)malloc(sizeof(*pfds) * fdSize);
-
-		pfds[0].fd = sockfd;
+		std::vector<pollfd> pfds(2);
+		pfds[0].fd = sockfd; // server
 		pfds[0].events = POLLIN;
+
+		pfds[1].fd = -1; // client
+		pfds[1].events = POLLIN;
 		Logger::logToFile("Waiting for client to connect...");
 
+		std::string persistentBuffer;
+
 		while (appletMainLoop()) {
-			poll(pfds, fdCount, -1);
-			for (int i = 0; i < fdCount; i++) {
-				if (pfds[i].revents & (POLLIN | POLLHUP)) {
-					if (pfds[i].fd == sockfd) {
-						clientFd = accept(sockfd, (struct sockaddr*)&clientAddr, &clientSize);
-						if (clientFd != -1) {
-							Logger::logToFile("Client connected...");
-							addToPfds(&pfds, clientFd, &fdCount, &fdSize);
-						}
-						else {
-							svcSleepThread(1e+9L);
-							close(sockfd);
-							setupServerSocket();
-							pfds[0].fd = sockfd;
-							pfds[0].events = POLLIN;
-							break;
-						}
-					}
-					else {
-						Logger::logToFile("Receiving data...");
-						clientFd = pfds[i].fd;
-						auto buffer = receiveData(clientFd);
-						fflush(stdout);
-						dup2(pfds[i].fd, STDOUT_FILENO);
+			int res = poll(pfds.data(), pfds.size(), -1);
+			if (res < 0) {
+				Logger::logToFile("poll() failed.");
+				svcSleepThread(1e+6L);
+				continue;
+			}
 
-						if (!buffer.empty()) {
-							Utils::parseArgs(buffer, [&](std::string x, const std::vector<std::string>& y) {
-								auto buffer = handler.HandleCommand(x, y);
-								if (buffer.empty()) {
-									return;
+			if (pfds[0].revents & POLLIN) {
+				//Logger::logToFile("Server socket is ready to accept a new connection.");
+				pfds[1].fd = accept(sockfd, (struct sockaddr*)&clientAddr, &clientSize);
+				if (pfds[1].fd >= 0) {
+					Logger::logToFile("Client connected...");
+					pfds[1].events = POLLIN;
+				}
+				else if (pfds[1].fd < 0 && (errno == EWOULDBLOCK || errno == EAGAIN)) {
+					continue;
+				}
+				else {
+					//Logger::logToFile("accept() error, resetting the server socket...");
+					close(sockfd);
+					close(pfds[1].fd);
+					svcSleepThread(1e+6L);
+					setupServerSocket();
+					pfds[0].fd = sockfd;
+					pfds[0].events = POLLIN;
+					continue;
+				}
+			}
+
+			if (pfds[1].revents & POLLIN) {
+				try {
+					//Logger::logToFile("Receiving data...");
+					auto commands = receiveData(persistentBuffer, pfds[1].fd);
+
+					fflush(stdout);
+					dup2(pfds[1].fd, STDOUT_FILENO);
+
+					if (!commands.empty()) {
+						for (const auto& command : commands) {
+							Utils::parseArgs(command, [=](const std::string& x, const std::vector<std::string>& y) {
+								auto buffer = m_handler->HandleCommand(x, y);
+								if (!buffer.empty()) {
+									//Logger::logToFile("Sending data...");
+									if (buffer.back() != '\n') {
+										buffer.push_back('\n');
+									}
+
+									SocketConnection::sendData(buffer, buffer.size(), pfds[1].fd);
 								}
-
-								Logger::logToFile("Sending data...");
-								SocketConnection::sendData(buffer, buffer.size(), clientFd);
 							});
 						}
-						else {
-							Logger::logToFile("Buffer empty, closing pfd.");
-							close(pfds[i].fd);
-							delFromPfds(pfds, i, &fdCount);
-							i--;
-						}
+
+						persistentBuffer.clear();
 					}
+					else {
+						//Logger::logToFile("Buffer empty, closing pfd.");
+						close(pfds[1].fd);
+						pfds[1].fd = -1;
+						pfds[1].events = POLLIN;
+						persistentBuffer.clear();
+					}
+				}
+				catch (const std::exception& e) {
+					Logger::logToFile("Exception: " + std::string(e.what()));
 				}
 			}
 		}
 
 		Logger::logToFile("Closing server connection...");
-		free(pfds);
-		pfds = nullptr;
 		close(sockfd);
 	}
 
@@ -103,17 +123,17 @@ namespace SocketConnection {
 		socketExit();
 	}
 
-	void SocketConnection::setupServerSocket() {
-		sockfd = socket(AF_INET, SOCK_STREAM, 0);
+	int SocketConnection::setupServerSocket() {
+		int sockfd = socket(AF_INET, SOCK_STREAM, 0);
 		if (sockfd < 0) {
-			return;
+			return sockfd;
 		}
 
 		int opt = 1;
 		if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))) {
 			Logger::logToFile("setsockopt() error.");
 			close(sockfd);
-			return;
+			return sockfd;
 		}
 
 		struct sockaddr_in serverAddr {};
@@ -128,71 +148,59 @@ namespace SocketConnection {
 		if (listen(sockfd, 3) < 0) {
 			Logger::logToFile("listen() error.");
 			close(sockfd);
-			return;
+			return sockfd;
 		}
 
 		Logger::logToFile("Listening on port " + std::to_string(m_port) + "...");
+		return sockfd;
 	}
 
-	void SocketConnection::addToPfds(struct pollfd* pfds[], int clientFd, int* fdCount, int* fdSize) {
-		if (*fdCount == *fdSize) {
-			*fdSize *= 2;
+	std::vector<std::string> SocketConnection::receiveData(std::string& persistentBuffer, int sockfd) {
+		ssize_t received = 0;
+		char buf[256];
+		std::vector<std::string> commands;
 
-			*pfds = (struct pollfd*)realloc(*pfds, sizeof(**pfds) * (*fdSize));
-		}
+		while (true) {
+			memset(buf, 0, 256);
+			received = recv(sockfd, buf, 256, 0);
 
-		(*pfds)[*fdCount].fd = clientFd;
-		(*pfds)[*fdCount].events = POLLIN;
+			if (received > 0) {
+				persistentBuffer.append(buf, received);
+				size_t pos;
+				while ((pos = persistentBuffer.find("\r\n")) != std::string::npos) {
+					commands.push_back(persistentBuffer.substr(0, pos));
+					persistentBuffer.erase(0, pos + 2);
+				}
 
-		(*fdCount)++;
-	}
-
-	void SocketConnection::delFromPfds(struct pollfd pfds[], int i, int* fdCount) {
-		pfds[i] = pfds[*fdCount - 1];
-		(*fdCount)--;
-	}
-
-	std::vector<char> SocketConnection::receiveData(int sockfd) {
-		size_t size = 65535;
-		auto buffer = std::vector<char>(size);
-		int len = recv(sockfd, (void*)buffer.data(), size, 0);
-		if (len <= 0) {
-			Logger::logToFile("Failed initial data read.");
-			return {};
-		}
-
-		size_t total = len;
-		Logger::logToFile("Read initial data size: " + std::to_string(len));
-		while (buffer.data()[total - 1] != '\n') {
-			auto received = recv(sockfd, (void*)(buffer.data() + total), size - total, 0);
-			if (received <= 0) {
-				Logger::logToFile("Failed to receive data.");
+				if (!commands.empty()) {
+					return commands;
+				}
+			}
+			else if (received == -1) {
+				Logger::logToFile("receiveData() recv() error.");
 				return {};
 			}
-
-			total += received;
-			Logger::logToFile("Received so far: " + std::to_string(total));
+			else {
+				Logger::logToFile("receiveData() client closed the connection.");
+				return {};
+			}
 		}
-
-		buffer.data()[total - 1] = 0;
-		return buffer;
 	}
 
-	void SocketConnection::sendData(const std::vector<char>& buffer, size_t size, int sockfd) {
+	void SocketConnection::sendData(std::vector<char>& buffer, size_t size, int sockfd) {
 		size_t total = 0;
-		while (total < size) {
+		do {
 			ssize_t sent = send(sockfd, (void*)(buffer.data() + total), size - total, 0);
-			if (sent == -1) {
-				Logger::logToFile("Failed to send data.");
+			if (sent <= 0) {
+				buffer.clear();
+				Logger::logToFile("sendData(): Failed to send data. send() error or client closed the connection.");
 				return;
 			}
 
 			total += sent;
-			Logger::logToFile("Sent so far: " + std::to_string(total));
+			//Logger::logToFile("Sent so far: " + std::to_string(total));
+		} while (total < size);
 
-			if (buffer.data()[total - 1] == '\n') {
-				break;
-			}
-		}
+		buffer.clear();
 	}
 }

@@ -48,6 +48,9 @@
     <ClInclude Include="include\memoryCommands.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="include\ntp.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="source\commandHandler.cpp">
@@ -75,6 +78,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="source\memoryCommands.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="source\ntp.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

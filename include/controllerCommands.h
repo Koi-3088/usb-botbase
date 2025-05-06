@@ -1,8 +1,6 @@
 #pragma once
 
-#include "defines.h"
 #include "moduleBase.h"
-#include <malloc.h>
 #include <switch.h>
 #include <unordered_map>
 
@@ -11,13 +9,13 @@ namespace ControllerCommands {
 	public:
 		Controller() : BaseCommands() {
 			m_workMem = (u8*)aligned_alloc(0x1000, m_workMem_size);
-			controllerHandle = { 0 };
-			controllerDevice = { 0 };
-			controllerState = { 0 };
-			sessionId = { 0 };
-			dummyKeyboardState = { 0 };
-			bControllerIsInitialised = false;
-			controllerInitializedType = HidDeviceType_FullKey3;
+			m_controllerHandle = { 0 };
+			m_controllerDevice = { 0 };
+			m_controllerState = { 0 };
+			m_sessionId = { 0 };
+			m_dummyKeyboardState = { 0 };
+			m_ControllerIsInitialised = false;
+			m_controllerInitializedType = HidDeviceType_FullKey3;
 		};
 
 		~Controller() override {
@@ -26,6 +24,7 @@ namespace ControllerCommands {
 		};
 
 		static int parseStringToButton(const std::string& arg);
+		static int parseStringToStick(const std::string& arg);
 
 	protected:
 		void initController();
@@ -37,18 +36,17 @@ namespace ControllerCommands {
 		void setStickState(Joystick stick, int dxVal, int dyVal);
 		void touch(HidTouchState* state, u64 sequentialCount, u64 holdTime, bool hold, u8* token);
 		void key(HiddbgKeyboardAutoPilotState* states, u64 sequentialCount);
-		void clickSequence(char* seq, u8* token);
 		void setControllerType(const std::vector<std::string>& params);
 
 	private:
-		bool bControllerIsInitialised;
-		HidDeviceType controllerInitializedType;
+		bool m_ControllerIsInitialised;
+		HidDeviceType m_controllerInitializedType;
 
-		HiddbgHdlsHandle controllerHandle;
-		HiddbgHdlsDeviceInfo controllerDevice;
-		HiddbgHdlsState controllerState;
-		HiddbgKeyboardAutoPilotState dummyKeyboardState;
-		HiddbgHdlsSessionId sessionId;
+		HiddbgHdlsHandle m_controllerHandle;
+		HiddbgHdlsDeviceInfo m_controllerDevice;
+		HiddbgHdlsState m_controllerState;
+		HiddbgKeyboardAutoPilotState m_dummyKeyboardState;
+		HiddbgHdlsSessionId m_sessionId;
 
 		u8* m_workMem = nullptr;
 		const size_t m_workMem_size = 0x1000;
@@ -68,5 +66,6 @@ namespace ControllerCommands {
 		};
 
 		static std::unordered_map<std::string, int> m_button;
+		static std::unordered_map<std::string, int> m_stick;
     };
 }

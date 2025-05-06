@@ -1,0 +1,8 @@
+.DS_Store
+._*
+build
+*.kip
+*.elf
+*.nso
+*.nsp
+*.npdm
