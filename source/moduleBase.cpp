@@ -8,11 +8,11 @@ namespace ModuleBase {
 	using namespace Util;
     using namespace SbbLog;
 
-	void BaseCommands::attach() {
-        uint64_t pid = 0;
+	bool BaseCommands::attach(u64& pid) {
         Result rc = pmdmntGetApplicationProcessId(&pid);
         if (R_FAILED(rc)) {
             Logger::logToFile("attach() pmdmntGetApplicationProcessId() failed.", rc);
+			return false;
         }
 
         if (m_debugHandle != 0) {
@@ -22,7 +22,10 @@ namespace ModuleBase {
         rc = svcDebugActiveProcess(&m_debugHandle, pid);
         if (R_FAILED(rc)) {
             Logger::logToFile("attach() svcDebugActiveProcess() failed.", rc);
+			return false;
         }
+
+		return true;
     }
 
 	void BaseCommands::detach() {
@@ -32,32 +35,23 @@ namespace ModuleBase {
     }
 
 	void BaseCommands::initMetaData() {
-		//Logger::logToFile("getMetaData() attach().");
-		attach();
-
 		u64 pid = 0;
-		Result rc = pmdmntGetApplicationProcessId(&pid);
-		if (R_FAILED(rc)) {
-			Logger::logToFile("getMetaData() pmdmntGetApplicationProcessId() failed.", rc);
+		if (!attach(pid)) {
+			Logger::logToFile("initMetaData() attach() failed.");
+			detach();
+			return;
 		}
 
-		//Logger::logToFile("getMetaData() pid: " + std::to_string(pid));
 		if (m_metaData.pid == 0 || m_metaData.pid != pid) {
 			m_metaData.pid = pid;
-			m_metaData.main_nso_base = getMainNsoBase(m_metaData.pid);
-			//Logger::logToFile("getMetaData() main_nso_base: " + std::to_string(m_metaData.main_nso_base));
+			m_metaData.main_nso_base = getMainNsoBase(pid);
 			m_metaData.heap_base = getHeapBase();
-			//Logger::logToFile("getMetaData() heap_base: " + std::to_string(m_metaData.heap_base));
-			m_metaData.titleID = getTitleId(m_metaData.pid);
-			//Logger::logToFile("getMetaData() titleID: " + std::to_string(m_metaData.titleID));
+			m_metaData.titleID = getTitleId(pid);
 			m_metaData.titleVersion = GetTitleVersion(m_metaData.titleID);
-			//Logger::logToFile("getMetaData() titleVersion: " + std::to_string(m_metaData.titleVersion));
-			m_metaData.buildID = getBuildID(m_metaData.pid);
-			//Logger::logToFile("getMetaData() buildID: " + std::to_string(m_metaData.buildID));
+			m_metaData.buildID = getBuildID(pid);
 		}
 
 		detach();
-		//Logger::logToFile("getMetaData() detach().");
 	}
 
 	u8 BaseCommands::getBuildID(u64 pid) {
@@ -113,49 +107,46 @@ namespace ModuleBase {
 	}
 
 	u64 BaseCommands::GetTitleVersion(u64 titleID) {
-		u64 titleV = 0;
-		s32 out = 0;
-
 		Result rc = nsInitialize();
 		if (R_FAILED(rc)) {
 			Logger::logToFile("GetTitleVersion() nsInitialize() failed.", rc);
 		}
 
-		NsApplicationContentMetaStatus* metaStatus = (NsApplicationContentMetaStatus*)malloc(sizeof(NsApplicationContentMetaStatus[100U]));
-		rc = nsListApplicationContentMetaStatus(titleID, 0, metaStatus, 100, &out); // This always fails. Check if sbb also fails.
+		u64 titleV = 0;
+		s32 out = 0;
+		std::vector<NsApplicationContentMetaStatus> metaStatus(100U);
+		rc = nsListApplicationContentMetaStatus(titleID, 0, metaStatus.data(), sizeof(NsApplicationContentMetaStatus), &out);
+		nsExit();
 		if (R_FAILED(rc)) {
 			Logger::logToFile("GetTitleVersion() nsListApplicationContentMetaStatus() failed.", rc);
+			return 0;
 		}
 
-		//Logger::logToFile("GetTitleVersion() out: " + std::to_string(out));
 		for (int i = 0; i < out; i++) {
 			if (titleV < metaStatus[i].version) {
 				titleV = metaStatus[i].version;
 			}
 		}
 
-		nsExit();
-		free(metaStatus);
-		metaStatus = nullptr;
 		return (titleV / 0x10000);
 	}
 
-	u64 BaseCommands::getOutSize(NsApplicationControlData* buf) {
+	std::vector<NsApplicationControlData> BaseCommands::getNsApplicationControlData(u64& out) {
 		Result rc = nsInitialize();
 		if (R_FAILED(rc)) {
-			Logger::logToFile("getoutsize() nsInitialize() failed.", rc);
+			Logger::logToFile("getNsApplicationControlData() nsInitialize() failed.", rc);
+			return {};
 		}
 
-		u64 outsize = 0;
-		u64 pid = 0;
-		pmdmntGetApplicationProcessId(&pid);
-		rc = nsGetApplicationControlData(NsApplicationControlSource_Storage, getTitleId(pid), buf, sizeof(NsApplicationControlData), &outsize);
-		if (R_FAILED(rc)) {
-			Logger::logToFile("getoutsize() nsGetApplicationControlData() failed.", rc);
-		}
-
+		std::vector<NsApplicationControlData> buf(1);
+		rc = nsGetApplicationControlData(NsApplicationControlSource_Storage, m_metaData.titleID, buf.data(), sizeof(NsApplicationControlData), &out);
 		nsExit();
-		return outsize;
+		if (R_FAILED(rc)) {
+			Logger::logToFile("getNsApplicationControlData() nsGetApplicationControlData() failed.", rc);
+			return {};
+		}
+
+		return buf;
 	}
 
 	void BaseCommands::setScreen(const ViPowerState& state) {
@@ -214,55 +205,87 @@ namespace ModuleBase {
 	}
 
 	void BaseCommands::getGameIcon(std::vector<char>& buffer) {
-		NsApplicationControlData* buf = new(NsApplicationControlData);
-		u64 outsize = getOutSize(buf);
-		buffer.resize(sizeof(outsize));
+		u64 out = 0;
+		auto data = getNsApplicationControlData(out);
+		if (data.empty()) {
+			return;
+		}
 
-		std::copy(reinterpret_cast<const char*>(&buf->icon),
-			reinterpret_cast<const char*>(&buf->icon) + sizeof(outsize),
+		out -= sizeof(data[0].nacp);
+		buffer.resize(out);
+		std::copy(reinterpret_cast<const char*>(&data[0].icon),
+			reinterpret_cast<const char*>(&data[0].icon) + out,
 			buffer.begin());
 	}
 
 	void BaseCommands::getGameVersion(std::vector<char>& buffer) {
-		NsApplicationControlData* buf = new(NsApplicationControlData);
-		getOutSize(buf);
-		std::string ver(buf->nacp.display_version);
-		buffer.insert(buffer.begin(), ver.begin(), ver.end());
+		u64 out = 0;
+		auto data = getNsApplicationControlData(out);
+		if (data.empty()) {
+			return;
+		}
+
+		buffer.resize(sizeof(data[0].nacp.display_version));
+		std::copy(reinterpret_cast<const char*>(&data[0].nacp.display_version[0]),
+			reinterpret_cast<const char*>(&data[0].nacp.display_version[15]),
+			buffer.begin());
 	}
 
 	void BaseCommands::getGameRating(std::vector<char>& buffer) {
-		NsApplicationControlData* buf = new(NsApplicationControlData);
-		getOutSize(buf);
-		int rating = buf->nacp.rating_age[0];
-		buffer.resize(sizeof(rating));
+		u64 out = 0;
+		auto data = getNsApplicationControlData(out);
+		if (data.empty()) {
+			return;
+		}
 
-		std::copy(reinterpret_cast<const char*>(&rating),
-			reinterpret_cast<const char*>(&rating) + sizeof(rating),
+		buffer.resize(sizeof(s8));
+		std::copy(reinterpret_cast<const char*>(&data[0].nacp.rating_age[0]),
+			reinterpret_cast<const char*>(&data[0].nacp.rating_age[1] + sizeof(s8)),
 			buffer.begin());
 	}
 
 	void BaseCommands::getGameAuthor(std::vector<char>& buffer) {
-		NsApplicationControlData* buf = new(NsApplicationControlData);
-		getOutSize(buf);
+		u64 out = 0;
+		auto data = getNsApplicationControlData(out);
+		if (data.empty()) {
+			return;
+		}
 
-		NacpLanguageEntry* lang = nullptr;
-		nacpGetLanguageEntry(&buf->nacp, &lang);
+		NacpLanguageEntry* lang = nullptr;	
+		Result rc = nacpGetLanguageEntry(&data[0].nacp, &lang);
+		if (R_FAILED(rc)) {
+			Logger::logToFile("getGameAuthor() nacpGetLanguageEntry() failed.", rc);
+			delete lang;
+			return;
+		}
 
-		std::string author(lang->author);
-		buffer.insert(buffer.begin(), author.begin(), author.end());
-		free(lang);
+		buffer.resize(out);
+		std::copy(reinterpret_cast<const char*>(&lang->author[0]),
+			reinterpret_cast<const char*>(&lang->author[255]),
+			buffer.begin());
+		delete lang;
 	}
 
 	void BaseCommands::getGameName(std::vector<char>& buffer) {
-		NsApplicationControlData* buf = new(NsApplicationControlData);
-		getOutSize(buf);
+		u64 out = 0;
+		auto data = getNsApplicationControlData(out);
+		if (data.empty()) {
+			return;
+		}
 
 		NacpLanguageEntry* lang = nullptr;
-		nacpGetLanguageEntry(&buf->nacp, &lang);
+		Result rc = nacpGetLanguageEntry(&data[0].nacp, &lang);
+		if (R_FAILED(rc)) {
+			Logger::logToFile("getGameName() nacpGetLanguageEntry() failed.", rc);
+			delete lang;
+			return;
+		}
 
-		std::string name(lang->name);
-		buffer.insert(buffer.begin(), name.begin(), name.end());
-		free(lang);
+		buffer.resize(out);
+		std::copy(reinterpret_cast<const char*>(&lang->name[0]),
+			reinterpret_cast<const char*>(&lang->name[511]),
+			buffer.begin());
+		delete lang;
 	}
 
 	void BaseCommands::getSwitchTime(std::vector<char>& buffer) {
@@ -352,9 +375,9 @@ namespace ModuleBase {
 
 		NifmInternetConnectionStatus status;
 		rc = nifmGetInternetConnectionStatus(NULL, NULL, &status);
+		nifmExit();
 		if (R_FAILED(rc) || status != NifmInternetConnectionStatus_Connected) {
 			Logger::logToFile("isConnectedToInternet() nifmGetInternetConnectionStatus() failed or not connected.", rc);
-			nifmExit();
 			return false;
 		}
 

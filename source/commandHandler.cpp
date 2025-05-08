@@ -27,9 +27,14 @@ namespace CommandHandler {
 			Logger::logToFile("HandleCommand param " + std::to_string(i) + ": " + params.at(i));
 		}
 
+		bool controllerInit = cmd == "click" && params[0] == "UNUSED";
+		if (!controllerInit && m_metaData.pid == 0) {
+			Logger::logToFile("HandleCommand pid is 0, calling initMetaData().");
+			initMetaData();
+		}
+
 		auto it = Handler::m_cmd.find(cmd);
 		if (it != Handler::m_cmd.end()) {
-			initMetaData();
 			it->second(params, buffer);
 		}
 		else {
@@ -173,15 +178,11 @@ namespace CommandHandler {
 		std::vector<s64> jumps(count);
 		for (int i = 0; i < count; i++) {
 			jumps[i] = Utils::parseStringToSignedLong(mod[i]);
-			//Logger::logToFile("pointerAll_cmd() jump#" + std::to_string(i) + ": " + std::to_string(jumps[i]));
 		}
 
 		u64 val = followMainPointer(mainJump, jumps, buffer);
-		//Logger::logToFile("pointerAll_cmd() val: " + std::to_string(val));
-
 		if (val != 0) {
 			val += finalJump;
-			//Logger::logToFile("pointerAll_cmd() val with final jump: " + std::to_string(val));
 			std::memcpy(buffer.data(), &val, sizeof(val));
 		}
 		else {
@@ -207,16 +208,12 @@ namespace CommandHandler {
 		std::vector<s64> jumps(count);
 		for (int i = 0; i < count; i++) {
 			jumps[i] = Utils::parseStringToSignedLong(mod[i]);
-			//Logger::logToFile("pointerRelative_cmd() jump#" + std::to_string(i) + ": " + std::to_string(jumps[i]));
 		}
 
 		u64 val = followMainPointer(mainJump, jumps, buffer);
-		//Logger::logToFile("pointerRelative_cmd() val: " + std::to_string(val));
 
 		if (val != 0) {
 			val += finalJump;
-			//Logger::logToFile("pointerRelative_cmd() val with final jump: " + std::to_string(val));
-
 			val -= m_metaData.heap_base;
 			std::memcpy(buffer.data(), &val, sizeof(val));
 		}
@@ -250,9 +247,7 @@ namespace CommandHandler {
 
 		u64 val = followMainPointer(mainJump, jumps, buffer);
 		val += finalJump;
-		//Logger::logToFile("pointerPeek_cmd() val with final jump: " + std::to_string(val));
 		std::memcpy(buffer.data(), &val, sizeof(val));
-
 		peek(val, size, buffer);
 	}
 
@@ -335,9 +330,7 @@ namespace CommandHandler {
 
 		u64 val = followMainPointer(mainJump, jumps, buffer);
 		val += finalJump;
-		//Logger::logToFile("pointerPoke_cmd() val with final jump: " + std::to_string(val));
 		std::memcpy(buffer.data(), &val, sizeof(val));
-
 		poke(val, data.size(), data);
 	}
 #pragma endregion Various memory read/write commands.
@@ -440,7 +433,6 @@ namespace CommandHandler {
 	}
 
 	void Handler::detachController_cmd() {
-		Logger::logToFile("detachController()");
 		detachController();
 	}
 #pragma endregion Various controller commands.
@@ -461,7 +453,6 @@ namespace CommandHandler {
 
 	void Handler::getTitleID_cmd(std::vector<char>& buffer) {
 		buffer.resize(sizeof(m_metaData.titleID));
-
 		std::copy(reinterpret_cast<const char*>(&m_metaData.titleID),
 			reinterpret_cast<const char*>(&m_metaData.titleID) + sizeof(m_metaData.titleID),
 			buffer.begin());
@@ -469,7 +460,6 @@ namespace CommandHandler {
 
 	void Handler::getBuildID_cmd(std::vector<char>& buffer) {
 		buffer.resize(sizeof(m_metaData.buildID));
-
 		std::copy(reinterpret_cast<const char*>(&m_metaData.buildID),
 			reinterpret_cast<const char*>(&m_metaData.buildID) + sizeof(m_metaData.buildID),
 			buffer.begin());
@@ -477,7 +467,6 @@ namespace CommandHandler {
 
 	void Handler::getTitleVersion_cmd(std::vector<char>& buffer) {
 		buffer.resize(sizeof(m_metaData.titleVersion));
-
 		std::copy(reinterpret_cast<const char*>(&m_metaData.titleVersion),
 			reinterpret_cast<const char*>(&m_metaData.titleVersion) + sizeof(m_metaData.titleVersion),
 			buffer.begin());
@@ -490,8 +479,8 @@ namespace CommandHandler {
 		setGetSystemLanguage(&languageCode);
 		setMakeLanguage(languageCode, &language);
 		setExit();
-		buffer.resize(sizeof(language));
 
+		buffer.resize(sizeof(language));
 		std::copy(reinterpret_cast<const char*>(&language),
 			reinterpret_cast<const char*>(&language) + sizeof(language),
 			buffer.begin());
@@ -504,15 +493,14 @@ namespace CommandHandler {
 
 		u64 programID = Utils::parseStringToInt(params.front());
 		bool isRunning = getIsProgramOpen(programID);
-		buffer.resize(sizeof(isRunning));
 
+		buffer.resize(sizeof(isRunning));
 		std::copy(reinterpret_cast<const char*>(&isRunning),
 			reinterpret_cast<const char*>(&isRunning) + sizeof(isRunning),
 			buffer.begin());
 	}
 
-	// Requires 0x480000 heap size in main.cpp to work.
-	/*void Handler::pixelPeek_cmd(std::vector<char>& buffer) {
+	void Handler::pixelPeek_cmd(std::vector<char>& buffer) {
 		try {
 			u64 outSize = 0;
 			buffer.resize(0x80000);
@@ -521,12 +509,14 @@ namespace CommandHandler {
 			if (R_FAILED(rc)) {
 				Logger::logToFile("Failed to capture screenshot.", rc);
 			}
+
+			buffer.resize(outSize);
 		}
 		catch (const std::bad_alloc& e) {
 			Logger::logToFile("std::bad_alloc caught in pixelPeek_cmd(): " + std::string(e.what()));
 			throw;
 		}
-	}*/
+	}
 
 	void Handler::screenOn_cmd() {
 		setScreen(ViPowerState_On);
@@ -538,7 +528,6 @@ namespace CommandHandler {
 
 	void Handler::getMainNsoBase_cmd(std::vector<char>& buffer) {
 		buffer.resize(sizeof(m_metaData.main_nso_base));
-
 		std::copy(reinterpret_cast<const char*>(&m_metaData.main_nso_base),
 			reinterpret_cast<const char*>(&m_metaData.main_nso_base) + sizeof(m_metaData.main_nso_base),
 			buffer.begin());
@@ -546,7 +535,6 @@ namespace CommandHandler {
 
 	void Handler::getHeapBase_cmd(std::vector<char>& buffer) {
 		buffer.resize(sizeof(m_metaData.heap_base));
-
 		std::copy(reinterpret_cast<const char*>(&m_metaData.heap_base),
 			reinterpret_cast<const char*>(&m_metaData.heap_base) + sizeof(m_metaData.heap_base),
 			buffer.begin());
@@ -562,8 +550,8 @@ namespace CommandHandler {
 		u32 charge;
 		psmGetBatteryChargePercentage(&charge);
 		psmExit();
-		buffer.resize(sizeof(charge));
 
+		buffer.resize(sizeof(charge));
 		std::copy(reinterpret_cast<const char*>(&charge),
 			reinterpret_cast<const char*>(&charge) + sizeof(charge),
 			buffer.begin());

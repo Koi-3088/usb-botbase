@@ -19,7 +19,7 @@ namespace ControllerCommands {
             Logger::logToFile("initController() hiddbgInitialize() failed.", rc);
         }
         
-        if (m_workMem == nullptr) {
+        if (!m_workMem) {
             m_workMem = (u8*)aligned_alloc(0x1000, m_workMem_size);
         }
 

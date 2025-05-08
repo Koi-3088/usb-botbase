@@ -68,7 +68,7 @@ namespace CommandHandler {
 			REGISTER_CMD_NOARGS("screenOn", screenOn_cmd);
 			REGISTER_CMD_NOARGS("screenOff", screenOff_cmd);
 			REGISTER_CMD_NOARGS("detachController", detachController_cmd);
-			//REGISTER_CMD_BUFFER("pixelPeek", pixelPeek_cmd);
+			REGISTER_CMD_BUFFER("pixelPeek", pixelPeek_cmd);
 		};
 
 		~Handler() override {}
@@ -120,7 +120,7 @@ namespace CommandHandler {
 		void screenOn_cmd();
 		void screenOff_cmd();
 		void detachController_cmd();
-		//void pixelPeek_cmd(std::vector<char>& buffer);
+		void pixelPeek_cmd(std::vector<char>& buffer);
 
 		std::unordered_map<std::string, CmdFunc> m_cmd;
 	};

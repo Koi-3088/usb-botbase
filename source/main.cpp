@@ -11,9 +11,6 @@ using namespace Util;
 using namespace SbbLog;
 
 #define TITLE_ID 0x430000000000000B
-#define HEAP_SIZE 0x300000
-#define THREAD_SIZE 0x1A000
-#define VERSION_S "2.4.1"
 
 ConnectionHandler* m_connection;
 
@@ -22,7 +19,7 @@ extern "C" {
     TimeServiceType __nx_time_service_type = TimeServiceType_System;
 
     void __libnx_initheap(void) {
-        static u8 inner_heap[HEAP_SIZE];
+        static u8 inner_heap[0x300000];
         extern void* fake_heap_start;
         extern void* fake_heap_end;
 

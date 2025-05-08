@@ -48,8 +48,7 @@ namespace ModuleBase {
 			u8 buildID;
 		};
 
-		MetaData m_metaData { 0 };
-
+		MetaData m_metaData = { 0 };
 		enum Joystick {
 			Left = 0,
 			Right = 1,
@@ -63,7 +62,7 @@ namespace ModuleBase {
 			return m_sbbVersion;
 		}
 
-		void attach();
+		bool attach(u64& pid);
 		void detach();
 		void initMetaData();
 
@@ -72,7 +71,7 @@ namespace ModuleBase {
 		u64 getTitleId(u64 pid);
 		u8 getBuildID(u64 pid);
 		u64 GetTitleVersion(u64 titleID);
-		u64 getOutSize(NsApplicationControlData* buf);
+		std::vector<NsApplicationControlData> getNsApplicationControlData(u64& out);
 
 		bool getIsProgramOpen(u64 id);
 		void setScreen(const ViPowerState& state);
@@ -82,7 +81,7 @@ namespace ModuleBase {
 		void resetSwitchTime(std::vector<char>& buffer);
 
 	private:
-		const std::string m_sbbVersion = "2.4.1";
+		const std::string m_sbbVersion = "3.0.0";
 
 		void setMainLoopSleepTime(const std::vector<std::string>& params);
 		void setButtonClickSleepTime(const std::vector<std::string>& params);

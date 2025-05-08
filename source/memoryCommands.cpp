@@ -44,12 +44,10 @@ namespace MemoryCommands {
 
 		readMem(buffer, m_metaData.main_nso_base + main, size);
 		std::memcpy(&offset, buffer.data(), size);
-		Logger::logToFile("followMainPointer() first offset memcpy(): " + std::to_string(offset));
 
 		for (int i = 0; i < jumps.size(); i++) {
 			readMem(buffer, offset + jumps[i], size);
 			std::memcpy(&offset, buffer.data(), size);
-			Logger::logToFile("followMainPointer() jump #" + std::to_string(i) + " memcpy(): " + std::to_string(offset));
 			if (offset == 0) {
 				break;
 			}
@@ -59,7 +57,7 @@ namespace MemoryCommands {
 	}
 
 	void Vision::readMem(const std::vector<char>& buffer, u64 offset, u64 size, u64 multi) {
-		attach();
+		attach(m_metaData.pid);
 		Result rc = svcReadDebugProcessMemory((void*)(buffer.data()), m_debugHandle, offset, size);
 		if (R_FAILED(rc)) {
 			Logger::logToFile("readMem() svcReadDebugProcessMemory() failed.", rc);
@@ -68,7 +66,7 @@ namespace MemoryCommands {
 	}
 
 	void Vision::writeMem(u64 offset, u64 size, const std::vector<char>& buffer) {
-		attach();
+		attach(m_metaData.pid);
 		Result rc = svcWriteDebugProcessMemory(m_debugHandle, (void*)buffer.data(), offset, size);
 		if (R_FAILED(rc)) {
 			Logger::logToFile("writedMem() svcWriteDebugProcessMemory() failed.", rc);

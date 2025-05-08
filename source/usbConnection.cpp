@@ -1,8 +1,9 @@
+#include "commandHandler.h"
 #include "defines.h"
 #include "logger.h"
 #include "usbConnection.h"
 #include "util.h"
-#include "commandHandler.h"
+#include <cstring>
 
 namespace UsbConnection {
     using namespace Util;
@@ -17,32 +18,32 @@ namespace UsbConnection {
 	void UsbConnection::connect() {
         Utils::flashLed();
 
-        Handler handler;
-        std::vector<std::string> dummyVec;
-        std::string dummyBtn("UNUSED");
-        dummyVec.emplace_back(dummyBtn);
-
-        handler.HandleCommand("click", dummyVec);
+        std::vector<std::string> dummyVec(1, "UNUSED");
+        m_handler->HandleCommand("click", dummyVec);
         dummyVec.clear();
-        dummyBtn.clear();
 
         std::string persistentBuffer;
-
         while (appletMainLoop()) {
             auto commands = UsbConnection::receiveData(persistentBuffer);
-            for (const auto& command : commands) {
-                Utils::parseArgs(command, [=](std::string x, const std::vector<std::string>& y) {
-                    auto sendBuffer = m_handler->HandleCommand(x, y);
-                    if (sendBuffer.empty()) {
-                        return;
-                    }
+            fflush(stdout);
 
-                    Logger::logToFile("Sending data...");
-                    UsbConnection::sendData(sendBuffer, sendBuffer.size());
+            if (!commands.empty()) {
+                for (const auto& command : commands) {
+                    Utils::parseArgs(command, [=](std::string x, const std::vector<std::string>& y) {
+                        auto buffer = m_handler->HandleCommand(x, y);
+                        if (!buffer.empty()) {
+                            if (buffer.back() != '\n') {
+                                buffer.push_back('\n');
+                            }
+
+                            UsbConnection::sendData(buffer, buffer.size());
+                        }
                     });
-            }
+                }
 
-            //svcSleepThread(1e+6L);
+                persistentBuffer.clear();
+                //svcSleepThread(1e+6L);
+            }
         }
 	}
 
@@ -51,35 +52,49 @@ namespace UsbConnection {
 	}
 
     std::vector<std::string> UsbConnection::receiveData(std::string& persistentBuffer, int sockfd) {
-        size_t size = 0;
-        Logger::logToFile("Size before read: " + std::to_string(size));
-        return {};
-        /*int len = usbCommsRead(&size, sizeof(size));
-        if (len <= 0) {
-            return {};
-        }
+        size_t received = 0;
+        char buf[256];
+        std::vector<std::string> commands;
 
-        Logger::logToFile("Size after initial read: " + std::to_string(size));
-		std::vector<std::string> buffer(size);
-        len = usbCommsRead((void*)buffer.data(), size);
-        if (size - 2 > buffer.size() || len <= 0) {
-            return buffer;
-        }
+        while (true) {
+            memset(buf, 0, 256);
+            received = usbCommsRead(buf, 256);
+            if (received > 0) {
+                persistentBuffer.append(buf, received);
+                size_t pos;
+                while ((pos = persistentBuffer.find("\r\n")) != std::string::npos) {
+                    commands.push_back(persistentBuffer.substr(0, pos));
+                    persistentBuffer.erase(0, pos + 2);
+                }
 
-        Logger::logToFile("Read buffer: " + std::string(buffer.begin(), buffer.end()));
-        return buffer;*/
+                if (!commands.empty()) {
+                    return commands;
+                }
+            }
+            else if (received == -1) {
+                Logger::logToFile("receiveData() recv() error.");
+                return {};
+            }
+            else {
+                Logger::logToFile("receiveData() client closed the connection.");
+                return {};
+            }
+        }
     }
 
-    void UsbConnection::sendData(std::vector<char>& data, size_t size, int sockfd) {
-        USBResponse response {
-            size,
-            (void*)data.data(),
-        };
+    void UsbConnection::sendData(std::vector<char>& buffer, size_t size, int sockfd) {
+        size_t total = 0;
+		do {
+			ssize_t sent = usbCommsWrite((void*)(buffer.data() + total), size - total);
+			if (sent < 0) {
+				buffer.clear();
+				Logger::logToFile("sendData() usbCommsWrite() error.");
+				return;
+			}
 
-		usbCommsWrite(&response, 4);
-        Logger::logToFile("Send response size: " + std::to_string(response.size));
-		if (response.size > 0) {
-            usbCommsWrite(response.data, response.size);
-		}
+            total += sent;
+		} while (total < size);
+
+		buffer.clear();
     }
 }

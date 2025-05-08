@@ -45,7 +45,6 @@ namespace SocketConnection {
 		Logger::logToFile("Waiting for client to connect...");
 
 		std::string persistentBuffer;
-
 		while (appletMainLoop()) {
 			int res = poll(pfds.data(), pfds.size(), -1);
 			if (res < 0) {
@@ -55,7 +54,6 @@ namespace SocketConnection {
 			}
 
 			if (pfds[0].revents & POLLIN) {
-				//Logger::logToFile("Server socket is ready to accept a new connection.");
 				pfds[1].fd = accept(sockfd, (struct sockaddr*)&clientAddr, &clientSize);
 				if (pfds[1].fd >= 0) {
 					Logger::logToFile("Client connected...");
@@ -65,7 +63,6 @@ namespace SocketConnection {
 					continue;
 				}
 				else {
-					//Logger::logToFile("accept() error, resetting the server socket...");
 					close(sockfd);
 					close(pfds[1].fd);
 					svcSleepThread(1e+6L);
@@ -78,9 +75,7 @@ namespace SocketConnection {
 
 			if (pfds[1].revents & POLLIN) {
 				try {
-					//Logger::logToFile("Receiving data...");
 					auto commands = receiveData(persistentBuffer, pfds[1].fd);
-
 					fflush(stdout);
 					dup2(pfds[1].fd, STDOUT_FILENO);
 
@@ -89,7 +84,6 @@ namespace SocketConnection {
 							Utils::parseArgs(command, [=](const std::string& x, const std::vector<std::string>& y) {
 								auto buffer = m_handler->HandleCommand(x, y);
 								if (!buffer.empty()) {
-									//Logger::logToFile("Sending data...");
 									if (buffer.back() != '\n') {
 										buffer.push_back('\n');
 									}
@@ -102,7 +96,6 @@ namespace SocketConnection {
 						persistentBuffer.clear();
 					}
 					else {
-						//Logger::logToFile("Buffer empty, closing pfd.");
 						close(pfds[1].fd);
 						pfds[1].fd = -1;
 						pfds[1].events = POLLIN;
@@ -110,7 +103,7 @@ namespace SocketConnection {
 					}
 				}
 				catch (const std::exception& e) {
-					Logger::logToFile("Exception: " + std::string(e.what()));
+					Logger::logToFile("Socket connect() exception: " + std::string(e.what()));
 				}
 			}
 		}
@@ -198,7 +191,6 @@ namespace SocketConnection {
 			}
 
 			total += sent;
-			//Logger::logToFile("Sent so far: " + std::to_string(total));
 		} while (total < size);
 
 		buffer.clear();
