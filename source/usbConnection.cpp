@@ -44,6 +44,9 @@ namespace UsbConnection {
                 persistentBuffer.clear();
                 //svcSleepThread(1e+6L);
             }
+            else {
+                persistentBuffer.clear();
+            }
         }
 	}
 

@@ -62,7 +62,7 @@ namespace ModuleBase {
 			return m_sbbVersion;
 		}
 
-		bool attach(u64& pid);
+		bool attach();
 		void detach();
 		void initMetaData();
 

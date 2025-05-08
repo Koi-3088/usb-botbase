@@ -8,12 +8,19 @@ namespace ModuleBase {
 	using namespace Util;
     using namespace SbbLog;
 
-	bool BaseCommands::attach(u64& pid) {
+	bool BaseCommands::attach() {
+		u64 pid = 0;
         Result rc = pmdmntGetApplicationProcessId(&pid);
         if (R_FAILED(rc)) {
             Logger::logToFile("attach() pmdmntGetApplicationProcessId() failed.", rc);
 			return false;
         }
+
+		if (m_metaData.pid != pid) {
+			Logger::logToFile("attach() m_metaData.pid != pid, calling initMetaData().");
+			m_metaData.pid = pid;
+			initMetaData();
+		}
 
         if (m_debugHandle != 0) {
             svcCloseHandle(m_debugHandle);
@@ -35,21 +42,17 @@ namespace ModuleBase {
     }
 
 	void BaseCommands::initMetaData() {
-		u64 pid = 0;
-		if (!attach(pid)) {
+		if (!attach()) {
 			Logger::logToFile("initMetaData() attach() failed.");
 			detach();
 			return;
 		}
 
-		if (m_metaData.pid == 0 || m_metaData.pid != pid) {
-			m_metaData.pid = pid;
-			m_metaData.main_nso_base = getMainNsoBase(pid);
-			m_metaData.heap_base = getHeapBase();
-			m_metaData.titleID = getTitleId(pid);
-			m_metaData.titleVersion = GetTitleVersion(m_metaData.titleID);
-			m_metaData.buildID = getBuildID(pid);
-		}
+		m_metaData.main_nso_base = getMainNsoBase(m_metaData.pid);
+		m_metaData.heap_base = getHeapBase();
+		m_metaData.titleID = getTitleId(m_metaData.pid);
+		m_metaData.titleVersion = GetTitleVersion(m_metaData.titleID);
+		m_metaData.buildID = getBuildID(m_metaData.pid);
 
 		detach();
 	}
