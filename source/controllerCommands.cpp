@@ -124,19 +124,15 @@ namespace ControllerCommands {
         }
     }
 
-    void Controller::touch(HidTouchState* state, u64 sequentialCount, u64 holdTime, bool hold, u8* token) {
+    void Controller::touch(std::vector<HidTouchState>& state, u64 sequentialCount, u64 holdTime, bool hold) {
         initController();
-        state->delta_time = holdTime; // only the first touch needs this for whatever reason
+        state[0].delta_time = holdTime; // only the first touch needs this for whatever reason
         for (u32 i = 0; i < sequentialCount; i++) {
             hiddbgSetTouchScreenAutoPilotState(&state[i], 1);
             svcSleepThread(holdTime);
             if (!hold) {
                 hiddbgSetTouchScreenAutoPilotState(NULL, 0);
                 svcSleepThread(pollRate * 1e+6L);
-            }
-
-            if ((*token) == 1) {
-                break;
             }
         }
 
@@ -149,7 +145,7 @@ namespace ControllerCommands {
         hiddbgUnsetTouchScreenAutoPilotState();
     }
 
-    void Controller::key(HiddbgKeyboardAutoPilotState* states, u64 sequentialCount) {
+    void Controller::key(const std::vector<HiddbgKeyboardAutoPilotState>& states, u64 sequentialCount) {
         initController();
         HiddbgKeyboardAutoPilotState tempState = { 0 };
         u32 i;

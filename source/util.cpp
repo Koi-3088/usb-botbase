@@ -94,14 +94,12 @@ namespace Util {
 
     void Utils::parseArgs(const std::string& cmd, std::function<void(const std::string&, const std::vector<std::string>&)> callback) {
         std::istringstream stream(cmd);
-
         std::vector<std::string> params;
         std::copy(std::istream_iterator<std::string>(stream),
             std::istream_iterator<std::string>(),
             std::back_inserter(params));
 
         if (params.empty()) {
-            //Logger::logToFile("parseArgs() params empty.");
             return;
         }
 

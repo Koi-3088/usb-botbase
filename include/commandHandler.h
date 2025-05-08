@@ -9,13 +9,10 @@
 
 #define REGISTER_CMD(name, function) \
     (m_cmd)[(name)] = [this](const std::vector<std::string>& params, std::vector<char>& buffer) { this->function(params, buffer); }
-
 #define REGISTER_CMD_BUFFER(name, function) \
     (m_cmd)[(name)] = [this](const std::vector<std::string>&, std::vector<char>& buffer) { this->function(buffer); }
-
 #define REGISTER_CMD_PARAMS(name, function) \
     (m_cmd)[(name)] = [this](const std::vector<std::string>& params, std::vector<char>&) { this->function(params); }
-
 #define REGISTER_CMD_NOARGS(name, function) \
     (m_cmd)[(name)] = [this](const std::vector<std::string>&, std::vector<char>&) { this->function(); }
 
@@ -42,13 +39,12 @@ namespace CommandHandler {
 			REGISTER_CMD("pointerPeekMulti", pointerPeekMulti_cmd);
 			REGISTER_CMD("pointerPoke", pointerPoke_cmd);
 
-			REGISTER_CMD_PARAMS("clickSeq", clickSeq_cmd);
-			REGISTER_CMD_NOARGS("clickCancel", clickCancel_cmd);
 			REGISTER_CMD_PARAMS("press", press_cmd);
 			REGISTER_CMD_PARAMS("release", release_cmd);
 			REGISTER_CMD_PARAMS("setStick", setStick_cmd);
 			REGISTER_CMD_PARAMS("touch", touch_cmd);
 			REGISTER_CMD_PARAMS("touchHold", touchHold_cmd);
+			REGISTER_CMD_PARAMS("touchDraw", touchDraw_cmd);
 			REGISTER_CMD_PARAMS("key", key_cmd);
 			REGISTER_CMD_PARAMS("keyMod", keyMod_cmd);
 			REGISTER_CMD_PARAMS("keyMulti", keyMulti_cmd);
@@ -94,13 +90,12 @@ namespace CommandHandler {
 		void pointerPeekMulti_cmd(const std::vector<std::string>& params, std::vector<char>& buffer);
 		void pointerPoke_cmd(const std::vector<std::string>& params, std::vector<char>& buffer);
 
-		void clickSeq_cmd(const std::vector<std::string>& params);
-		void clickCancel_cmd();
 		void press_cmd(const std::vector<std::string>& params);
 		void release_cmd(const std::vector<std::string>& params);
 		void setStick_cmd(const std::vector<std::string>& params);
 		void touch_cmd(const std::vector<std::string>& params);
 		void touchHold_cmd(const std::vector<std::string>& params);
+		void touchDraw_cmd(const std::vector<std::string>& params);
 		void key_cmd(const std::vector<std::string>& params);
 		void keyMod_cmd(const std::vector<std::string>& params);
 		void keyMulti_cmd(const std::vector<std::string>& params);

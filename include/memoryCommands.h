@@ -14,7 +14,7 @@ namespace MemoryCommands {
 
 	protected:
 		void peek(u64 offset, u64 size, std::vector<char>& buffer);
-		void peekMulti(u64* offset, u64* size, u64 count, std::vector<char>& buffer);
+		void peekMulti(const std::vector<u64>& offsets, const std::vector<u64>& sizes, std::vector<char>& buffer);
 
 		void poke(u64 offset, u64 size, const std::vector<char>& buffer);
 

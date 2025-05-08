@@ -238,9 +238,9 @@ namespace ModuleBase {
 			return;
 		}
 
-		buffer.resize(sizeof(s8));
+		buffer.resize(sizeof(int));
 		std::copy(reinterpret_cast<const char*>(&data[0].nacp.rating_age[0]),
-			reinterpret_cast<const char*>(&data[0].nacp.rating_age[1] + sizeof(s8)),
+			reinterpret_cast<const char*>(&data[0].nacp.rating_age[1] + sizeof(int)),
 			buffer.begin());
 	}
 

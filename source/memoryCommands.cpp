@@ -19,17 +19,18 @@ namespace MemoryCommands {
 		}
 	}
 
-	void Vision::peekMulti(u64* offset, u64* size, u64 count, std::vector<char>& buffer) {
+	void Vision::peekMulti(const std::vector<u64>& offsets, const std::vector<u64>& sizes, std::vector<char>& buffer) {
+		u64 ofs = 0;
 		u64 totalSize = 0;
-		for (int i = 0; i < (int)count; i++) {
-			totalSize += size[i];
+		for (int i = 0; i < sizes.size(); i++) {
+			totalSize += sizes[i];
 		}
 
-		buffer.resize(totalSize);
-		u64 ofs = 0;
-		for (int i = 0; i < (int)count; i++) {
-			readMem(buffer, offset[i], size[i], ofs);
-			ofs += size[i];
+		buffer.resize(totalSize * sizeof(u8));
+		int count = (int)offsets.size();
+		for (int i = 0; i < count; i++) {
+			readMem(buffer, offsets[i], sizes[i], ofs);
+			ofs += sizes[i];
 		}
 	}
 
@@ -58,7 +59,7 @@ namespace MemoryCommands {
 
 	void Vision::readMem(const std::vector<char>& buffer, u64 offset, u64 size, u64 multi) {
 		attach(m_metaData.pid);
-		Result rc = svcReadDebugProcessMemory((void*)(buffer.data()), m_debugHandle, offset, size);
+		Result rc = svcReadDebugProcessMemory((void*)(buffer.data() + multi), m_debugHandle, offset, size);
 		if (R_FAILED(rc)) {
 			Logger::logToFile("readMem() svcReadDebugProcessMemory() failed.", rc);
 		}

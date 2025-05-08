@@ -6,7 +6,6 @@
 #include <algorithm>
 #include <cstring>
 #include <switch.h>
-#include <memory>
 
 namespace CommandHandler {
 	using namespace SbbLog;
@@ -52,11 +51,7 @@ namespace CommandHandler {
 		}
 
 		u64 offset = Utils::parseStringToInt(params.front());
-		Logger::logToFile("Peek parseStringToInt() offset: " + std::to_string(offset));
-
 		u64 size = Utils::parseStringToInt(params[1]);
-		Logger::logToFile("Peek parseStringToInt() size: " + std::to_string(size));
-
 		peek(m_metaData.heap_base + offset, size, buffer);
 	}
 
@@ -66,14 +61,14 @@ namespace CommandHandler {
 		}
 
 		u64 itemCount = (params.size()) / 2;
-		auto offsets = std::make_unique<u64[]>(itemCount);
-		auto sizes = std::make_unique<u64[]>(itemCount);
+		auto offsets = std::vector<u64>(itemCount);
+		auto sizes = std::vector<u64>(itemCount);
 		for (int i = 0; i < itemCount; ++i) {
 			offsets[i] = m_metaData.heap_base + Utils::parseStringToInt(params[(i * 2)]);
 			sizes[i] = Utils::parseStringToInt(params[(i * 2) + 1]);
 		}
 
-		peekMulti(offsets.get(), sizes.get(), itemCount, buffer);
+		peekMulti(offsets, sizes, buffer);
 	}
 
 	void Handler::peekAbsolute_cmd(const std::vector<std::string>& params, std::vector<char>& buffer) {
@@ -82,10 +77,7 @@ namespace CommandHandler {
 		}
 
 		u64 offset = Utils::parseStringToInt(params[0]);
-		Logger::logToFile("peekAbsolute() parseStringToInt() offset: " + std::to_string(offset));
-
 		u64 size = Utils::parseStringToInt(params[1]);
-		Logger::logToFile("peekAbsolute() parseStringToInt() size: " + std::to_string(size));
 		peek(offset, size, buffer);
 	}
 
@@ -95,14 +87,14 @@ namespace CommandHandler {
 		}
 
 		u64 itemCount = (params.size()) / 2;
-		auto offsets = std::make_unique<u64[]>(itemCount);
-		auto sizes = std::make_unique<u64[]>(itemCount);
+		auto offsets = std::vector<u64>(itemCount);
+		auto sizes = std::vector<u64>(itemCount);
 		for (int i = 0; i < itemCount; ++i) {
 			offsets[i] = Utils::parseStringToInt(params[(i * 2)]);
 			sizes[i] = Utils::parseStringToInt(params[(i * 2) + 1]);
 		}
 
-		peekMulti(offsets.get(), sizes.get(), itemCount, buffer);
+		peekMulti(offsets, sizes, buffer);
 	}
 
 	void Handler::peekMain_cmd(const std::vector<std::string>& params, std::vector<char>& buffer) {
@@ -120,15 +112,15 @@ namespace CommandHandler {
 			return;
 		}
 
-		u64 itemCount = (params.size()) / 2;
-		auto offsets = std::make_unique<u64[]>(itemCount);
-		auto sizes = std::make_unique<u64[]>(itemCount);
-		for (int i = 0; i < itemCount; ++i) {
+		size_t itemCount = (params.size()) / 2;
+		auto offsets = std::vector<u64>(itemCount);
+		auto sizes = std::vector<u64>(itemCount);
+		for (int i = 0; i < itemCount; i++) {
 			offsets[i] = m_metaData.main_nso_base + Utils::parseStringToInt(params[(i * 2)]);
 			sizes[i] = Utils::parseStringToInt(params[(i * 2) + 1]);
 		}
 
-		peekMulti(offsets.get(), sizes.get(), itemCount, buffer);
+		peekMulti(offsets, sizes, buffer);
 	}
 
 	void Handler::poke_cmd(const std::vector<std::string>& params) {
@@ -253,56 +245,64 @@ namespace CommandHandler {
 
 	// pointerPeekMulti <amount of bytes in hex or dec> <first (main) jump> <additional jumps> <final jump in pointerexpr> split by asterisks (*)
 	// warning: no validation
+	// Untested
 	void Handler::pointerPeekMulti_cmd(const std::vector<std::string>& params, std::vector<char>& buffer) {
-		if (params.size() < 3) {
+		if (params.size() < 4) {
 			return;
 		}
 
-		// we guess a max of 40 for now
-		/*auto offsets = std::make_unique<u64[]>(40);
-		auto sizes = std::make_unique<u64[]>(40);
-		u64 itemCount = 0;
+		std::vector<u64> offsets;
+		std::vector<u64> sizes;
+		std::vector<std::vector<std::string>> groups;
+		std::vector<std::string> currentGroup;
 
-		u64 currIndex = 0;
-		u64 lastIndex = 1;
-
-		int len = params.size();
-		while (currIndex < len)
-		{
-			// count first
-			std::string thisArg = params[currIndex];
-			while (thisArg == "*") {
-				currIndex++;
-				if (currIndex < len) {
-					thisArg = params[currIndex];
-				}
-				else {
-					break;
+		for (const auto& param : params) {
+			if (param == "*") {
+				if (!currentGroup.empty()) {
+					groups.push_back(currentGroup);
+					currentGroup.clear();
 				}
 			}
-
-			u64 thisCount = currIndex - lastIndex;
-
-			s64 finalJump = Utils::parseStringToSignedLong(params[currIndex - 1]);
-			u64 size = Utils::parseStringToSignedLong(params[lastIndex]);
-			
-			u64 count = thisCount - 2;
-			std::vector<s64> jumps(count);
-			for (int i = 1; i < count + 1; i++) {
-				jumps[i - 1] = Utils::parseStringToSignedLong(params[i + lastIndex]);
+			else {
+				currentGroup.push_back(param);
 			}
-
-			followMainPointer(jumps, buffer);
-			*(u64*)buffer.data() += finalJump;
-
-			offsets[itemCount] = *(u64*)buffer.data();
-			sizes[itemCount] = size;
-			itemCount++;
-			currIndex++;
-			lastIndex = currIndex;
 		}
 
-		peekMulti(offsets.get(), sizes.get(), itemCount, buffer);*/
+		if (!currentGroup.empty()) {
+			groups.push_back(currentGroup);
+		}
+
+		for (const auto& group : groups) {
+			if (group.size() < 4) {
+				continue;
+			}
+
+			std::vector<std::string> mod = group;
+			s64 finalJump = Utils::parseStringToSignedLong(mod.back());
+			mod.pop_back();
+
+			s64 size = Utils::parseStringToSignedLong(mod.front());
+			mod.erase(mod.begin());
+
+			s64 mainJump = Utils::parseStringToSignedLong(mod.front());
+			mod.erase(mod.begin());
+
+			int count = mod.size();
+			std::vector<s64> jumps(count);
+			for (int i = 0; i < count; i++) {
+				jumps[i] = Utils::parseStringToSignedLong(mod[i]);
+			}
+
+			u64 val = followMainPointer(mainJump, jumps, buffer);
+			val += finalJump;
+
+			offsets.push_back(val);
+			sizes.push_back(size);
+		}
+
+		if (!offsets.empty() && !sizes.empty()) {
+			peekMulti(offsets, sizes, buffer);
+		}
 	}
 
 	// pointerPoke <data to be sent> <first (main) jump> <additional jumps> <final jump in pointerexpr>
@@ -341,16 +341,6 @@ namespace CommandHandler {
 		}
 
 		click((HidNpadButton)parseStringToButton(params.front()));
-	}
-
-	void Handler::clickSeq_cmd(const std::vector<std::string>& params) {
-		if (params.size() != 1) {
-			return;
-		}
-	}
-
-	void Handler::clickCancel_cmd() {
-		return;
 	}
 
 	void Handler::press_cmd(const std::vector<std::string>& params) {
@@ -402,34 +392,117 @@ namespace CommandHandler {
 		setStickState((Joystick)side, dxVal, dyVal);
 	}
 
+	//touch followed by arrayof: <x in the range 0-1280> <y in the range 0-720>. Array is sequential taps, not different fingers. Functions in its own thread, but will not allow the call again while running. tapcount * pollRate * 2
 	void Handler::touch_cmd(const std::vector<std::string>& params) {
-		if (params.size() < 2 || params.size() % 2 == 0) {
+		if (params.size() < 2) {
 			return;
 		}
+
+		u32 count = params.size() / 2;
+		std::vector<HidTouchState> state(count);
+		u32 j = 0;
+		for (int i = 0; i < count; i++)
+		{
+			state[i].diameter_x = state[i].diameter_y = fingerDiameter;
+			state[i].x = (u32)Utils::parseStringToInt(params[j++]);
+			state[i].y = (u32)Utils::parseStringToInt(params[j++]);
+		}
+
+		touch(state, count, pollRate * 1e+6L, false);
 	}
 
+	//touchHold <x in the range 0-1280> <y in the range 0-720> <time in milliseconds (must be at least 15ms)>. Functions in its own thread, but will not allow the call again while running. pollRate + holdtime
 	void Handler::touchHold_cmd(const std::vector<std::string>& params) {
 		if (params.size() < 3) {
 			return;
 		}
+
+		std::vector<HidTouchState> state(1);
+		state[0].diameter_x = state[0].diameter_y = fingerDiameter;
+		state[0].x = (u32)Utils::parseStringToInt(params[0]);
+		state[0].y = (u32)Utils::parseStringToInt(params[1]);
+		u64 time = Utils::parseStringToInt(params[2]);
+		touch(state, 1, time * 1e+6L, false);
 	}
 
-	void Handler::key_cmd(const std::vector<std::string>& params) {
-		if (params.size() != 1) {
-			return;
-		}
-	}
-
-	void Handler::keyMod_cmd(const std::vector<std::string>& params) {
-		if (params.size() < 2 || params.size() % 2 == 0) {
-			return;
-		}
-	}
-
-	void Handler::keyMulti_cmd(const std::vector<std::string>& params) {
+	//touchDraw followed by arrayof: <x in the range 0-1280> <y in the range 0-720>. Array is vectors of where finger moves to, then removes the finger. Functions in its own thread, but will not allow the call again while running. (vectorcount * pollRate * 2) + pollRate
+	void Handler::touchDraw_cmd(const std::vector<std::string>& params) {
 		if (params.size() < 2) {
 			return;
 		}
+
+		u32 count = params.size() / 2;
+		std::vector<HidTouchState> state(count);
+		u32 j = 0;
+		for (int i = 0; i < count; i++)
+		{
+			state[i].diameter_x = state[i].diameter_y = fingerDiameter;
+			state[i].x = (u32)Utils::parseStringToInt(params[j++]);
+			state[i].y = (u32)Utils::parseStringToInt(params[j++]);
+		}
+
+		touch(state, count, pollRate * 1e+6L * 2, true);
+	}
+
+	//key followed by arrayof: <HidKeyboardKey> to be pressed in sequential order
+	//thank you Red (hp3721) for this functionality
+	void Handler::key_cmd(const std::vector<std::string>& params) {
+		if (params.size() < 1) {
+			return;
+		}
+
+		u64 count = params.size();
+		std::vector<HiddbgKeyboardAutoPilotState> keystates(count);
+		for (int i = 0; i < count; i++)
+		{
+			u8 key = (u8)Utils::parseStringToInt(params[i]);
+			if (key >= HidKeyboardKey_A && key <= HidKeyboardKey_RightGui) {
+				keystates[i].keys[key / 64] = 1UL << key;
+				keystates[i].modifiers = 1024UL; //numlock
+			}
+		}
+
+		key(keystates, count);
+	}
+
+	//keyMod followed by arrayof: <HidKeyboardKey> <HidKeyboardModifier>(without the bitfield shift) to be pressed in sequential order
+	void Handler::keyMod_cmd(const std::vector<std::string>& params) {
+		if (params.size() < 2) {
+			return;
+		}
+
+		u64 count = params.size() / 2;
+		std::vector<HiddbgKeyboardAutoPilotState> keystates(count);
+		int j = 0;
+		for (int i = 0; i < count; i++)
+		{
+			u8 key = (u8)Utils::parseStringToInt(params[j++]);
+			if (key >= HidKeyboardKey_A && key <= HidKeyboardKey_RightGui) {
+				keystates[i].keys[key / 64] = 1UL << key;
+				keystates[i].modifiers = BIT((u8)Utils::parseStringToInt(params[j++]));
+			}
+		}
+
+		key(keystates, count);
+	}
+
+	//keyMulti followed by arrayof: <HidKeyboardKey> to be pressed at the same time.
+	void Handler::keyMulti_cmd(const std::vector<std::string>& params) {
+		if (params.size() < 1) {
+			return;
+		}
+
+		u64 count = params.size();
+		std::vector<HiddbgKeyboardAutoPilotState> keystates(count);
+		for (int i = 0; i < count; i++)
+		{
+			u8 key = (u8)Utils::parseStringToInt(params[i]);
+			if (key >= HidKeyboardKey_A && key <= HidKeyboardKey_RightGui) {
+				keystates[0].keys[key / 64] |= 1UL << key;
+			}
+		}
+
+		key(keystates, count);
 	}
 
 	void Handler::detachController_cmd() {
@@ -548,8 +621,12 @@ namespace CommandHandler {
 		}
 
 		u32 charge;
-		psmGetBatteryChargePercentage(&charge);
+		rc = psmGetBatteryChargePercentage(&charge);
 		psmExit();
+		if (R_FAILED(rc)) {
+			Logger::logToFile("charge_cmd() psmGetBatteryChargePercentage() failed.", rc);
+			return;
+		}
 
 		buffer.resize(sizeof(charge));
 		std::copy(reinterpret_cast<const char*>(&charge),
