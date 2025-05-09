@@ -155,7 +155,7 @@ namespace CommandHandler {
 
 	// pointerAll <first (main) jump> <additional jumps> <final jump in pointerexpr> 
 	void Handler::pointerAll_cmd(const std::vector<std::string>& params, std::vector<char>& buffer) {
-		if (params.size() < 3) {
+		if (params.size() < 2) {
 			return;
 		}
 

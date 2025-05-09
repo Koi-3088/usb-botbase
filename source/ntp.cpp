@@ -31,35 +31,56 @@ information. */
 #include <netinet/in.h>
 #include <switch.h>
 #include <sys/socket.h>
+#include <sys\unistd.h>
 
 time_t ntpGetTime() {
-    Result si = socketInitializeDefault();
-    if (R_FAILED(si)) {
+    Result rc = socketInitializeDefault();
+    if (R_FAILED(rc)) {
         SbbLog::Logger::logToFile("Failed to initialize socket for NTP.");
         return 0;
     }
 
     static const char* SERVER_NAME = "time.cloudflare.com";
-    int sockfd = -1;
-    sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    struct hostent* server;
-    server = gethostbyname(SERVER_NAME);
+    int sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	if (sockfd <= 0) {
+		SbbLog::Logger::logToFile("Failed to create socket for NTP.");
+		return 0;
+	}
+
+    struct hostent* server = gethostbyname(SERVER_NAME);
+    if (server == NULL) {
+		SbbLog::Logger::logToFile("Failed to resolve NTP server.");
+		close(sockfd);
+		return 0;
+	}
 
     struct sockaddr_in serv_addr;
     memset(&serv_addr, 0, sizeof(struct sockaddr_in));
     serv_addr.sin_family = AF_INET;
     memcpy((char*)&serv_addr.sin_addr.s_addr, (char*)server->h_addr_list[0], 4);
     serv_addr.sin_port = htons(123);
-    connect(sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr));
+    if (connect(sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) <= 0) {
+		SbbLog::Logger::logToFile("Failed to connect to NTP server.");
+		close(sockfd);
+        return 0;
+    }
 
     ntp_packet packet;
     memset(&packet, 0, sizeof(ntp_packet));
     packet.li_vn_mode = (0 << 6) | (4 << 3) | 3;              // LI 0 | Client version 4 | Mode 3
     packet.txTm_s = htonl(NTP_TIMESTAMP_DELTA + time(NULL));  // Current network time on the console
-    send(sockfd, (char*)&packet, sizeof(ntp_packet), 0);
-    (size_t)(recv(sockfd, (char*)&packet, sizeof(ntp_packet), 0));
-    packet.txTm_s = ntohl(packet.txTm_s);
+    if (send(sockfd, (char*)&packet, sizeof(ntp_packet), 0) <= 0) {
+		SbbLog::Logger::logToFile("Failed to send NTP packet.");
+		close(sockfd);
+		return 0;
+    }
 
-    socketExit();
+    if ((size_t)(recv(sockfd, (char*)&packet, sizeof(ntp_packet), 0)) <= 0) {
+		SbbLog::Logger::logToFile("Failed to receive NTP packet.");
+		close(sockfd);
+		return 0;
+    }
+
+    packet.txTm_s = ntohl(packet.txTm_s);
     return (time_t)(packet.txTm_s - NTP_TIMESTAMP_DELTA);
 }
