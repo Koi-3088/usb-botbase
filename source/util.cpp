@@ -135,10 +135,10 @@ namespace Util {
     }
 
     std::vector<char> Utils::parseStringToByteBuffer(const std::string& arg) {
-        char toTranslate[3] = { 0 };
-        int length = arg.length();
-        bool isHex = false;
         std::string argStr = arg;
+        char toTranslate[3] = { 0 };
+        int length = argStr.length();
+        bool isHex = false;
 
         if (length > 2) {
             if (argStr[1] == 'x') {
@@ -155,7 +155,7 @@ namespace Util {
             bufferSize++;
         }
 
-        std::vector<char> buffer(bufferSize);
+        std::vector<char> buffer;
         for (u64 i = 0; i < bufferSize; i++) {
             if (isOdd) {
                 if (isFirst) {
@@ -174,10 +174,10 @@ namespace Util {
 
             isFirst = false;
             if (isHex) {
-                buffer[i] = std::stoull(toTranslate, NULL, 16);
+                buffer.push_back(std::stoull(toTranslate, NULL, 16));
             }
             else {
-                buffer[i] = std::stoull(toTranslate, NULL, 10);
+                buffer.push_back(std::stoull(toTranslate, NULL, 10));
             }
         }
 

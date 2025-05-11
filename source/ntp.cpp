@@ -1,86 +1,89 @@
-/* This is free and unencumbered software released into the public domain.
-Anyone is free to copy, modify, publish, use, compile, sell, or
-distribute this software, either in source code form or as a compiled
-binary, for any purpose, commercial or non-commercial, and by any
-means.
-In jurisdictions that recognize copyright laws, the author or authors
-of this software dedicate any and all copyright interest in the
-software to the public domain. We make this dedication for the benefit
-of the public at large and to the detriment of our heirs and
-successors. We intend this dedication to be an overt act of
-relinquishment in perpetuity of all present and future rights to this
-software under copyright law.
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
-IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
-OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
-ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
-OTHER DEALINGS IN THE SOFTWARE.
-For more information, please refer to <https://unlicense.org>
-Additionally, the ntp_packet struct uses code licensed under the BSD 3-clause. See LICENSE-THIRD-PARTY for more
-information. */
-
-#define _BSD_SOURCE
-
-#include "ntp.h"
+#include "defines.h"
 #include "logger.h"
-#include <string.h>
-#include <arpa/inet.h>
+#include "ntp.h"
+#include <arpa\inet.h>
+#include <array>
 #include <netdb.h>
-#include <netinet/in.h>
+#include <sys\socket.h>
+#include <sys\time.h>
+#include <unistd.h>
 #include <switch.h>
-#include <sys/socket.h>
-#include <sys\unistd.h>
 
-time_t ntpGetTime() {
-    Result rc = socketInitializeDefault();
-    if (R_FAILED(rc)) {
-        SbbLog::Logger::logToFile("Failed to initialize socket for NTP.");
-        return 0;
+namespace NTP {
+	using namespace SbbLog;
+
+    time_t NTPClient::getTime() {
+        std::array<uint8_t, 48> packet {};
+        packet[0] = 0b11100011; // Unsynchronized, NTP ver 4, client
+
+        addrinfo hints {};
+        hints.ai_family = AF_INET;
+        hints.ai_socktype = SOCK_DGRAM;
+        hints.ai_protocol = IPPROTO_UDP;
+
+        addrinfo* res = nullptr;
+        if (getaddrinfo(m_ntp_server, m_ntp_port, &hints, &res) != 0 || res == nullptr) {
+			Logger::Logger::logToFile("getaddrinfo() failed: " + std::string(gai_strerror(errno)));
+            return 0;
+        }
+
+        Result rc = socketInitializeDefault();
+		if (R_FAILED(rc)) {
+			Logger::Logger::logToFile("socketInitializeDefault() failed: " + std::to_string(rc));
+			freeaddrinfo(res);
+			return 0;
+		}
+
+        int sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+        if (sockfd < 0) {
+            Logger::Logger::logToFile("socket() failed: " + std::to_string(errno));
+            freeaddrinfo(res);
+            return 0;
+        }
+
+        timeval timeout {
+            timeout.tv_sec = 5,
+            timeout.tv_usec = 0,
+        };
+
+        if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) != 0) {
+			Logger::Logger::logToFile("setsockopt() failed.");
+            close(sockfd);
+            freeaddrinfo(res);
+            return 0;
+        }
+
+        if (sendto(sockfd, packet.data(), packet.size(), 0, res->ai_addr, res->ai_addrlen) <= 0) {
+            Logger::Logger::logToFile("sendto() failed.");
+            close(sockfd);
+            freeaddrinfo(res);
+			return 0;
+        }
+
+        sockaddr_storage server_addr {};
+        socklen_t server_addr_len = sizeof(server_addr);
+        if (recvfrom(sockfd, packet.data(), packet.size(), 0, reinterpret_cast<sockaddr*>(&server_addr), &server_addr_len) <= 0) {
+            Logger::logToFile("recvfrom() failed.");
+            close(sockfd);
+            freeaddrinfo(res);
+			return 0;
+        }
+
+        close(sockfd);
+        freeaddrinfo(res);
+        socketExit();
+
+        uint32_t seconds = (uint32_t(packet[40]) << 24) |
+                           (uint32_t(packet[41]) << 16) |
+                           (uint32_t(packet[42]) << 8) |
+                           (uint32_t(packet[43])
+        );
+
+        if (seconds < m_ntp_delta) {
+			Logger::logToFile("Invalid time received from NTP server.");
+            return 0;
+        }
+
+        return time_t(seconds - m_ntp_delta);
     }
-
-    static const char* SERVER_NAME = "time.cloudflare.com";
-    int sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-	if (sockfd <= 0) {
-		SbbLog::Logger::logToFile("Failed to create socket for NTP.");
-		return 0;
-	}
-
-    struct hostent* server = gethostbyname(SERVER_NAME);
-    if (server == NULL) {
-		SbbLog::Logger::logToFile("Failed to resolve NTP server.");
-		close(sockfd);
-		return 0;
-	}
-
-    struct sockaddr_in serv_addr;
-    memset(&serv_addr, 0, sizeof(struct sockaddr_in));
-    serv_addr.sin_family = AF_INET;
-    memcpy((char*)&serv_addr.sin_addr.s_addr, (char*)server->h_addr_list[0], 4);
-    serv_addr.sin_port = htons(123);
-    if (connect(sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) <= 0) {
-		SbbLog::Logger::logToFile("Failed to connect to NTP server.");
-		close(sockfd);
-        return 0;
-    }
-
-    ntp_packet packet;
-    memset(&packet, 0, sizeof(ntp_packet));
-    packet.li_vn_mode = (0 << 6) | (4 << 3) | 3;              // LI 0 | Client version 4 | Mode 3
-    packet.txTm_s = htonl(NTP_TIMESTAMP_DELTA + time(NULL));  // Current network time on the console
-    if (send(sockfd, (char*)&packet, sizeof(ntp_packet), 0) <= 0) {
-		SbbLog::Logger::logToFile("Failed to send NTP packet.");
-		close(sockfd);
-		return 0;
-    }
-
-    if ((size_t)(recv(sockfd, (char*)&packet, sizeof(ntp_packet), 0)) <= 0) {
-		SbbLog::Logger::logToFile("Failed to receive NTP packet.");
-		close(sockfd);
-		return 0;
-    }
-
-    packet.txTm_s = ntohl(packet.txTm_s);
-    return (time_t)(packet.txTm_s - NTP_TIMESTAMP_DELTA);
 }

@@ -1,12 +1,14 @@
-#include "ntp.h"
+#include <ctime>
 #include <switch.h>
 #include "logger.h"
 #include "util.h"
 #include "moduleBase.h"
+#include "ntp.h"
 
 namespace ModuleBase {
 	using namespace Util;
     using namespace SbbLog;
+	using namespace NTP;
 
 	bool BaseCommands::attach() {
 		u64 pid = 0;
@@ -22,10 +24,7 @@ namespace ModuleBase {
 			initMetaData();
 		}
 
-        if (m_debugHandle != 0) {
-            svcCloseHandle(m_debugHandle);
-        }
-
+		detach();
         rc = svcDebugActiveProcess(&m_debugHandle, pid);
         if (R_FAILED(rc)) {
             Logger::logToFile("attach() svcDebugActiveProcess() failed.", rc);
@@ -293,47 +292,63 @@ namespace ModuleBase {
 
 	void BaseCommands::getSwitchTime(std::vector<char>& buffer) {
 		time_t posix = 0;
+		buffer.resize(sizeof(posix));
+
 		Result rc = timeGetCurrentTime(TimeType_UserSystemClock, (u64*)&posix);
-		if (R_FAILED(rc)) {
-			Logger::logToFile("getSwitchTime() timeGetCurrentTime(TimeType_UserSystemClock) failed.", rc);
-			return;
-		}
+		if (R_SUCCEEDED(rc)) {
+			std::tm* time = localtime(&posix);
+			if (time->tm_year >= 160 || time->tm_year < 100) { // >= 2060 || < 2000
+				Logger::Logger::logToFile("getSwitchTime() invalid time range, setting time to 2000-01-01.");
+				time->tm_year = 100;
+				time->tm_mon = 0;
+				time->tm_mday = 1;
 
-		struct tm* time = localtime(&posix);
-		if (time->tm_year >= 160 || time->tm_year < 100) {
-			time->tm_year = 100;
-			time->tm_mon = 0;
-			time->tm_mday = 1;
-
-			rc = timeSetCurrentTime(TimeType_NetworkSystemClock, mktime(time));
-			if (R_FAILED(rc)) {
-				Logger::logToFile("getSwitchTime() timeGetCurrentTime(TimeType_NetworkSystemClock) failed.", rc);
-				return;
+				rc = timeSetCurrentTime(TimeType_NetworkSystemClock, mktime(time));
+				if (R_SUCCEEDED(rc)) {
+					Logger::Logger::logToFile("getSwitchTime() timeSetCurrentTime() succeeded, set time to 2000-01-01.");
+					posix = mktime(time);
+				}
+				else {
+					Logger::logToFile("getSwitchTime() timeSetCurrentTime() failed.", rc);
+					posix = 0;
+				}
 			}
-
-			posix = mktime(time);
-			buffer.resize(sizeof(posix));
-			free(time);
-
-			std::copy(reinterpret_cast<const char*>(&posix),
-				reinterpret_cast<const char*>(&posix) + sizeof(posix),
-				buffer.begin());
+			else {
+				posix = mktime(time);
+			}
 		}
+		else {
+			Logger::logToFile("getSwitchTime() timeGetCurrentTime(TimeType_UserSystemClock) failed.", rc);
+			posix = 0;
+		}
+
+		std::copy(reinterpret_cast<const char*>(&posix),
+			reinterpret_cast<const char*>(&posix) + sizeof(time_t),
+			buffer.begin());
 	}
 
 	void BaseCommands::setSwitchTime(const std::vector<std::string>& params, std::vector<char>& buffer) {
+		bool success = false;
+		buffer.resize(sizeof(success));
+
 		time_t input = (time_t)std::stoull(params[0], NULL, 10);
-		struct tm* toSet = localtime(&input);
-		if (toSet->tm_year >= 160 || toSet->tm_year < 100) {
-			Logger::logToFile("setSwitchTime() time to set is outside of valid range.");
-			return;
+		std::tm* toSet = localtime(&input);
+		if (toSet->tm_year >= 100 || toSet->tm_year <= 160) { // >= 2000 || <= 2060
+			Result rc = timeSetCurrentTime(TimeType_NetworkSystemClock, input);
+			if (R_SUCCEEDED(rc)) {
+				success = true;
+			}
+			else {
+				Logger::logToFile("setSwitchTime() timeSetCurrentTime() failed.", rc);
+			}
+		}
+		else {
+			Logger::logToFile("setSwitchTime() invalid time range.");
 		}
 
-		Result rc = timeSetCurrentTime(TimeType_NetworkSystemClock, input);
-		if (R_FAILED(rc)) {
-			Logger::logToFile("setSwitchTime() failed to set the network clock. Is internet time sync enabled?", rc);
-			return;
-		}
+		std::copy(reinterpret_cast<const char*>(&success),
+			reinterpret_cast<const char*>(&success) + sizeof(bool),
+			buffer.begin());
 	}
 
 	void BaseCommands::resetSwitchTime(std::vector<char>& buffer) {
@@ -347,13 +362,16 @@ namespace ModuleBase {
 			setsysExit();
 
 			if (R_SUCCEEDED(rc) && isConnectedToInternet()) {
-				time_t ntp = ntpGetTime();
-				rc = timeSetCurrentTime(TimeType_NetworkSystemClock, ntp);
-				if (R_SUCCEEDED(rc)) {
-					success = true;
-				}
-				else {
-					Logger::logToFile("resetSwitchTime() failed to set the network clock.", rc);
+				NTPClient ntpClient;
+				time_t ntp = ntpClient.getTime();
+				if (ntp != 0) {
+					rc = timeSetCurrentTime(TimeType_NetworkSystemClock, ntp);
+					if (R_SUCCEEDED(rc)) {
+						success = true;
+					}
+					else {
+						Logger::logToFile("resetSwitchTime() failed to set the network clock.", rc);
+					}
 				}
 			}
 			else {
@@ -365,7 +383,7 @@ namespace ModuleBase {
 		}
 
 		std::copy(reinterpret_cast<const char*>(&success),
-			reinterpret_cast<const char*>(&success) + sizeof(success),
+			reinterpret_cast<const char*>(&success) + sizeof(bool),
 			buffer.begin());
 	}
 

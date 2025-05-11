@@ -37,7 +37,7 @@ namespace CommandHandler {
 			REGISTER_CMD("pointerRelative", pointerRelative_cmd);
 			REGISTER_CMD("pointerPeek", pointerPeek_cmd);
 			REGISTER_CMD("pointerPeekMulti", pointerPeekMulti_cmd);
-			REGISTER_CMD("pointerPoke", pointerPoke_cmd);
+			REGISTER_CMD_PARAMS("pointerPoke", pointerPoke_cmd);
 
 			REGISTER_CMD_PARAMS("press", press_cmd);
 			REGISTER_CMD_PARAMS("release", release_cmd);
@@ -65,6 +65,10 @@ namespace CommandHandler {
 			REGISTER_CMD_NOARGS("screenOff", screenOff_cmd);
 			REGISTER_CMD_NOARGS("detachController", detachController_cmd);
 			REGISTER_CMD_BUFFER("pixelPeek", pixelPeek_cmd);
+
+			REGISTER_CMD_BUFFER("getSwitchTime", getSwitchTime_cmd);
+			REGISTER_CMD("setSwitchTime", setSwitchTime_cmd);
+			REGISTER_CMD_BUFFER("resetSwitchTime", resetSwitchTime_cmd);
 		};
 
 		~Handler() override {}
@@ -88,7 +92,7 @@ namespace CommandHandler {
 		void pointerRelative_cmd(const std::vector<std::string>& params, std::vector<char>& buffer);
 		void pointerPeek_cmd(const std::vector<std::string>& params, std::vector<char>& buffer);
 		void pointerPeekMulti_cmd(const std::vector<std::string>& params, std::vector<char>& buffer);
-		void pointerPoke_cmd(const std::vector<std::string>& params, std::vector<char>& buffer);
+		void pointerPoke_cmd(const std::vector<std::string>& params);
 
 		void press_cmd(const std::vector<std::string>& params);
 		void release_cmd(const std::vector<std::string>& params);
@@ -116,6 +120,10 @@ namespace CommandHandler {
 		void screenOff_cmd();
 		void detachController_cmd();
 		void pixelPeek_cmd(std::vector<char>& buffer);
+
+		void getSwitchTime_cmd(std::vector<char>& buffer);
+		void setSwitchTime_cmd(const std::vector<std::string>& params, std::vector<char>& buffer);
+		void resetSwitchTime_cmd(std::vector<char>& buffer);
 
 		std::unordered_map<std::string, CmdFunc> m_cmd;
 	};

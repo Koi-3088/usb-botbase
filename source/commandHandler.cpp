@@ -43,7 +43,7 @@ namespace CommandHandler {
 		return buffer;
 	}
 
-	// All peek***, peek***multi, poke***, etc. can be condensed to 1 command each using an enum
+	// All peek***, peek***Multi, poke***, etc. can be condensed to 1 command each using an enum, if desired.
 #pragma region Vision
 	void Handler::peek_cmd(const std::vector<std::string>& params, std::vector<char>& buffer) {
 		if (params.size() != 2) {
@@ -185,7 +185,7 @@ namespace CommandHandler {
 	// pointerRelative <first (main) jump> <additional jumps> <final jump in pointerexpr> 
 	// returns offset relative to heap
 	void Handler::pointerRelative_cmd(const std::vector<std::string>& params, std::vector<char>& buffer) {
-		if (params.size() < 3) {
+		if (params.size() < 2) {
 			return;
 		}
 
@@ -217,7 +217,7 @@ namespace CommandHandler {
 	// pointerPeek <amount of bytes in hex or dec> <first (main) jump> <additional jumps> <final jump in pointerexpr>
 	// warning: no validation
 	void Handler::pointerPeek_cmd(const std::vector<std::string>& params, std::vector<char>& buffer) {
-		if (params.size() < 4) {
+		if (params.size() < 3) {
 			return;
 		}
 
@@ -247,7 +247,7 @@ namespace CommandHandler {
 	// warning: no validation
 	// Untested
 	void Handler::pointerPeekMulti_cmd(const std::vector<std::string>& params, std::vector<char>& buffer) {
-		if (params.size() < 4) {
+		if (params.size() < 3) {
 			return;
 		}
 
@@ -307,8 +307,8 @@ namespace CommandHandler {
 
 	// pointerPoke <data to be sent> <first (main) jump> <additional jumps> <final jump in pointerexpr>
 	// warning: no validation
-	void Handler::pointerPoke_cmd(const std::vector<std::string>& params, std::vector<char>& buffer) {
-		if (params.size() < 4) {
+	void Handler::pointerPoke_cmd(const std::vector<std::string>& params) {
+		if (params.size() < 3) {
 			return;
 		}
 
@@ -328,9 +328,9 @@ namespace CommandHandler {
 			jumps[i] = Utils::parseStringToSignedLong(mod[i]);
 		}
 
+		std::vector<char> buffer;
 		u64 val = followMainPointer(mainJump, jumps, buffer);
 		val += finalJump;
-		std::memcpy(buffer.data(), &val, sizeof(val));
 		poke(val, data.size(), data);
 	}
 #pragma endregion Various memory read/write commands.
@@ -660,4 +660,21 @@ namespace CommandHandler {
 		}
 	}
 #pragma endregion Miscellaneous commands that get/set parameters.
+#pragma region Time
+	void Handler::getSwitchTime_cmd(std::vector<char>& buffer) {
+		getSwitchTime(buffer);
+	}
+
+	void Handler::setSwitchTime_cmd(const std::vector<std::string>& params, std::vector<char>& buffer) {
+		if (params.size() != 1) {
+			return;
+		}
+
+		setSwitchTime(params, buffer);
+	}
+
+	void Handler::resetSwitchTime_cmd(std::vector<char>& buffer) {
+		resetSwitchTime(buffer);
+	}
+#pragma endregion Time commands.
 }
