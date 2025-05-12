@@ -66,11 +66,11 @@ namespace ModuleBase {
 		void detach();
 		void initMetaData();
 
-		u64 getMainNsoBase(u64 pid);
+		u64 getMainNsoBase();
 		u64 getHeapBase();
-		u64 getTitleId(u64 pid);
-		u8 getBuildID(u64 pid);
-		u64 GetTitleVersion(u64 titleID);
+		u64 getTitleId();
+		u8 getBuildID();
+		u64 GetTitleVersion();
 		std::vector<NsApplicationControlData> getNsApplicationControlData(u64& out);
 
 		bool getIsProgramOpen(u64 id);
@@ -96,5 +96,6 @@ namespace ModuleBase {
 		void getGameName(std::vector<char>& buffer);
 
 		bool isConnectedToInternet();
+		bool metaHasZeroValue(const MetaData& meta);
 	};
 }

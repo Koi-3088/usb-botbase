@@ -4,10 +4,11 @@
 #include <arpa\inet.h>
 #include <array>
 #include <netdb.h>
+#include <string.h>
+#include <switch.h>
 #include <sys\socket.h>
 #include <sys\time.h>
 #include <unistd.h>
-#include <switch.h>
 
 namespace NTP {
 	using namespace SbbLog;
@@ -23,20 +24,20 @@ namespace NTP {
 
         addrinfo* res = nullptr;
         if (getaddrinfo(m_ntp_server, m_ntp_port, &hints, &res) != 0 || res == nullptr) {
-			Logger::Logger::logToFile("getaddrinfo() failed: " + std::string(gai_strerror(errno)));
+			Logger::Logger::logToFile("NTP getaddrinfo() failed: " + std::string(gai_strerror(errno)));
             return 0;
         }
 
         Result rc = socketInitializeDefault();
 		if (R_FAILED(rc)) {
-			Logger::Logger::logToFile("socketInitializeDefault() failed: " + std::to_string(rc));
+			Logger::Logger::logToFile("NTP socketInitializeDefault() failed: " + std::to_string(rc));
 			freeaddrinfo(res);
 			return 0;
 		}
 
         int sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
         if (sockfd < 0) {
-            Logger::Logger::logToFile("socket() failed: " + std::to_string(errno));
+            Logger::Logger::logToFile("NTP socket() failed: " + std::to_string(errno));
             freeaddrinfo(res);
             return 0;
         }
@@ -47,14 +48,14 @@ namespace NTP {
         };
 
         if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) != 0) {
-			Logger::Logger::logToFile("setsockopt() failed.");
+			Logger::Logger::logToFile("NTP setsockopt() failed.");
             close(sockfd);
             freeaddrinfo(res);
             return 0;
         }
 
         if (sendto(sockfd, packet.data(), packet.size(), 0, res->ai_addr, res->ai_addrlen) <= 0) {
-            Logger::Logger::logToFile("sendto() failed.");
+            Logger::Logger::logToFile("NTP sendto() failed or server closed the connection: " + std::string(strerror(errno)));
             close(sockfd);
             freeaddrinfo(res);
 			return 0;
@@ -63,7 +64,7 @@ namespace NTP {
         sockaddr_storage server_addr {};
         socklen_t server_addr_len = sizeof(server_addr);
         if (recvfrom(sockfd, packet.data(), packet.size(), 0, reinterpret_cast<sockaddr*>(&server_addr), &server_addr_len) <= 0) {
-            Logger::logToFile("recvfrom() failed.");
+            Logger::logToFile("NTP recvfrom() failed or server closed the connection: " + std::string(strerror(errno)));
             close(sockfd);
             freeaddrinfo(res);
 			return 0;

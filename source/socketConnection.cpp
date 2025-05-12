@@ -33,6 +33,7 @@ namespace SocketConnection {
 			return;
 		}
 
+		std::string persistentBuffer;
 		struct sockaddr_in clientAddr {};
 		socklen_t clientSize = sizeof(clientAddr);
 
@@ -44,7 +45,6 @@ namespace SocketConnection {
 		pfds[1].events = POLLIN;
 		Logger::logToFile("Waiting for client to connect...");
 
-		std::string persistentBuffer;
 		while (appletMainLoop()) {
 			int res = poll(pfds.data(), pfds.size(), -1);
 			if (res < 0) {
@@ -104,6 +104,8 @@ namespace SocketConnection {
 				}
 				catch (const std::exception& e) {
 					Logger::logToFile("Socket connect() exception: " + std::string(e.what()));
+					close(sockfd);
+					close(pfds[1].fd);
 				}
 			}
 		}
@@ -123,7 +125,7 @@ namespace SocketConnection {
 		}
 
 		int opt = 1;
-		if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))) {
+		if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
 			Logger::logToFile("setsockopt() error.");
 			close(sockfd);
 			return sockfd;
@@ -144,7 +146,6 @@ namespace SocketConnection {
 			return sockfd;
 		}
 
-		Logger::logToFile("Listening on port " + std::to_string(m_port) + "...");
 		return sockfd;
 	}
 
@@ -170,7 +171,7 @@ namespace SocketConnection {
 				}
 			}
 			else if (received == -1) {
-				Logger::logToFile("receiveData() recv() error.");
+				Logger::logToFile("receiveData() recv() error: " + std::string(strerror(errno)));
 				return {};
 			}
 			else {
@@ -184,10 +185,13 @@ namespace SocketConnection {
 		size_t total = 0;
 		do {
 			ssize_t sent = send(sockfd, (void*)(buffer.data() + total), size - total, 0);
-			if (sent <= 0) {
-				buffer.clear();
-				Logger::logToFile("sendData(): Failed to send data. send() error or client closed the connection.");
-				return;
+			if (sent == -1) {
+				Logger::logToFile("sendData(): Failed to send data. send() error: " + std::string(strerror(errno)));
+				break;
+			}
+			else if (sent == 0) {
+				Logger::logToFile("sendData(): Failed to send data. Client closed the connection.");
+				break;
 			}
 
 			total += sent;

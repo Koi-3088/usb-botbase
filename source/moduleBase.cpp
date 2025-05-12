@@ -23,8 +23,10 @@ namespace ModuleBase {
 			m_metaData.pid = pid;
 			initMetaData();
 		}
+		else {
+			detach();
+		}
 
-		detach();
         rc = svcDebugActiveProcess(&m_debugHandle, pid);
         if (R_FAILED(rc)) {
             Logger::logToFile("attach() svcDebugActiveProcess() failed.", rc);
@@ -47,21 +49,25 @@ namespace ModuleBase {
 			return;
 		}
 
-		m_metaData.main_nso_base = getMainNsoBase(m_metaData.pid);
+		m_metaData.main_nso_base = getMainNsoBase();
 		m_metaData.heap_base = getHeapBase();
-		m_metaData.titleID = getTitleId(m_metaData.pid);
-		m_metaData.titleVersion = GetTitleVersion(m_metaData.titleID);
-		m_metaData.buildID = getBuildID(m_metaData.pid);
+		m_metaData.titleID = getTitleId();
+		m_metaData.titleVersion = GetTitleVersion();
+		m_metaData.buildID = getBuildID();
 
 		detach();
+		if (metaHasZeroValue(m_metaData)) {
+			Logger::logToFile("initMetaData() MetaData had one or more zero value.");
+		}
 	}
 
-	u8 BaseCommands::getBuildID(u64 pid) {
+	u8 BaseCommands::getBuildID() {
 		LoaderModuleInfo proc_modules[2];
 		s32 numModules = 0;
-		Result rc = ldrDmntGetProcessModuleInfo(pid, proc_modules, 2, &numModules);
+		Result rc = ldrDmntGetProcessModuleInfo(m_metaData.pid, proc_modules, 2, &numModules);
 		if (R_FAILED(rc)) {
 			Logger::logToFile("getBuildID() ldrDmntGetProcessModuleInfo() failed.", rc);
+			return 0;
 		}
 
 		if (numModules == 2) {
@@ -72,12 +78,13 @@ namespace ModuleBase {
 		}
 	}
 
-	u64 BaseCommands::getMainNsoBase(u64 pid) {
+	u64 BaseCommands::getMainNsoBase() {
 		LoaderModuleInfo proc_modules[2];
 		s32 numModules = 0;
-		Result rc = ldrDmntGetProcessModuleInfo(pid, proc_modules, 2, &numModules);
+		Result rc = ldrDmntGetProcessModuleInfo(m_metaData.pid, proc_modules, 2, &numModules);
 		if (R_FAILED(rc)) {
 			Logger::logToFile("getMainNsoBase() ldrDmntGetProcessModuleInfo() failed.", rc);
+			return 0;
 		}
 
 		if (numModules == 2) {
@@ -93,31 +100,34 @@ namespace ModuleBase {
 		Result rc = svcGetInfo(&heap_base, InfoType_HeapRegionAddress, m_debugHandle, 0);
 		if (R_FAILED(rc)) {
 			Logger::logToFile("getHeapBase() svcGetInfo() failed.", rc);
+			return 0;
 		}
 
 		return heap_base;
 	}
 
-	u64 BaseCommands::getTitleId(u64 pid) {
+	u64 BaseCommands::getTitleId() {
 		u64 titleId = 0;
-		Result rc = pminfoGetProgramId(&titleId, pid);
+		Result rc = pminfoGetProgramId(&titleId, m_metaData.pid);
 		if (R_FAILED(rc)) {
 			Logger::logToFile("getTitleId() pminfoGetProgramId() failed.", rc);
+			return 0;
 		}
 
 		return titleId;
 	}
 
-	u64 BaseCommands::GetTitleVersion(u64 titleID) {
+	u64 BaseCommands::GetTitleVersion() {
 		Result rc = nsInitialize();
 		if (R_FAILED(rc)) {
 			Logger::logToFile("GetTitleVersion() nsInitialize() failed.", rc);
+			return 0;
 		}
 
 		u64 titleV = 0;
 		s32 out = 0;
 		std::vector<NsApplicationContentMetaStatus> metaStatus(100U);
-		rc = nsListApplicationContentMetaStatus(titleID, 0, metaStatus.data(), sizeof(NsApplicationContentMetaStatus), &out);
+		rc = nsListApplicationContentMetaStatus(m_metaData.titleID, 0, metaStatus.data(), sizeof(NsApplicationContentMetaStatus), &out);
 		nsExit();
 		if (R_FAILED(rc)) {
 			Logger::logToFile("GetTitleVersion() nsListApplicationContentMetaStatus() failed.", rc);
@@ -403,5 +413,10 @@ namespace ModuleBase {
 		}
 
 		return true;
+	}
+
+	bool BaseCommands::metaHasZeroValue(const MetaData& m) {
+		return (m.buildID == 0 || m.heap_base == 0 || m.main_nso_base == 0
+				|| m.pid == 0 || m.titleID == 0 || m.titleVersion == 0);
 	}
 }

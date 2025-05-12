@@ -41,12 +41,10 @@ namespace UsbConnection {
                     });
                 }
 
-                persistentBuffer.clear();
                 //svcSleepThread(1e+6L);
             }
-            else {
-                persistentBuffer.clear();
-            }
+
+            persistentBuffer.clear();
         }
 	}
 
@@ -89,11 +87,14 @@ namespace UsbConnection {
         size_t total = 0;
 		do {
 			ssize_t sent = usbCommsWrite((void*)(buffer.data() + total), size - total);
-			if (sent < 0) {
-				buffer.clear();
+			if (sent == -1) {
 				Logger::logToFile("sendData() usbCommsWrite() error.");
-				return;
+                break;
 			}
+            else if (sent == 0) {
+                Logger::logToFile("sendData() usbCommsWrite() connection closed.");
+                break;
+            }
 
             total += sent;
 		} while (total < size);
