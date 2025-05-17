@@ -366,7 +366,6 @@ namespace CommandHandler {
 			return;
 		}
 
-		int side = 0;
 		int stick = parseStringToStick(params.front());
 		if (stick == -1) {
 			return;
@@ -389,7 +388,7 @@ namespace CommandHandler {
 			dyVal = JOYSTICK_MIN;
 		}
 
-		setStickState((Joystick)side, dxVal, dyVal);
+		setStickState((Joystick)stick, dxVal, dyVal);
 	}
 
 	//touch followed by arrayof: <x in the range 0-1280> <y in the range 0-720>. Array is sequential taps, not different fingers. Functions in its own thread, but will not allow the call again while running. tapcount * pollRate * 2
