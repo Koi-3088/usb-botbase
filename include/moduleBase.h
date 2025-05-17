@@ -16,8 +16,6 @@ namespace ModuleBase {
 	class BaseCommands {
 	public:
 		BaseCommands() {
-			REGISTER_CFG_CMD("mainLoopSleepTime", setMainLoopSleepTime);
-			REGISTER_CFG_CMD("buttonClickSleepTime", setButtonClickSleepTime);
 			REGISTER_CFG_CMD("keySleepTime", setKeySleepTime);
 			REGISTER_CFG_CMD("fingerDiameter", setFingerDiameter);
 			REGISTER_CFG_CMD("pollRate", setPollRate);
@@ -33,8 +31,6 @@ namespace ModuleBase {
 
 	protected:
 		Handle m_debugHandle = 0;
-		u64 mainLoopSleepTime = 50;
-		u64 buttonClickSleepTime = 50;
 		u64 keyPressSleepTime = 25;
 		u64 pollRate = 17;
 		u32 fingerDiameter = 50;
@@ -83,8 +79,6 @@ namespace ModuleBase {
 	private:
 		const std::string m_sbbVersion = "3.0.0";
 
-		void setMainLoopSleepTime(const std::vector<std::string>& params);
-		void setButtonClickSleepTime(const std::vector<std::string>& params);
 		void setKeySleepTime(const std::vector<std::string>& params);
 		void setFingerDiameter(const std::vector<std::string>& params);
 		void setPollRate(const std::vector<std::string>& params);

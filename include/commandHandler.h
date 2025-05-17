@@ -22,6 +22,7 @@ namespace CommandHandler {
 	class Handler : protected ControllerCommands::Controller, protected MemoryCommands::Vision {
 	public:
 		Handler() : Controller() {
+#pragma region Register
 			REGISTER_CMD("peek", peek_cmd);
 			REGISTER_CMD("peekMulti", peekMulti_cmd);
 			REGISTER_CMD("peekAbsolute", peekAbsolute_cmd);
@@ -69,6 +70,7 @@ namespace CommandHandler {
 			REGISTER_CMD_BUFFER("getSwitchTime", getSwitchTime_cmd);
 			REGISTER_CMD("setSwitchTime", setSwitchTime_cmd);
 			REGISTER_CMD_BUFFER("resetSwitchTime", resetSwitchTime_cmd);
+#pragma endregion Command registration.
 		};
 
 		~Handler() override {}
@@ -77,6 +79,7 @@ namespace CommandHandler {
 		std::vector<char> HandleCommand(const std::string& cmd, const std::vector<std::string>& params);
 
 	private:
+#pragma region Vision
 		void peek_cmd(const std::vector<std::string>& params, std::vector<char>& buffer);
 		void peekMulti_cmd(const std::vector<std::string>& params, std::vector<char>& buffer);
 		void peekAbsolute_cmd(const std::vector<std::string>& params, std::vector<char>& buffer);
@@ -93,7 +96,9 @@ namespace CommandHandler {
 		void pointerPeek_cmd(const std::vector<std::string>& params, std::vector<char>& buffer);
 		void pointerPeekMulti_cmd(const std::vector<std::string>& params, std::vector<char>& buffer);
 		void pointerPoke_cmd(const std::vector<std::string>& params);
-
+#pragma endregion Various memory read/write commands.
+#pragma region Controller
+		void click_cmd(const std::vector<std::string>& params);
 		void press_cmd(const std::vector<std::string>& params);
 		void release_cmd(const std::vector<std::string>& params);
 		void setStick_cmd(const std::vector<std::string>& params);
@@ -103,7 +108,8 @@ namespace CommandHandler {
 		void key_cmd(const std::vector<std::string>& params);
 		void keyMod_cmd(const std::vector<std::string>& params);
 		void keyMulti_cmd(const std::vector<std::string>& params);
-
+#pragma endregion Various controller commands.
+#pragma region Base
 		void getBuildID_cmd(std::vector<char>& buffer);
 		void getTitleVersion_cmd(std::vector<char>& buffer);
 		void getSystemLanguage_cmd(std::vector<char>& buffer);
@@ -111,20 +117,22 @@ namespace CommandHandler {
 		void getMainNsoBase_cmd(std::vector<char>& buffer);
 		void getHeapBase_cmd(std::vector<char>& buffer);
 		void charge_cmd(std::vector<char>& buffer);
-		void getVersion_cmd(std::vector<char>& buffer);
 		void getTitleID_cmd(std::vector<char>& buffer);
 		void game_cmd(const std::vector<std::string>& params, std::vector<char>& buffer);
-		void configure_cmd(const std::vector<std::string>& params);
-		void click_cmd(const std::vector<std::string>& params);
 		void screenOn_cmd();
 		void screenOff_cmd();
 		void detachController_cmd();
 		void pixelPeek_cmd(std::vector<char>& buffer);
-
+#pragma endregion Various base libnx commands.
+#pragma region Misc
+		void getVersion_cmd(std::vector<char>& buffer);
+		void configure_cmd(const std::vector<std::string>& params);
+#pragma endregion Miscellaneous commands that get/set parameters.
+#pragma region Time
 		void getSwitchTime_cmd(std::vector<char>& buffer);
 		void setSwitchTime_cmd(const std::vector<std::string>& params, std::vector<char>& buffer);
 		void resetSwitchTime_cmd(std::vector<char>& buffer);
-
+#pragma endregion Time commands.
 		std::unordered_map<std::string, CmdFunc> m_cmd;
 	};
 }

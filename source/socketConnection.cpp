@@ -23,16 +23,13 @@ namespace SocketConnection {
 	void SocketConnection::connect() {
 		Utils::flashLed();
 
-		std::vector<std::string> dummyVec(1, "UNUSED");
-		m_handler->HandleCommand("click", dummyVec);
-		dummyVec.clear();
-
 		int sockfd = setupServerSocket();
 		if (sockfd < 0) {
 			Logger::logToFile("Socket error.");
 			return;
 		}
 
+		std::vector<std::string> dummyVec(1, "UNUSED");
 		std::string persistentBuffer;
 		struct sockaddr_in clientAddr {};
 		socklen_t clientSize = sizeof(clientAddr);
@@ -46,6 +43,11 @@ namespace SocketConnection {
 		Logger::logToFile("Waiting for client to connect...");
 
 		while (appletMainLoop()) {
+			if (m_dummyClick) {
+				m_handler->HandleCommand("click", dummyVec);
+				m_dummyClick = false;
+			}
+
 			int res = poll(pfds.data(), pfds.size(), -1);
 			if (res < 0) {
 				Logger::logToFile("poll() failed.");
@@ -69,6 +71,7 @@ namespace SocketConnection {
 					setupServerSocket();
 					pfds[0].fd = sockfd;
 					pfds[0].events = POLLIN;
+					m_dummyClick = true;
 					continue;
 				}
 			}
@@ -100,12 +103,14 @@ namespace SocketConnection {
 						pfds[1].fd = -1;
 						pfds[1].events = POLLIN;
 						persistentBuffer.clear();
+						m_dummyClick = true;
 					}
 				}
 				catch (const std::exception& e) {
 					Logger::logToFile("Socket connect() exception: " + std::string(e.what()));
 					close(sockfd);
 					close(pfds[1].fd);
+					m_dummyClick = true;
 				}
 			}
 		}

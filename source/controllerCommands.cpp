@@ -9,7 +9,7 @@ namespace ControllerCommands {
     using namespace SbbLog;
 
     void Controller::initController() {
-        if (m_ControllerIsInitialised) {
+        if (m_controllerIsInitialised) {
             return;
         }
 
@@ -17,25 +17,25 @@ namespace ControllerCommands {
         Result rc = hiddbgInitialize();
         if (R_FAILED(rc)) {
             Logger::logToFile("initController() hiddbgInitialize() failed.", rc);
+            return;
         }
         
         if (!m_workMem) {
             m_workMem = (u8*)aligned_alloc(0x1000, m_workMem_size);
-        }
-
-        if (!m_workMem) {
-            Logger::logToFile("initController() _aligned_malloc() failed.");
-            return;
+            if (!m_workMem) {
+                Logger::logToFile("initController() aligned_alloc() failed.");
+                return;
+            }
         }
 
         // Set the controller type to Pro-Controller, and set the npadInterfaceType.
         m_controllerDevice.deviceType = HidDeviceType_FullKey3;
-        m_controllerDevice.npadInterfaceType = HidNpadInterfaceType_Bluetooth;
+        m_controllerDevice.npadInterfaceType = HidNpadInterfaceType_USB;
         // Set the controller colors. The grip colors are for Pro-Controller on [9.0.0+].
-        m_controllerDevice.singleColorBody = RGBA8_MAXALPHA(255, 255, 255);
+        m_controllerDevice.singleColorBody = RGBA8_MAXALPHA(0, 0, 0);
         m_controllerDevice.singleColorButtons = RGBA8_MAXALPHA(0, 0, 0);
-        m_controllerDevice.colorLeftGrip = RGBA8_MAXALPHA(230, 255, 0);
-        m_controllerDevice.colorRightGrip = RGBA8_MAXALPHA(0, 40, 20);
+        m_controllerDevice.colorLeftGrip = RGBA8_MAXALPHA(0, 0, 255);
+        m_controllerDevice.colorRightGrip = RGBA8_MAXALPHA(0, 255, 0);
 
         // Setup example controller state.
         m_controllerState.battery_level = 4; // Set battery charge to full.
@@ -55,8 +55,9 @@ namespace ControllerCommands {
         }
 
         //init a dummy keyboard state for assignment between keypresses
-        m_dummyKeyboardState.keys[3] = 0x800000000000000UL; // Hackfix found by Red: an unused key press (KBD_MEDIA_CALC) is required to allow sequential same-key presses. bitfield[3]
-        m_ControllerIsInitialised = true;
+        // Hackfix found by Red: an unused key press (KBD_MEDIA_CALC) is required to allow sequential same-key presses. bitfield[3]
+        m_dummyKeyboardState.keys[3] = 0x800000000000000UL;
+        m_controllerIsInitialised = true;
     }
 
     void Controller::detachController() {
@@ -74,18 +75,18 @@ namespace ControllerCommands {
 
         hiddbgExit();
         if (m_workMem != nullptr) {
-            free(m_workMem);
+            aligned_free(m_workMem);
             m_workMem = nullptr;
         }
 
         m_sessionId.id = 0;
-        m_ControllerIsInitialised = false;
+        m_controllerIsInitialised = false;
     }
 
     void Controller::click(HidNpadButton btn) {
         initController();
         press(btn);
-        svcSleepThread(buttonClickSleepTime * 1e+6L);
+        svcSleepThread(1e+6L);
         release(btn);
     }
 

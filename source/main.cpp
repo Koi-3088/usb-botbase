@@ -112,9 +112,13 @@ extern "C" {
         pmdmntExit();
         ldrDmntExit();
         pminfoExit();
-        m_connection->disconnect();
-        delete m_connection;
-        m_connection = nullptr;
+
+        if (m_connection) {
+            m_connection->disconnect();
+            delete m_connection;
+            m_connection = nullptr;
+        }
+
         capsscExit();
         viExit();
     }
@@ -123,6 +127,7 @@ extern "C" {
 int main() {
     Logger::logToFile("\n##########\r\n");
     m_connection->connect();
+    m_connection->disconnect();
     delete m_connection;
     m_connection = nullptr;
     Logger::logToFile("Exiting main()...");

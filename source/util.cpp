@@ -1,5 +1,6 @@
 #include "defines.h"
 #include "util.h"
+#include "logger.h"
 #include <iterator>
 #include <algorithm>
 #include <fstream>
@@ -7,6 +8,8 @@
 #include <switch.h>
 
 namespace Util {
+    using namespace SbbLog;
+
     // taken from sys-httpd (thanks jolan!)
     static const HidsysNotificationLedPattern breathingPattern = {
         0x8,       // 100ms (baseMiniCycleDuration)
@@ -53,6 +56,7 @@ namespace Util {
     bool Utils::flashLed() {
         Result rc = hidsysInitialize();
         if (R_FAILED(rc)) {
+            Logger::logToFile("flashLed() hidsysInitialize() failed.", rc);
             return false;
         }
 
@@ -68,6 +72,7 @@ namespace Util {
 
         Result rc = hidsysGetUniquePadsFromNpad(idType, unique_pad_ids, 2, &total_entries);
         if (R_FAILED(rc)) {
+            Logger::logToFile("sendPatternStatic() hidsysGetUniquePadsFromNpad() failed.", rc);
             return;
         }
 
@@ -77,13 +82,14 @@ namespace Util {
     }
 
     bool Utils::isUSB() {
-        char str[10];
+        std::vector<char> str(10);
         std::ifstream cfg("sdmc:/atmosphere/contents/430000000000000B/config.cfg");
         if (cfg.is_open()) {
-            cfg.getline(str, 10, '\n');
+            cfg.getline(str.data(), str.size(), '\n');
             cfg.close();
 
-            if (std::string(str) == "usb") {
+            str.shrink_to_fit();
+            if (std::string(str.data()) == "usb") {
                 return true;
             }
         }

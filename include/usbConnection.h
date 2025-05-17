@@ -28,6 +28,7 @@ namespace UsbConnection {
 
 	private:
 		std::unique_ptr<CommandHandler::Handler> m_handler;
+		bool m_dummyClick = true;
 
 		struct USBResponse {
 			u64 size;

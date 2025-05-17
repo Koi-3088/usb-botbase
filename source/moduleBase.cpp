@@ -196,14 +196,6 @@ namespace ModuleBase {
 		return !(pid == 0 || R_FAILED(rc));
 	}
 
-	void BaseCommands::setMainLoopSleepTime(const std::vector<std::string>& params) {
-		mainLoopSleepTime = Utils::parseStringToInt(params[1]);
-	}
-
-	void BaseCommands::setButtonClickSleepTime(const std::vector<std::string>& params) {
-		buttonClickSleepTime = Utils::parseStringToInt(params[1]);
-	}
-
 	void BaseCommands::setKeySleepTime(const std::vector<std::string>& params) {
 		keyPressSleepTime = Utils::parseStringToInt(params[1]);
 	}

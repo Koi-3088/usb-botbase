@@ -28,6 +28,7 @@ namespace SocketConnection {
 
 	private:
 		const int m_port = 6000;
+		bool m_dummyClick = true;
 		std::unique_ptr<CommandHandler::Handler> m_handler;
 
 		int setupServerSocket();

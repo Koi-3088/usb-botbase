@@ -17,13 +17,15 @@ namespace UsbConnection {
 
 	void UsbConnection::connect() {
         Utils::flashLed();
-
         std::vector<std::string> dummyVec(1, "UNUSED");
-        m_handler->HandleCommand("click", dummyVec);
-        dummyVec.clear();
-
         std::string persistentBuffer;
+
         while (appletMainLoop()) {
+            if (m_dummyClick) {
+                m_handler->HandleCommand("click", dummyVec);
+                m_dummyClick = false;
+            }
+
             auto commands = UsbConnection::receiveData(persistentBuffer);
             fflush(stdout);
 
@@ -40,8 +42,9 @@ namespace UsbConnection {
                         }
                     });
                 }
-
-                //svcSleepThread(1e+6L);
+            }
+            else {
+                m_dummyClick = true;
             }
 
             persistentBuffer.clear();
