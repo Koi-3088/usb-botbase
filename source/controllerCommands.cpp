@@ -83,14 +83,14 @@ namespace ControllerCommands {
         m_controllerIsInitialised = false;
     }
 
-    void Controller::click(HidNpadButton btn) {
+    void Controller::click(const HidNpadButton& btn) {
         initController();
         press(btn);
         svcSleepThread(1e+6L);
         release(btn);
     }
 
-    void Controller::press(HidNpadButton btn) {
+    void Controller::press(const HidNpadButton& btn) {
         initController();
         m_controllerState.buttons |= btn;
         Result rc = hiddbgSetHdlsState(m_controllerHandle, &m_controllerState);
@@ -99,7 +99,7 @@ namespace ControllerCommands {
         }
     }
 
-    void Controller::release(HidNpadButton btn) {
+    void Controller::release(const HidNpadButton& btn) {
         initController();
         m_controllerState.buttons &= ~btn;
         Result rc = hiddbgSetHdlsState(m_controllerHandle, &m_controllerState);
@@ -108,7 +108,7 @@ namespace ControllerCommands {
         }
     }
 
-    void Controller::setStickState(Joystick stick, int dxVal, int dyVal) {
+    void Controller::setStickState(const Joystick& stick, int dxVal, int dyVal) {
         initController();
         if (stick == Joystick::Left) {
             m_controllerState.analog_stick_l.x = dxVal;

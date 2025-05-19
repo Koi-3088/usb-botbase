@@ -34,10 +34,10 @@ namespace ControllerCommands {
 		void initController();
 		void detachController();
 
-		void click(HidNpadButton btn);
-		void press(HidNpadButton btn);
-		void release(HidNpadButton btn);
-		void setStickState(Joystick stick, int dxVal, int dyVal);
+		void click(const HidNpadButton& btn);
+		void press(const HidNpadButton& btn);
+		void release(const HidNpadButton& btn);
+		void setStickState(const Joystick& stick, int dxVal, int dyVal);
 		void touch(std::vector<HidTouchState>& state, u64 sequentialCount, u64 holdTime, bool hold);
 		void key(const std::vector<HiddbgKeyboardAutoPilotState>& states, u64 sequentialCount);
 		void setControllerType(const std::vector<std::string>& params);
