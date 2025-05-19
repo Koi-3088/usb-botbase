@@ -33,7 +33,7 @@ namespace ControllerCommands {
         m_controllerDevice.npadInterfaceType = HidNpadInterfaceType_USB;
         // Set the controller colors. The grip colors are for Pro-Controller on [9.0.0+].
         m_controllerDevice.singleColorBody = RGBA8_MAXALPHA(0, 0, 0);
-        m_controllerDevice.singleColorButtons = RGBA8_MAXALPHA(0, 0, 0);
+        m_controllerDevice.singleColorButtons = RGBA8_MAXALPHA(255, 255, 255);
         m_controllerDevice.colorLeftGrip = RGBA8_MAXALPHA(0, 0, 255);
         m_controllerDevice.colorRightGrip = RGBA8_MAXALPHA(0, 255, 0);
 

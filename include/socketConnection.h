@@ -5,6 +5,9 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <queue>
+#include <condition_variable>
+#include <atomic>
 
 namespace SocketConnection {
 	class SocketConnection : public Connection::ConnectionHandler {
@@ -14,6 +17,14 @@ namespace SocketConnection {
 		};
 
 		~SocketConnection() override {
+			if (m_senderThread.joinable()) {
+				m_senderThread.join();
+			}
+
+			if (m_readerThread.joinable()) {
+				m_readerThread.join();
+			}
+
 			if (m_handler) {
 				m_handler.reset();
 			}
@@ -29,6 +40,19 @@ namespace SocketConnection {
 	private:
 		const int m_port = 6000;
 		bool m_dummyClick = true;
+
+		std::thread m_senderThread;
+		std::queue<std::vector<char>> m_senderQueue;
+		std::mutex m_senderMutex;
+		std::condition_variable m_senderCv;
+
+		std::thread m_readerThread;
+
+		std::queue<std::string> m_commandQueue;
+		std::mutex m_commandMutex;
+		std::condition_variable m_commandCv;
+
+		std::atomic_bool m_running { false };
 		std::unique_ptr<CommandHandler::Handler> m_handler;
 
 		int setupServerSocket();
