@@ -176,6 +176,33 @@ namespace ControllerCommands {
         m_controllerInitializedType = (HidDeviceType)Utils::parseStringToInt(params[0]);
     }
 
+    void Controller::handleCcCommand(const Command& cmd, std::vector<char>& buffer) {
+        initController();
+
+        buffer.resize(sizeof(uint64_t));
+        std::copy(reinterpret_cast<const char*>(&cmd.seqnum),
+            reinterpret_cast<const char*>(&cmd.seqnum + sizeof(uint64_t)),
+            buffer.begin());
+
+        m_controllerState.buttons |= cmd.buttons;
+        m_controllerState.analog_stick_l.x = cmd.left_joystick_x;
+        m_controllerState.analog_stick_l.y = cmd.left_joystick_y;
+        m_controllerState.analog_stick_r.x = cmd.right_joystick_x;
+        m_controllerState.analog_stick_r.y = cmd.right_joystick_y;
+
+        Result rc = hiddbgSetHdlsState(m_controllerHandle, &m_controllerState);
+        if (R_FAILED(rc)) {
+            Logger::logToFile("handleCcCommand() hiddbgSetHdlsState() press failed.", rc);
+        }
+
+        svcSleepThread(cmd.milliseconds);
+        m_controllerState.buttons &= ~cmd.buttons;
+        rc = hiddbgSetHdlsState(m_controllerHandle, &m_controllerState);
+        if (R_FAILED(rc)) {
+            Logger::logToFile("andleCcCommand() hiddbgSetHdlsState() release failed.", rc);
+        }
+    }
+
     int Controller::parseStringToButton(const std::string& arg) {
         auto it = Controller::m_button.find(arg);
         if (it != Controller::m_button.end()) {

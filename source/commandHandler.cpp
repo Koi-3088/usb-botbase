@@ -507,6 +507,22 @@ namespace CommandHandler {
 	void Handler::detachController_cmd() {
 		detachController();
 	}
+
+	void Handler::clickCC_cmd(const std::vector<std::string>& params, std::vector<char>& buffer) {
+		if (params.size() < 1) {
+			return;
+		}
+
+		Command cmd {};
+		try {
+			cmd.parseFromHex(params.front().data());
+		} catch (...) {
+			Logger::logToFile("Failed to parse CC command: " + params.front());
+			return;
+		}
+
+		handleCcCommand(cmd, buffer);
+	}
 #pragma endregion Various controller commands.
 #pragma region Base
 	void Handler::game_cmd(const std::vector<std::string>& params, std::vector<char>& buffer) {
@@ -637,7 +653,6 @@ namespace CommandHandler {
 	void Handler::getVersion_cmd(std::vector<char>& buffer) {
 		auto sbb = getSbbVersion();
 		buffer.insert(buffer.begin(), sbb.begin(), sbb.end());
-		Logger::logToFile("cmd buffer: " + std::string(buffer.data()));
 	}
 
 	void Handler::configure_cmd(const std::vector<std::string>& params) {

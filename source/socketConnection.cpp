@@ -9,7 +9,7 @@
 #include <sys/errno.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <chrono>
+//#include <chrono>
 
 namespace SocketConnection {
 	using namespace Util;
@@ -114,7 +114,7 @@ namespace SocketConnection {
 					}
 
 					std::unique_lock<std::mutex> lock(m_commandMutex);
-					m_commandCv.wait_for(lock, std::chrono::milliseconds(100), [&]() { return !m_commandQueue.empty() || !m_running; });
+					m_commandCv.wait(lock, [&]() { return !m_commandQueue.empty() || !m_running; });
 					while (!m_commandQueue.empty()) {
 						auto command = std::move(m_commandQueue.front());
 						m_commandQueue.pop();

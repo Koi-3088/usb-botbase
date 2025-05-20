@@ -40,6 +40,7 @@ namespace CommandHandler {
 			REGISTER_CMD("pointerPeekMulti", pointerPeekMulti_cmd);
 			REGISTER_CMD_PARAMS("pointerPoke", pointerPoke_cmd);
 
+			REGISTER_CMD_PARAMS("click", click_cmd);
 			REGISTER_CMD_PARAMS("press", press_cmd);
 			REGISTER_CMD_PARAMS("release", release_cmd);
 			REGISTER_CMD_PARAMS("setStick", setStick_cmd);
@@ -49,6 +50,8 @@ namespace CommandHandler {
 			REGISTER_CMD_PARAMS("key", key_cmd);
 			REGISTER_CMD_PARAMS("keyMod", keyMod_cmd);
 			REGISTER_CMD_PARAMS("keyMulti", keyMulti_cmd);
+			REGISTER_CMD("clickCC", clickCC_cmd);
+			REGISTER_CMD_NOARGS("detachController", detachController_cmd);
 
 			REGISTER_CMD_BUFFER("getBuildID", getBuildID_cmd);
 			REGISTER_CMD_BUFFER("getTitleVersion", getTitleVersion_cmd);
@@ -61,11 +64,10 @@ namespace CommandHandler {
 			REGISTER_CMD_BUFFER("getTitleID", getTitleID_cmd);
 			REGISTER_CMD("game", game_cmd);
 			REGISTER_CMD_PARAMS("configure", configure_cmd);
-			REGISTER_CMD_PARAMS("click", click_cmd);
 			REGISTER_CMD_NOARGS("screenOn", screenOn_cmd);
 			REGISTER_CMD_NOARGS("screenOff", screenOff_cmd);
-			REGISTER_CMD_NOARGS("detachController", detachController_cmd);
 			REGISTER_CMD_BUFFER("pixelPeek", pixelPeek_cmd);
+			REGISTER_CMD_BUFFER("ping", ping_cmd);
 
 			REGISTER_CMD_BUFFER("getSwitchTime", getSwitchTime_cmd);
 			REGISTER_CMD("setSwitchTime", setSwitchTime_cmd);
@@ -108,6 +110,7 @@ namespace CommandHandler {
 		void key_cmd(const std::vector<std::string>& params);
 		void keyMod_cmd(const std::vector<std::string>& params);
 		void keyMulti_cmd(const std::vector<std::string>& params);
+		void clickCC_cmd(const std::vector<std::string>& params, std::vector<char>& buffer);
 #pragma endregion Various controller commands.
 #pragma region Base
 		void getBuildID_cmd(std::vector<char>& buffer);
