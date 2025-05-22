@@ -13,7 +13,9 @@ namespace SbbLog {
 		static void logToFile(const std::string& message, const Result res = 0);
 
 	private:
+		static size_t m_maxLogSize;
 		static std::string getCurrentDate();
 		static std::string getCurrentTimestamp();
+		static size_t getFileSize(const std::string& filename);
 	};
 }

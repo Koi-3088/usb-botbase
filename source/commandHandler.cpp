@@ -521,7 +521,7 @@ namespace CommandHandler {
 			return;
 		}
 
-		handleCcCommand(cmd, buffer);
+		CcClick(cmd, buffer);
 	}
 #pragma endregion Various controller commands.
 #pragma region Base
@@ -672,6 +672,11 @@ namespace CommandHandler {
 		else {
 			Logger::logToFile("configure_cmd() subfunction not found.");
 		}
+	}
+
+	void Handler::ping_cmd(std::vector<char>& buffer) {
+		std::string ack = "ACK";
+		buffer.insert(buffer.begin(), ack.begin(), ack.end());
 	}
 #pragma endregion Miscellaneous commands that get/set parameters.
 #pragma region Time

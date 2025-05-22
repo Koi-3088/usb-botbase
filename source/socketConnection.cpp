@@ -30,7 +30,6 @@ namespace SocketConnection {
 			return;
 		}
 
-		std::vector<std::string> dummyVec(1, "UNUSED");
 		struct sockaddr_in clientAddr {};
 		socklen_t clientSize = sizeof(clientAddr);
 		Logger::logToFile("Waiting for client to connect...");
@@ -82,16 +81,17 @@ namespace SocketConnection {
 
 			m_senderThread = std::thread([&]() {
 				try {
+					std::unique_lock<std::mutex> lock(m_senderMutex);
 					while (m_running) {
-						std::unique_lock<std::mutex> lock(m_senderMutex);
-						m_senderCv.wait(lock, [&]() { return !m_senderQueue.empty() || !m_running; });
-						while (!m_senderQueue.empty()) {
+						if (!m_senderQueue.empty()) {
 							auto buffer = std::move(m_senderQueue.front());
 							m_senderQueue.pop();
 							lock.unlock();
 							SocketConnection::sendData(buffer, buffer.size(), clientfd);
 							lock.lock();
 						}
+
+						m_senderCv.wait(lock, [&]() { return !m_senderQueue.empty() || !m_running; });
 					}
 				}
 				catch (const std::exception& e) {
@@ -106,16 +106,11 @@ namespace SocketConnection {
 				}
 			});
 
-			try {
-				while (m_running) {
-					if (m_dummyClick) {
-						m_handler->HandleCommand("click", dummyVec);
-						m_dummyClick = false;
-					}
-
+			m_commandThread = std::thread([&]() {
+				try {
 					std::unique_lock<std::mutex> lock(m_commandMutex);
-					m_commandCv.wait(lock, [&]() { return !m_commandQueue.empty() || !m_running; });
-					while (!m_commandQueue.empty()) {
+					while (m_running) {
+						m_commandCv.wait(lock, [&]() { return !m_commandQueue.empty() || !m_running; });
 						auto command = std::move(m_commandQueue.front());
 						m_commandQueue.pop();
 						lock.unlock();
@@ -147,22 +142,21 @@ namespace SocketConnection {
 							break;
 						}
 
+						persistentBuffer.clear();
 						lock.lock();
 					}
-
-					persistentBuffer.clear();
+				} catch (const std::exception& e) {
+					Logger::logToFile(std::string("Main command thread exception: ") + e.what());
+					m_running = false;
+					m_senderCv.notify_all();
+					m_commandCv.notify_all();
+				} catch (...) {
+					Logger::logToFile("Unknown main command thread exception.");
+					m_running = false;
+					m_senderCv.notify_all();
+					m_commandCv.notify_all();
 				}
-			} catch (const std::exception& e) {
-				Logger::logToFile(std::string("Main command loop exception: ") + e.what());
-				m_running = false;
-				m_senderCv.notify_all();
-				m_commandCv.notify_all();
-			} catch (...) {
-				Logger::logToFile("Unknown main command loop exception.");
-				m_running = false;
-				m_senderCv.notify_all();
-				m_commandCv.notify_all();
-			}
+			});
 
 			m_running = false;
 			m_senderCv.notify_all();
@@ -173,6 +167,10 @@ namespace SocketConnection {
 
 			if (m_senderThread.joinable()) {
 				m_senderThread.join();
+			}
+
+			if (m_commandThread.joinable()) {
+				m_commandThread.join();
 			}
 
 			close(clientfd);

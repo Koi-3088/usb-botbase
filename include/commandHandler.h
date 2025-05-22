@@ -130,6 +130,7 @@ namespace CommandHandler {
 #pragma region Misc
 		void getVersion_cmd(std::vector<char>& buffer);
 		void configure_cmd(const std::vector<std::string>& params);
+		void ping_cmd(std::vector<char>& buffer);
 #pragma endregion Miscellaneous commands that get/set parameters.
 #pragma region Time
 		void getSwitchTime_cmd(std::vector<char>& buffer);

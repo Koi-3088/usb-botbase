@@ -197,15 +197,19 @@ namespace ModuleBase {
 	}
 
 	void BaseCommands::setKeySleepTime(const std::vector<std::string>& params) {
-		keyPressSleepTime = Utils::parseStringToInt(params[1]);
+		keyPressSleepTime = Utils::parseStringToInt(params[0]);
 	}
 
 	void BaseCommands::setFingerDiameter(const std::vector<std::string>& params) {
-		fingerDiameter = Utils::parseStringToInt(params[1]);
+		fingerDiameter = Utils::parseStringToInt(params[0]);
 	}
 
 	void BaseCommands::setPollRate(const std::vector<std::string>& params) {
-		pollRate = Utils::parseStringToInt(params[1]);
+		pollRate = Utils::parseStringToInt(params[0]);
+	}
+
+	void BaseCommands::setEnablePA(const std::vector<std::string>& params) {
+		m_isEnabledPA = (bool)Utils::parseStringToInt(params[0]);
 	}
 
 	void BaseCommands::getGameIcon(std::vector<char>& buffer) {

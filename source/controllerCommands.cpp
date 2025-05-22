@@ -86,7 +86,6 @@ namespace ControllerCommands {
     void Controller::click(const HidNpadButton& btn) {
         initController();
         press(btn);
-        svcSleepThread(1e+6L);
         release(btn);
     }
 
@@ -176,7 +175,7 @@ namespace ControllerCommands {
         m_controllerInitializedType = (HidDeviceType)Utils::parseStringToInt(params[0]);
     }
 
-    void Controller::handleCcCommand(const Command& cmd, std::vector<char>& buffer) {
+    void Controller::CcClick(const Command& cmd, std::vector<char>& buffer) {
         initController();
 
         buffer.resize(sizeof(uint64_t));
@@ -195,7 +194,6 @@ namespace ControllerCommands {
             Logger::logToFile("handleCcCommand() hiddbgSetHdlsState() press failed.", rc);
         }
 
-        svcSleepThread(cmd.milliseconds);
         m_controllerState.buttons &= ~cmd.buttons;
         rc = hiddbgSetHdlsState(m_controllerHandle, &m_controllerState);
         if (R_FAILED(rc)) {

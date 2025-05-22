@@ -1,12 +1,15 @@
 #include "defines.h"
 #include "logger.h"
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <sstream>
-#include <iomanip>
 #include <switch.h>
+#include <sys\stat.h>
 
 namespace SbbLog {
+    size_t Logger::m_maxLogSize = 1024 * 1024 * 8;
+
     std::string Logger::getCurrentDate() {
         time_t now = 0;
         Result res = timeGetCurrentTime(TimeType_UserSystemClock, (u64*)&now);
@@ -33,22 +36,36 @@ namespace SbbLog {
         return oss.str();
     }
 
+    size_t Logger::getFileSize(const std::string& filename) {
+        struct stat stat_buf;
+        int rc = stat(filename.c_str(), &stat_buf);
+        return rc == 0 ? stat_buf.st_size : 0;
+    }
+
     void Logger::logToFile(const std::string& message, const Result res) {
-        std::string date = getCurrentDate();
-        std::string filename = "sdmc:/atmosphere/contents/430000000000000B/log_" + date + ".txt";
-		std::string errorMessage = "Error: " + std::to_string(R_DESCRIPTION(res));
-        std::ofstream logFile(filename, std::ios::app);
-        if (logFile.is_open()) {
-            if (message == "\n##########\r\n") {
-                logFile << message << std::endl;
-			}
-			else if (res != 0) {
-				logFile << "[" << getCurrentTimestamp() << "] " << message << " " << errorMessage << std::endl;
-			}
-            else {
-                logFile << "[" << getCurrentTimestamp() << "] " << message << std::endl;
+        try {
+            std::string date = getCurrentDate();
+            std::string filename = "sdmc:/atmosphere/contents/430000000000000B/log_" + date + ".txt";
+            if (getFileSize(filename) >= m_maxLogSize) {
+                std::ofstream clear(filename, std::ios::trunc);
+                clear.close();
             }
-            logFile.close();
+
+            std::string errorMessage = "Error: " + std::to_string(R_DESCRIPTION(res));
+            std::ofstream logFile(filename, std::ios::app);
+            if (logFile.is_open()) {
+                if (message == "\n##########\r\n") {
+                    logFile << message << std::endl;
+                } else if (res != 0) {
+                    logFile << "[" << getCurrentTimestamp() << "] " << message << " " << errorMessage << std::endl;
+                } else {
+                    logFile << "[" << getCurrentTimestamp() << "] " << message << std::endl;
+                }
+
+                logFile.close();
+            }
+        } catch (...) {
+            return;
         }
     }
 }

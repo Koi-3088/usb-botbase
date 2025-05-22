@@ -63,6 +63,14 @@ namespace ControllerCommands {
 					ptr++;
 				}
 			}
+
+			void clear() {
+				buttons = 0;
+				left_joystick_x = 0;
+				left_joystick_y = 0;
+				right_joystick_x = 0;
+				right_joystick_y = 0;
+			}
 		};
 
 	protected:
@@ -76,7 +84,7 @@ namespace ControllerCommands {
 		void touch(std::vector<HidTouchState>& state, u64 sequentialCount, u64 holdTime, bool hold);
 		void key(const std::vector<HiddbgKeyboardAutoPilotState>& states, u64 sequentialCount);
 		void setControllerType(const std::vector<std::string>& params);
-		void handleCcCommand(const Command& cmd, std::vector<char>& buffer);
+		void CcClick(const Command& cmd, std::vector<char>& buffer);
 
 	private:
 		inline void* aligned_alloc(size_t alignment, size_t size) {
@@ -102,7 +110,7 @@ namespace ControllerCommands {
 		}
 
 	private:
-		bool m_controllerIsInitialised;
+		std::atomic_bool m_controllerIsInitialised { false };
 		HidDeviceType m_controllerInitializedType;
 
 		HiddbgHdlsHandle m_controllerHandle;
