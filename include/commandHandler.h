@@ -67,7 +67,7 @@ namespace CommandHandler {
 			REGISTER_CMD_NOARGS("screenOn", screenOn_cmd);
 			REGISTER_CMD_NOARGS("screenOff", screenOff_cmd);
 			REGISTER_CMD_BUFFER("pixelPeek", pixelPeek_cmd);
-			REGISTER_CMD_BUFFER("ping", ping_cmd);
+			REGISTER_CMD("ping", ping_cmd);
 
 			REGISTER_CMD_BUFFER("getSwitchTime", getSwitchTime_cmd);
 			REGISTER_CMD("setSwitchTime", setSwitchTime_cmd);
@@ -131,7 +131,7 @@ namespace CommandHandler {
 #pragma region Misc
 		void getVersion_cmd(std::vector<char>& buffer);
 		void configure_cmd(const std::vector<std::string>& params);
-		void ping_cmd(std::vector<char>& buffer);
+		void ping_cmd(const std::vector<std::string>& params, std::vector<char>& buffer);
 #pragma endregion Miscellaneous commands that get/set parameters.
 #pragma region Time
 		void getSwitchTime_cmd(std::vector<char>& buffer);

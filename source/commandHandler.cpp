@@ -687,9 +687,20 @@ namespace CommandHandler {
 		return BaseCommands::getIsEnabledPA();
 	}
 
-	void Handler::ping_cmd(std::vector<char>& buffer) {
-		std::string ack = "ACK";
-		buffer.insert(buffer.begin(), ack.begin(), ack.end());
+	void Handler::ping_cmd(const std::vector<std::string>& params, std::vector<char>& buffer) {
+		if (params.size() != 1) {
+			return;
+		}
+
+		int32_t value = 0;
+		try {
+			value = Utils::parseStringToInt(params[0]);
+		} catch (...) {
+			Logger::logToFile("ping_cmd() failed to parse value.");
+		}
+
+		buffer.resize(sizeof(value));
+		std::memcpy(buffer.data(), &value, sizeof(value));
 	}
 #pragma endregion Miscellaneous commands that get/set parameters.
 #pragma region Time
