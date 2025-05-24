@@ -79,6 +79,7 @@ namespace CommandHandler {
 
 	public:
 		std::vector<char> HandleCommand(const std::string& cmd, const std::vector<std::string>& params);
+		bool getIsEnabledPA();
 
 	private:
 #pragma region Vision

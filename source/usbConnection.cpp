@@ -15,7 +15,7 @@ namespace UsbConnection {
         return res;
     }
 
-	void UsbConnection::connect() {
+	bool UsbConnection::connect() {
         Utils::flashLed();
         std::vector<std::string> dummyVec(1, "UNUSED");
         std::string persistentBuffer;
@@ -49,7 +49,13 @@ namespace UsbConnection {
 
             persistentBuffer.clear();
         }
+
+        return false;
 	}
+
+    bool UsbConnection::run() {
+        return true;
+    }
 
 	void UsbConnection::disconnect() {
 		usbCommsExit();
@@ -86,22 +92,23 @@ namespace UsbConnection {
         }
     }
 
-    void UsbConnection::sendData(std::vector<char>& buffer, size_t size, int sockfd) {
+    int UsbConnection::sendData(std::vector<char>& buffer, size_t size, int sockfd) {
         size_t total = 0;
 		do {
 			ssize_t sent = usbCommsWrite((void*)(buffer.data() + total), size - total);
 			if (sent == -1) {
 				Logger::logToFile("sendData() usbCommsWrite() error.");
-                break;
+                return sent;
 			}
             else if (sent == 0) {
                 Logger::logToFile("sendData() usbCommsWrite() connection closed.");
-                break;
+                return sent;
             }
 
             total += sent;
 		} while (total < size);
 
 		buffer.clear();
+        return total;
     }
 }

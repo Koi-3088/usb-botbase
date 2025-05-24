@@ -84,17 +84,6 @@ extern "C" {
             fatalThrow(rc);
         }
 
-        if (Utils::isUSB()) {
-            m_connection = new UsbConnection::UsbConnection();
-        }
-        else {
-            m_connection = new SocketConnection::SocketConnection();
-        }
-
-        if (R_FAILED(m_connection->initialize(rc))) {
-            fatalThrow(rc);
-        }
-
         rc = capsscInitialize();
         if (R_FAILED(rc)) {
             fatalThrow(rc);
@@ -126,10 +115,37 @@ extern "C" {
 
 int main() {
     Logger::logToFile("\n##########\r\n");
-    m_connection->connect();
-    m_connection->disconnect();
-    delete m_connection;
-    m_connection = nullptr;
+    while (appletMainLoop()) {
+        if (Utils::isUSB()) {
+            m_connection = new UsbConnection::UsbConnection();
+        } else {
+            m_connection = new SocketConnection::SocketConnection();
+        }
+
+        Result rc;
+        if (R_FAILED(m_connection->initialize(rc))) {
+            Logger::logToFile("Failed to initialize connection.");
+            break;
+        }
+
+        Logger::logToFile("Connecting...");
+        if (m_connection->connect()) {
+            m_connection->run();
+        }
+
+        if (!appletMainLoop()) {
+            m_connection->disconnect();
+            delete m_connection;
+            m_connection = nullptr;
+            break;
+        }
+
+        Logger::logToFile("Resetting connection...");
+        m_connection->disconnect();
+        delete m_connection;
+        m_connection = nullptr;
+    }
+
     Logger::logToFile("Exiting main()...");
     return 0;
 }

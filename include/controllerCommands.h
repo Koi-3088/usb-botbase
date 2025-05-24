@@ -4,6 +4,7 @@
 #include <malloc.h>
 #include <switch.h>
 #include <unordered_map>
+#include <chrono>
 
 namespace ControllerCommands {
 	class Controller : protected virtual ModuleBase::BaseCommands {
@@ -12,7 +13,7 @@ namespace ControllerCommands {
            m_workMem = (u8*)aligned_alloc(0x1000, m_workMem_size);
            m_controllerHandle = { 0 };
            m_controllerDevice = { 0 };
-           m_controllerState = { 0 };
+		   m_hiddbgHdlsState = { 0 };
            m_sessionId = { 0 };
            m_dummyKeyboardState = { 0 };
            m_controllerIsInitialised = false;
@@ -27,18 +28,36 @@ namespace ControllerCommands {
 			m_controllerIsInitialised = false;
 		};
 
-		static int parseStringToButton(const std::string& arg);
-		static int parseStringToStick(const std::string& arg);
+	public:
+		using WallClock = std::chrono::steady_clock::time_point;
+		struct ControllerState {
+			uint64_t buttons = 0;
+			int16_t left_joystick_x = 0;
+			int16_t left_joystick_y = 0;
+			int16_t right_joystick_x = 0;
+			int16_t right_joystick_y = 0;
 
-	protected:
-		struct Command {
+			bool isNeutral() const {
+				return buttons == 0
+					&& left_joystick_x == 0
+					&& left_joystick_y == 0
+					&& right_joystick_x == 0
+					&& right_joystick_y == 0;
+			}
+
+			void clear() {
+				buttons = 0;
+				left_joystick_x = 0;
+				left_joystick_y = 0;
+				right_joystick_x = 0;
+				right_joystick_y = 0;
+			}
+		};
+
+		struct ControllerCommand {
 			uint64_t seqnum;
 			uint64_t milliseconds;
-			uint64_t buttons;
-			uint16_t left_joystick_x;
-			uint16_t left_joystick_y;
-			uint16_t right_joystick_x;
-			uint16_t right_joystick_y;
+			ControllerState state {};
 
 			void writeToHex(char str[64]) const {
 				const char HEX_DIGITS[] = "0123456789abcdef";
@@ -63,15 +82,15 @@ namespace ControllerCommands {
 					ptr++;
 				}
 			}
-
-			void clear() {
-				buttons = 0;
-				left_joystick_x = 0;
-				left_joystick_y = 0;
-				right_joystick_x = 0;
-				right_joystick_y = 0;
-			}
 		};
+
+		static ControllerState m_currentState;
+		static std::atomic_bool m_replaceOnNext;
+		static WallClock m_nextStateChange;
+
+	public:
+		static int parseStringToButton(const std::string& arg);
+		static int parseStringToStick(const std::string& arg);
 
 	protected:
 		void initController();
@@ -84,7 +103,9 @@ namespace ControllerCommands {
 		void touch(std::vector<HidTouchState>& state, u64 sequentialCount, u64 holdTime, bool hold);
 		void key(const std::vector<HiddbgKeyboardAutoPilotState>& states, u64 sequentialCount);
 		void setControllerType(const std::vector<std::string>& params);
-		void CcClick(const Command& cmd, std::vector<char>& buffer);
+
+		void CcClick(const ControllerCommand& cmd, std::vector<char>& buffer);
+		void CcClear(const ControllerCommand& cmd, std::vector<char>& buffer);
 
 	private:
 		inline void* aligned_alloc(size_t alignment, size_t size) {
@@ -115,7 +136,7 @@ namespace ControllerCommands {
 
 		HiddbgHdlsHandle m_controllerHandle;
 		HiddbgHdlsDeviceInfo m_controllerDevice;
-		HiddbgHdlsState m_controllerState;
+		HiddbgHdlsState m_hiddbgHdlsState;
 		HiddbgKeyboardAutoPilotState m_dummyKeyboardState;
 		HiddbgHdlsSessionId m_sessionId;
 

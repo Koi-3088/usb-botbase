@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cstring>
 #include <switch.h>
+#include <chrono>
 
 namespace CommandHandler {
 	using namespace SbbLog;
@@ -513,7 +514,7 @@ namespace CommandHandler {
 			return;
 		}
 
-		Command cmd {};
+		ControllerCommand cmd {};
 		try {
 			cmd.parseFromHex(params.front().data());
 		} catch (...) {
@@ -521,7 +522,13 @@ namespace CommandHandler {
 			return;
 		}
 
-		CcClick(cmd, buffer);
+		if (!cmd.state.isNeutral()) {
+			CcClick(cmd, buffer);
+			Controller::m_nextStateChange += std::chrono::milliseconds(cmd.milliseconds);
+		} else {
+			CcClear(cmd, buffer);
+			Controller::m_nextStateChange += std::chrono::milliseconds(cmd.milliseconds);
+		}
 	}
 #pragma endregion Various controller commands.
 #pragma region Base
@@ -672,6 +679,10 @@ namespace CommandHandler {
 		else {
 			Logger::logToFile("configure_cmd() subfunction not found.");
 		}
+	}
+
+	bool Handler::getIsEnabledPA() {
+		return BaseCommands::getIsEnabledPA();
 	}
 
 	void Handler::ping_cmd(std::vector<char>& buffer) {

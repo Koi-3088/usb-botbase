@@ -8,6 +8,10 @@ namespace ControllerCommands {
     using namespace Util;
     using namespace SbbLog;
 
+    Controller::ControllerState Controller::m_currentState {};
+    Controller::WallClock Controller::m_nextStateChange = WallClock::max();
+    std::atomic_bool Controller::m_replaceOnNext { false };
+
     void Controller::initController() {
         if (m_controllerIsInitialised) {
             return;
@@ -38,11 +42,11 @@ namespace ControllerCommands {
         m_controllerDevice.colorRightGrip = RGBA8_MAXALPHA(0, 255, 0);
 
         // Setup example controller state.
-        m_controllerState.battery_level = 4; // Set battery charge to full.
-        m_controllerState.analog_stick_l.x = 0x0;
-        m_controllerState.analog_stick_l.y = -0x0;
-        m_controllerState.analog_stick_r.x = 0x0;
-        m_controllerState.analog_stick_r.y = -0x0;
+        m_hiddbgHdlsState.battery_level = 4; // Set battery charge to full.
+        m_hiddbgHdlsState.analog_stick_l.x = 0x0;
+        m_hiddbgHdlsState.analog_stick_l.y = -0x0;
+        m_hiddbgHdlsState.analog_stick_r.x = 0x0;
+        m_hiddbgHdlsState.analog_stick_r.y = -0x0;
 
         rc = hiddbgAttachHdlsWorkBuffer(&m_sessionId, m_workMem, m_workMem_size);
         if (R_FAILED(rc)) {
@@ -91,8 +95,8 @@ namespace ControllerCommands {
 
     void Controller::press(const HidNpadButton& btn) {
         initController();
-        m_controllerState.buttons |= btn;
-        Result rc = hiddbgSetHdlsState(m_controllerHandle, &m_controllerState);
+        m_hiddbgHdlsState.buttons |= btn;
+        Result rc = hiddbgSetHdlsState(m_controllerHandle, &m_hiddbgHdlsState);
         if (R_FAILED(rc)) {
             Logger::logToFile("press() hiddbgSetHdlsState() failed.", rc);
         }
@@ -100,8 +104,8 @@ namespace ControllerCommands {
 
     void Controller::release(const HidNpadButton& btn) {
         initController();
-        m_controllerState.buttons &= ~btn;
-        Result rc = hiddbgSetHdlsState(m_controllerHandle, &m_controllerState);
+        m_hiddbgHdlsState.buttons &= ~btn;
+        Result rc = hiddbgSetHdlsState(m_controllerHandle, &m_hiddbgHdlsState);
         if (R_FAILED(rc)) {
             Logger::logToFile("release() hiddbgSetHdlsState() failed.", rc);
         }
@@ -110,15 +114,15 @@ namespace ControllerCommands {
     void Controller::setStickState(const Joystick& stick, int dxVal, int dyVal) {
         initController();
         if (stick == Joystick::Left) {
-            m_controllerState.analog_stick_l.x = dxVal;
-            m_controllerState.analog_stick_l.y = dyVal;
+            m_hiddbgHdlsState.analog_stick_l.x = dxVal;
+            m_hiddbgHdlsState.analog_stick_l.y = dyVal;
         }
         else {
-            m_controllerState.analog_stick_r.x = dxVal;
-            m_controllerState.analog_stick_r.y = dyVal;
+            m_hiddbgHdlsState.analog_stick_r.x = dxVal;
+            m_hiddbgHdlsState.analog_stick_r.y = dyVal;
         }
 
-        Result rc = hiddbgSetHdlsState(m_controllerHandle, &m_controllerState);
+        Result rc = hiddbgSetHdlsState(m_controllerHandle, &m_hiddbgHdlsState);
         if (R_FAILED(rc)) {
             Logger::logToFile("setStickState() hiddbgSetHdlsState() failed.", rc);
         }
@@ -175,29 +179,47 @@ namespace ControllerCommands {
         m_controllerInitializedType = (HidDeviceType)Utils::parseStringToInt(params[0]);
     }
 
-    void Controller::CcClick(const Command& cmd, std::vector<char>& buffer) {
+    void Controller::CcClick(const ControllerCommand& cmd, std::vector<char>& buffer) {
         initController();
+        m_currentState = cmd.state;
+        m_hiddbgHdlsState.buttons = cmd.state.buttons;
+        m_hiddbgHdlsState.analog_stick_l.x = cmd.state.left_joystick_x;
+        m_hiddbgHdlsState.analog_stick_l.y = cmd.state.left_joystick_y;
+        m_hiddbgHdlsState.analog_stick_r.x = cmd.state.right_joystick_x;
+        m_hiddbgHdlsState.analog_stick_r.y = cmd.state.right_joystick_y;
 
-        buffer.resize(sizeof(uint64_t));
-        std::copy(reinterpret_cast<const char*>(&cmd.seqnum),
-            reinterpret_cast<const char*>(&cmd.seqnum + sizeof(uint64_t)),
-            buffer.begin());
-
-        m_controllerState.buttons |= cmd.buttons;
-        m_controllerState.analog_stick_l.x = cmd.left_joystick_x;
-        m_controllerState.analog_stick_l.y = cmd.left_joystick_y;
-        m_controllerState.analog_stick_r.x = cmd.right_joystick_x;
-        m_controllerState.analog_stick_r.y = cmd.right_joystick_y;
-
-        Result rc = hiddbgSetHdlsState(m_controllerHandle, &m_controllerState);
+        Result rc = hiddbgSetHdlsState(m_controllerHandle, &m_hiddbgHdlsState);
         if (R_FAILED(rc)) {
-            Logger::logToFile("handleCcCommand() hiddbgSetHdlsState() press failed.", rc);
+            Logger::logToFile("CcClick() hiddbgSetHdlsState() press failed.", rc);
         }
 
-        m_controllerState.buttons &= ~cmd.buttons;
-        rc = hiddbgSetHdlsState(m_controllerHandle, &m_controllerState);
+        if (cmd.seqnum != 0) {
+            buffer.resize(sizeof(cmd.seqnum));
+            std::copy(reinterpret_cast<const char*>(&cmd.seqnum),
+                reinterpret_cast<const char*>(&cmd.seqnum + sizeof(uint64_t)),
+                buffer.begin());
+        }
+    }
+
+    void Controller::CcClear(const ControllerCommand& cmd, std::vector<char>& buffer) {
+        initController();
+        m_currentState = cmd.state;
+        m_hiddbgHdlsState.buttons &= ~cmd.state.buttons;
+        m_hiddbgHdlsState.analog_stick_l.x = cmd.state.left_joystick_x;
+        m_hiddbgHdlsState.analog_stick_l.y = cmd.state.left_joystick_y;
+        m_hiddbgHdlsState.analog_stick_r.x = cmd.state.right_joystick_x;
+        m_hiddbgHdlsState.analog_stick_r.y = cmd.state.right_joystick_y;
+
+        Result rc = hiddbgSetHdlsState(m_controllerHandle, &m_hiddbgHdlsState);
         if (R_FAILED(rc)) {
-            Logger::logToFile("andleCcCommand() hiddbgSetHdlsState() release failed.", rc);
+            Logger::logToFile("CcClear() hiddbgSetHdlsState() clear failed.", rc);
+        }
+
+        if (cmd.seqnum != 0) {
+            buffer.resize(sizeof(cmd.seqnum));
+            std::copy(reinterpret_cast<const char*>(&cmd.seqnum),
+                reinterpret_cast<const char*>(&cmd.seqnum + sizeof(uint64_t)),
+                buffer.begin());
         }
     }
 

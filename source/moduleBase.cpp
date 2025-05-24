@@ -208,7 +208,7 @@ namespace ModuleBase {
 		pollRate = Utils::parseStringToInt(params[0]);
 	}
 
-	void BaseCommands::setEnablePA(const std::vector<std::string>& params) {
+	void BaseCommands::setEnabledPA(const std::vector<std::string>& params) {
 		m_isEnabledPA = (bool)Utils::parseStringToInt(params[0]);
 	}
 

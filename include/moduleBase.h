@@ -20,7 +20,7 @@ namespace ModuleBase {
 			REGISTER_CFG_CMD("keySleepTime", setKeySleepTime);
 			REGISTER_CFG_CMD("fingerDiameter", setFingerDiameter);
 			REGISTER_CFG_CMD("pollRate", setPollRate);
-			REGISTER_CFG_CMD("enablePA", setEnablePA);
+			REGISTER_CFG_CMD("enablePA", setEnabledPA);
 
 			REGISTER_GAME_CMD("icon", getGameIcon);
 			REGISTER_GAME_CMD("version", getGameVersion);
@@ -55,11 +55,13 @@ namespace ModuleBase {
 		std::unordered_map<std::string, std::function<void(const std::vector<std::string>&)>> m_configure;
 		std::unordered_map<std::string, std::function<void(std::vector<char>&)>> m_game;
 
-		std::atomic_bool m_isEnabledPA { false };
-
 	protected:
 		std::string getSbbVersion() {
 			return m_sbbVersion;
+		}
+
+		bool getIsEnabledPA() {
+			return m_isEnabledPA;
 		}
 
 		bool attach();
@@ -82,11 +84,12 @@ namespace ModuleBase {
 
 	private:
 		const std::string m_sbbVersion = "3.0.0";
+		std::atomic_bool m_isEnabledPA { false };
 
 		void setKeySleepTime(const std::vector<std::string>& params);
 		void setFingerDiameter(const std::vector<std::string>& params);
 		void setPollRate(const std::vector<std::string>& params);
-		void setEnablePA(const std::vector<std::string>& params);
+		void setEnabledPA(const std::vector<std::string>& params);
 
 		void getGameIcon(std::vector<char>& buffer);
 		void getGameVersion(std::vector<char>& buffer);
