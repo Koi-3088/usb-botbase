@@ -516,18 +516,20 @@ namespace CommandHandler {
 
 		ControllerCommand cmd {};
 		try {
-			cmd.parseFromHex(params.front().data());
+			cmd.parseFromHex(params[0].data());
 		} catch (...) {
 			Logger::logToFile("Failed to parse CC command: " + params.front());
 			return;
 		}
+
+		Logger::logToFile("ControllerCommand R stick x " + std::to_string(cmd.state.right_joystick_x) + " R stick y " + std::to_string(cmd.state.right_joystick_y));
 
 		if (!cmd.state.isNeutral()) {
 			CcClick(cmd, buffer);
 			Controller::m_nextStateChange += std::chrono::milliseconds(cmd.milliseconds);
 		} else {
 			CcClear(cmd, buffer);
-			Controller::m_nextStateChange += std::chrono::milliseconds(cmd.milliseconds);
+			//Controller::m_nextStateChange += std::chrono::milliseconds(cmd.milliseconds);
 		}
 	}
 #pragma endregion Various controller commands.

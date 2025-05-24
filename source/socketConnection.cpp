@@ -33,6 +33,7 @@ namespace SocketConnection {
 		socklen_t clientSize = sizeof(clientAddr);
 		Logger::logToFile("Waiting for client to connect...");
 
+		Utils::flashLed();
 		while (m_tcp.clientFd == -1) {
 			m_tcp.clientFd = accept(m_tcp.serverFd, (struct sockaddr*)&clientAddr, &clientSize);
 			if (m_tcp.clientFd < 0 && (errno == EWOULDBLOCK || errno == EAGAIN)) {
@@ -44,7 +45,6 @@ namespace SocketConnection {
 			}
 		}
 
-		Utils::flashLed();
 		Logger::logToFile("Client connected.");
 		return true;
 	}
@@ -285,31 +285,30 @@ namespace SocketConnection {
 
 	void SocketConnection::controllerLoopPA(std::unique_lock<std::mutex>& commandLock) {
 		const std::chrono::microseconds EARLY_WAKE(500);
-		Controller::ControllerCommand cmd {};
+		Controller::ControllerCommand cmd{};
+		char buf[sizeof(cmd)];
+
 		while (!m_error) {
-			m_commandCv.wait_until(commandLock, Controller::m_nextStateChange - EARLY_WAKE, [&]() { return m_error || !m_commandQueue.empty() || Controller::m_replaceOnNext; });
+			m_commandCv.wait_until(commandLock, Controller::m_nextStateChange - EARLY_WAKE, [&]() { return !m_commandQueue.empty() || m_error; });
+			if (m_error) {
+				break;
+			}
+
 			WallClock now = std::chrono::steady_clock::now();
 			if (now >= Controller::m_nextStateChange) {
 				if (m_commandQueue.empty()) {
 					Controller::m_currentState.clear();
 					cmd.state = Controller::m_currentState;
-
-					char buf[sizeof(cmd)];
 					cmd.writeToHex(buf);
 					std::string hex(buf);
 
-					std::vector<std::string> vec;
-					vec.push_back(hex);
-
+					std::vector<std::string> vec { hex };
 					auto buffer = m_handler->HandleCommand("clickCC", vec);
 					if (!buffer.empty()) {
-						if (buffer.back() != '\n') {
-							buffer.push_back('\n');
-						}
-
+						if (buffer.back() != '\n') buffer.push_back('\n');
 						std::lock_guard<std::mutex> sendLock(m_senderMutex);
 						m_senderQueue.push(buffer);
-						m_senderCv.notify_one();
+						m_senderCv.notify_all();
 					}
 
 					Controller::m_nextStateChange = WallClock::max();
@@ -327,10 +326,10 @@ namespace SocketConnection {
 							Controller::m_nextStateChange = WallClock::min();
 							std::queue<std::string> tmp;
 							m_commandQueue.swap(tmp);
-							m_commandCv.notify_all();
+							notifyAll();
 						} else if (x == "replaceOnNext") {
 							Controller::m_replaceOnNext = true;
-							m_commandCv.notify_all();
+							notifyAll();
 						} else {
 							auto buffer = m_handler->HandleCommand(x, y);
 							if (!buffer.empty()) {
@@ -340,7 +339,7 @@ namespace SocketConnection {
 
 								std::lock_guard<std::mutex> sendLock(m_senderMutex);
 								m_senderQueue.push(buffer);
-								m_senderCv.notify_all();
+								notifyAll();
 							}
 						}
 					});
@@ -349,24 +348,19 @@ namespace SocketConnection {
 				}
 
 				m_commandCv.notify_all();
-				continue;
 			}
 
-			if (now + EARLY_WAKE >= Controller::m_nextStateChange) {
+			if (now + EARLY_WAKE < Controller::m_nextStateChange) {
 				continue;
 			}
 		}
 
 		Controller::m_currentState.clear();
 		cmd.state = Controller::m_currentState;
-
-		char buf[sizeof(cmd)];
 		cmd.writeToHex(buf);
 		std::string hex(buf);
 
-		std::vector<std::string> vec;
-		vec.push_back(hex);
-
+		std::vector<std::string> vec{ hex };
 		auto buffer = m_handler->HandleCommand("clickCC", vec);
 		if (!buffer.empty()) {
 			if (buffer.back() != '\n') {
@@ -375,7 +369,7 @@ namespace SocketConnection {
 
 			std::lock_guard<std::mutex> sendLock(m_senderMutex);
 			m_senderQueue.push(buffer);
-			m_senderCv.notify_one();
+			m_senderCv.notify_all();
 		}
 	}
 }

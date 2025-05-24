@@ -84,7 +84,7 @@ namespace ModuleBase {
 
 	private:
 		const std::string m_sbbVersion = "3.0.0";
-		std::atomic_bool m_isEnabledPA { false };
+		std::atomic_bool m_isEnabledPA { true };
 
 		void setKeySleepTime(const std::vector<std::string>& params);
 		void setFingerDiameter(const std::vector<std::string>& params);

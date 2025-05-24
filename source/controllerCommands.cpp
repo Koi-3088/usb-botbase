@@ -8,7 +8,7 @@ namespace ControllerCommands {
     using namespace Util;
     using namespace SbbLog;
 
-    Controller::ControllerState Controller::m_currentState {};
+    Controller::ControllerState Controller::m_currentState { 0 };
     Controller::WallClock Controller::m_nextStateChange = WallClock::max();
     std::atomic_bool Controller::m_replaceOnNext { false };
 
@@ -182,7 +182,7 @@ namespace ControllerCommands {
     void Controller::CcClick(const ControllerCommand& cmd, std::vector<char>& buffer) {
         initController();
         m_currentState = cmd.state;
-        m_hiddbgHdlsState.buttons = cmd.state.buttons;
+        m_hiddbgHdlsState.buttons |= cmd.state.buttons;
         m_hiddbgHdlsState.analog_stick_l.x = cmd.state.left_joystick_x;
         m_hiddbgHdlsState.analog_stick_l.y = cmd.state.left_joystick_y;
         m_hiddbgHdlsState.analog_stick_r.x = cmd.state.right_joystick_x;

@@ -76,8 +76,12 @@ namespace ControllerCommands {
 				for (size_t c = 0; c < 64; c += 2) {
 					char hi = str[c + 0];
 					char lo = str[c + 1];
-					hi = hi < 'a' ? hi - '0' : hi - 'a' + 10;
-					lo = lo < 'a' ? lo - '0' : lo - 'a' + 10;
+					hi = (hi >= '0' && hi <= '9') ? hi - '0' :
+						(hi >= 'a' && hi <= 'f') ? hi - 'a' + 10 :
+						(hi >= 'A' && hi <= 'F') ? hi - 'A' + 10 : 0;
+					lo = (lo >= '0' && lo <= '9') ? lo - '0' :
+						(lo >= 'a' && lo <= 'f') ? lo - 'a' + 10 :
+						(lo >= 'A' && lo <= 'F') ? lo - 'A' + 10 : 0;
 					ptr[0] = hi << 4 | lo;
 					ptr++;
 				}
@@ -103,7 +107,6 @@ namespace ControllerCommands {
 		void touch(std::vector<HidTouchState>& state, u64 sequentialCount, u64 holdTime, bool hold);
 		void key(const std::vector<HiddbgKeyboardAutoPilotState>& states, u64 sequentialCount);
 		void setControllerType(const std::vector<std::string>& params);
-
 		void CcClick(const ControllerCommand& cmd, std::vector<char>& buffer);
 		void CcClear(const ControllerCommand& cmd, std::vector<char>& buffer);
 
