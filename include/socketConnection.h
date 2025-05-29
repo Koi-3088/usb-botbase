@@ -9,6 +9,10 @@
 #include <condition_variable>
 #include <atomic>
 
+namespace CommandHandler {
+	class Handler;
+}
+
 namespace SocketConnection {
 	class SocketConnection : public Connection::ConnectionHandler {
 	public:
@@ -18,7 +22,7 @@ namespace SocketConnection {
 
 		~SocketConnection() override {
 			m_error = true;
-			notifyAll();
+            notifyAll();
 			if (m_readerThread.joinable()) m_readerThread.join();
 			if (m_senderThread.joinable()) m_senderThread.join();
 			if (m_commandThread.joinable()) m_commandThread.join();
@@ -54,19 +58,19 @@ namespace SocketConnection {
 		std::mutex m_senderMutex;
 		std::condition_variable m_senderCv;
 
-		std::queue<std::string> m_commandQueue;
-		std::mutex m_commandMutex;
-		std::condition_variable m_commandCv;
-
 		std::atomic_bool m_error { false };
 		std::unique_ptr<CommandHandler::Handler> m_handler;
 
 		int setupServerSocket();
-		void notifyAll() {
-			m_senderCv.notify_all();
-			m_commandCv.notify_all();
-		}
 
-		void controllerLoopPA(std::unique_lock<std::mutex>& commandLock);
+		void controllerLoopPA();
+		void notifyAll() {
+			if (m_handler) {
+				std::lock_guard<std::mutex> lock(m_handler->m_commandMutex);
+				m_handler->m_commandCv.notify_all();
+			}
+
+            m_senderCv.notify_all();
+		}
 	};
 }

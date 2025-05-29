@@ -1,9 +1,12 @@
 #pragma once
 
-#include "memoryCommands.h"
 #include "controllerCommands.h"
-#include <string>
+#include "memoryCommands.h"
+#include <condition_variable>
 #include <functional>
+#include <mutex>
+#include <queue>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -50,7 +53,9 @@ namespace CommandHandler {
 			REGISTER_CMD_PARAMS("key", key_cmd);
 			REGISTER_CMD_PARAMS("keyMod", keyMod_cmd);
 			REGISTER_CMD_PARAMS("keyMulti", keyMulti_cmd);
-			REGISTER_CMD("clickCC", clickCC_cmd);
+			REGISTER_CMD("cqControllerState", cqControllerState_cmd);
+			REGISTER_CMD_BUFFER("cqCancel", cqCancel_cmd);
+			REGISTER_CMD_BUFFER("cqReplaceOnNext", cqReplaceOnNext_cmd);
 			REGISTER_CMD_NOARGS("detachController", detachController_cmd);
 
 			REGISTER_CMD_BUFFER("getBuildID", getBuildID_cmd);
@@ -80,6 +85,11 @@ namespace CommandHandler {
 	public:
 		std::vector<char> HandleCommand(const std::string& cmd, const std::vector<std::string>& params);
 		bool getIsEnabledPA();
+
+	public:
+		std::queue<std::string> m_commandQueue;
+		std::mutex m_commandMutex;
+		std::condition_variable m_commandCv;
 
 	private:
 #pragma region Vision
@@ -111,7 +121,9 @@ namespace CommandHandler {
 		void key_cmd(const std::vector<std::string>& params);
 		void keyMod_cmd(const std::vector<std::string>& params);
 		void keyMulti_cmd(const std::vector<std::string>& params);
-		void clickCC_cmd(const std::vector<std::string>& params, std::vector<char>& buffer);
+		void cqControllerState_cmd(const std::vector<std::string>& params, std::vector<char>& buffer);
+		void cqCancel_cmd(std::vector<char>& buffer);
+		void cqReplaceOnNext_cmd(std::vector<char>& buffer);
 #pragma endregion Various controller commands.
 #pragma region Base
 		void getBuildID_cmd(std::vector<char>& buffer);

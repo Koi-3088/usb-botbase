@@ -8,7 +8,8 @@ namespace ControllerCommands {
     using namespace Util;
     using namespace SbbLog;
 
-    Controller::ControllerState Controller::m_currentState { 0 };
+    std::mutex Controller::m_stateMutex;
+    Controller::ControllerCommand Controller::m_controllerCommand { 0 };
     Controller::WallClock Controller::m_nextStateChange = WallClock::max();
     std::atomic_bool Controller::m_replaceOnNext { false };
 
@@ -88,12 +89,16 @@ namespace ControllerCommands {
     }
 
     void Controller::click(const HidNpadButton& btn) {
+        std::lock_guard<std::mutex> lock(m_stateMutex);
+
         initController();
         press(btn);
         release(btn);
     }
 
     void Controller::press(const HidNpadButton& btn) {
+        std::lock_guard<std::mutex> lock(m_stateMutex);
+
         initController();
         m_hiddbgHdlsState.buttons |= btn;
         Result rc = hiddbgSetHdlsState(m_controllerHandle, &m_hiddbgHdlsState);
@@ -103,6 +108,8 @@ namespace ControllerCommands {
     }
 
     void Controller::release(const HidNpadButton& btn) {
+        std::lock_guard<std::mutex> lock(m_stateMutex);
+
         initController();
         m_hiddbgHdlsState.buttons &= ~btn;
         Result rc = hiddbgSetHdlsState(m_controllerHandle, &m_hiddbgHdlsState);
@@ -112,6 +119,8 @@ namespace ControllerCommands {
     }
 
     void Controller::setStickState(const Joystick& stick, int dxVal, int dyVal) {
+        std::lock_guard<std::mutex> lock(m_stateMutex);
+
         initController();
         if (stick == Joystick::Left) {
             m_hiddbgHdlsState.analog_stick_l.x = dxVal;
@@ -179,10 +188,11 @@ namespace ControllerCommands {
         m_controllerInitializedType = (HidDeviceType)Utils::parseStringToInt(params[0]);
     }
 
-    void Controller::CcClick(const ControllerCommand& cmd, std::vector<char>& buffer) {
+    void Controller::cqControllerState(const ControllerCommand& cmd, std::vector<char>& buffer) {
         initController();
-        m_currentState = cmd.state;
-        m_hiddbgHdlsState.buttons |= cmd.state.buttons;
+        m_controllerCommand.state = cmd.state;
+
+        m_hiddbgHdlsState.buttons = cmd.state.buttons;
         m_hiddbgHdlsState.analog_stick_l.x = cmd.state.left_joystick_x;
         m_hiddbgHdlsState.analog_stick_l.y = cmd.state.left_joystick_y;
         m_hiddbgHdlsState.analog_stick_r.x = cmd.state.right_joystick_x;
@@ -190,21 +200,26 @@ namespace ControllerCommands {
 
         Result rc = hiddbgSetHdlsState(m_controllerHandle, &m_hiddbgHdlsState);
         if (R_FAILED(rc)) {
-            Logger::logToFile("CcClick() hiddbgSetHdlsState() press failed.", rc);
+            Logger::logToFile("cqControllerState() hiddbgSetHdlsState() press failed.", rc);
+        }
+
+        if (cmd.state.isNeutral()) {
+            m_controllerCommand.seqnum = 0;
+            m_nextStateChange = WallClock::max();
+        } else {
+            m_controllerCommand.seqnum = cmd.seqnum;
+            m_nextStateChange += std::chrono::milliseconds(cmd.milliseconds);
         }
 
         if (cmd.seqnum != 0) {
-            buffer.resize(sizeof(cmd.seqnum));
-            std::copy(reinterpret_cast<const char*>(&cmd.seqnum),
-                reinterpret_cast<const char*>(&cmd.seqnum + sizeof(uint64_t)),
-                buffer.begin());
+            std::string res = "cqCommandFinished " + std::to_string(cmd.seqnum);
+            buffer.insert(buffer.begin(), res.begin(), res.end());
         }
     }
 
-    void Controller::CcClear(const ControllerCommand& cmd, std::vector<char>& buffer) {
+    void Controller::cqControllerStateClear(const ControllerCommand& cmd, std::vector<char>& buffer) {
         initController();
-        m_currentState = cmd.state;
-        m_hiddbgHdlsState.buttons &= ~cmd.state.buttons;
+        m_hiddbgHdlsState.buttons = cmd.state.buttons;
         m_hiddbgHdlsState.analog_stick_l.x = cmd.state.left_joystick_x;
         m_hiddbgHdlsState.analog_stick_l.y = cmd.state.left_joystick_y;
         m_hiddbgHdlsState.analog_stick_r.x = cmd.state.right_joystick_x;
@@ -212,15 +227,16 @@ namespace ControllerCommands {
 
         Result rc = hiddbgSetHdlsState(m_controllerHandle, &m_hiddbgHdlsState);
         if (R_FAILED(rc)) {
-            Logger::logToFile("CcClear() hiddbgSetHdlsState() clear failed.", rc);
+            Logger::logToFile("cqControllerStateClear() hiddbgSetHdlsState() clear failed.", rc);
         }
 
         if (cmd.seqnum != 0) {
-            buffer.resize(sizeof(cmd.seqnum));
-            std::copy(reinterpret_cast<const char*>(&cmd.seqnum),
-                reinterpret_cast<const char*>(&cmd.seqnum + sizeof(uint64_t)),
-                buffer.begin());
+            std::string res = "cqCommandFinished " + std::to_string(cmd.seqnum);
+            buffer.insert(buffer.begin(), res.begin(), res.end());
         }
+
+        m_controllerCommand.seqnum = 0;
+        m_nextStateChange = WallClock::max();
     }
 
     int Controller::parseStringToButton(const std::string& arg) {

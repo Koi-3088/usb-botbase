@@ -5,6 +5,7 @@
 #include <switch.h>
 #include <unordered_map>
 #include <chrono>
+#include <mutex>
 
 namespace ControllerCommands {
 	class Controller : protected virtual ModuleBase::BaseCommands {
@@ -46,7 +47,7 @@ namespace ControllerCommands {
 			}
 
 			void clear() {
-				buttons = 0;
+				buttons &= ~0;
 				left_joystick_x = 0;
 				left_joystick_y = 0;
 				right_joystick_x = 0;
@@ -88,7 +89,8 @@ namespace ControllerCommands {
 			}
 		};
 
-		static ControllerState m_currentState;
+		static std::mutex m_stateMutex;
+		static ControllerCommand m_controllerCommand;
 		static std::atomic_bool m_replaceOnNext;
 		static WallClock m_nextStateChange;
 
@@ -107,8 +109,8 @@ namespace ControllerCommands {
 		void touch(std::vector<HidTouchState>& state, u64 sequentialCount, u64 holdTime, bool hold);
 		void key(const std::vector<HiddbgKeyboardAutoPilotState>& states, u64 sequentialCount);
 		void setControllerType(const std::vector<std::string>& params);
-		void CcClick(const ControllerCommand& cmd, std::vector<char>& buffer);
-		void CcClear(const ControllerCommand& cmd, std::vector<char>& buffer);
+		void cqControllerState(const ControllerCommand& cmd, std::vector<char>& buffer);
+		void cqControllerStateClear(const ControllerCommand& cmd, std::vector<char>& buffer);
 
 	private:
 		inline void* aligned_alloc(size_t alignment, size_t size) {

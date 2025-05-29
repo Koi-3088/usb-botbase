@@ -27,10 +27,11 @@ namespace CommandHandler {
 			Logger::logToFile("HandleCommand param " + std::to_string(i) + ": " + params.at(i));
 		}
 
-		bool controllerInit = cmd == "click" && params[0] == "UNUSED";
+		bool controllerInit = params.size() >= 1 && cmd == "click" && params[0] == "UNUSED";
 		if (!controllerInit && m_metaData.pid == 0) {
 			Logger::logToFile("HandleCommand pid is 0, calling initMetaData().");
 			initMetaData();
+            Logger::logToFile("Initialized MetaData.");
 		}
 
 		auto it = Handler::m_cmd.find(cmd);
@@ -509,8 +510,8 @@ namespace CommandHandler {
 		detachController();
 	}
 
-	void Handler::clickCC_cmd(const std::vector<std::string>& params, std::vector<char>& buffer) {
-		if (params.size() < 1) {
+	void Handler::cqControllerState_cmd(const std::vector<std::string>& params, std::vector<char>& buffer) {
+		if (params.size() != 1) {
 			return;
 		}
 
@@ -522,15 +523,23 @@ namespace CommandHandler {
 			return;
 		}
 
-		Logger::logToFile("ControllerCommand R stick x " + std::to_string(cmd.state.right_joystick_x) + " R stick y " + std::to_string(cmd.state.right_joystick_y));
+		cqControllerState(cmd, buffer);
+	}
 
-		if (!cmd.state.isNeutral()) {
-			CcClick(cmd, buffer);
-			Controller::m_nextStateChange += std::chrono::milliseconds(cmd.milliseconds);
-		} else {
-			CcClear(cmd, buffer);
-			//Controller::m_nextStateChange += std::chrono::milliseconds(cmd.milliseconds);
-		}
+	void Handler::cqCancel_cmd(std::vector<char>& buffer) {
+		//Logger::logToFile("Entering cqCancel_cmd");
+		std::queue<std::string> tmp;
+		m_commandQueue.swap(tmp);
+		m_nextStateChange = WallClock::min();
+		//m_commandCv.notify_all();
+		//Logger::logToFile("Leaving cqCancel_cmd");
+	}
+
+	void Handler::cqReplaceOnNext_cmd(std::vector<char>& buffer) {
+		//Logger::logToFile("Entering cqReplaceOnNext_cmd");
+		m_replaceOnNext = true;
+		//m_commandCv.notify_all();
+		//Logger::logToFile("Leaving cqReplaceOnNext_cmd");
 	}
 #pragma endregion Various controller commands.
 #pragma region Base
@@ -692,15 +701,15 @@ namespace CommandHandler {
 			return;
 		}
 
-		int32_t value = 0;
+		std::string value("ping ");
 		try {
-			value = Utils::parseStringToInt(params[0]);
+			value += std::to_string(Utils::parseStringToInt(params[0]));
 		} catch (...) {
 			Logger::logToFile("ping_cmd() failed to parse value.");
+			value += std::to_string(-1);
 		}
 
-		buffer.resize(sizeof(value));
-		std::memcpy(buffer.data(), &value, sizeof(value));
+        buffer.insert(buffer.begin(), value.begin(), value.end());
 	}
 #pragma endregion Miscellaneous commands that get/set parameters.
 #pragma region Time
