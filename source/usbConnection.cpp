@@ -1,5 +1,5 @@
-#include "commandHandler.h"
 #include "defines.h"
+#include "commandHandler.h"
 #include "logger.h"
 #include "usbConnection.h"
 #include "util.h"

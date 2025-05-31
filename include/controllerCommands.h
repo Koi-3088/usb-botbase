@@ -1,11 +1,14 @@
 #pragma once
 
 #include "moduleBase.h"
-#include <malloc.h>
-#include <switch.h>
-#include <unordered_map>
 #include <chrono>
+#include <condition_variable>
+#include <malloc.h>
 #include <mutex>
+#include <queue>
+#include <switch.h>
+#include <thread>
+#include <unordered_map>
 
 namespace ControllerCommands {
 	class Controller : protected virtual ModuleBase::BaseCommands {
@@ -20,6 +23,8 @@ namespace ControllerCommands {
            m_controllerIsInitialised = false;
 		   m_controllerDevice.npadInterfaceType = HidNpadInterfaceType_USB;
            m_controllerInitializedType = HidDeviceType_FullKey3;
+		   m_controllerCommand = { 0 };
+           m_ccThreadRunning = false;
         };
 
 		~Controller() override {
@@ -27,6 +32,11 @@ namespace ControllerCommands {
 			aligned_free(m_workMem);
 			m_workMem = nullptr;
 			m_controllerIsInitialised = false;
+			m_ccThreadRunning = false;
+            m_ccCv.notify_all();
+            if (m_ccThread.joinable()) {
+                m_ccThread.join();
+            }
 		};
 
 	public:
@@ -47,7 +57,7 @@ namespace ControllerCommands {
 			}
 
 			void clear() {
-				buttons &= ~0;
+				buttons = 0;
 				left_joystick_x = 0;
 				left_joystick_y = 0;
 				right_joystick_x = 0;
@@ -89,16 +99,14 @@ namespace ControllerCommands {
 			}
 		};
 
-		static std::mutex m_stateMutex;
-		static ControllerCommand m_controllerCommand;
-		static std::atomic_bool m_replaceOnNext;
-		static WallClock m_nextStateChange;
-
 	public:
 		static int parseStringToButton(const std::string& arg);
 		static int parseStringToStick(const std::string& arg);
+        void startControllerThread(std::queue<std::vector<char>>& senderQueue, std::mutex& senderMutex, std::condition_variable& senderCv, std::atomic_bool& error);
 
 	protected:
+		std::atomic_bool m_ccThreadRunning { false };
+
 		void initController();
 		void detachController();
 
@@ -109,10 +117,13 @@ namespace ControllerCommands {
 		void touch(std::vector<HidTouchState>& state, u64 sequentialCount, u64 holdTime, bool hold);
 		void key(const std::vector<HiddbgKeyboardAutoPilotState>& states, u64 sequentialCount);
 		void setControllerType(const std::vector<std::string>& params);
-		void cqControllerState(const ControllerCommand& cmd, std::vector<char>& buffer);
-		void cqControllerStateClear(const ControllerCommand& cmd, std::vector<char>& buffer);
+		void cqCancel();
+        void cqReplaceOnNext();
+        void cqEnqueueCommand(const ControllerCommand& cmd);
 
 	private:
+		void commandLoopPA(std::queue<std::vector<char>>& senderQueue, std::mutex& senderMutex, std::condition_variable& senderCv, std::atomic_bool& error);
+		void cqControllerState(const ControllerCommand& cmd, std::vector<char>& buffer);
 		inline void* aligned_alloc(size_t alignment, size_t size) {
 			if (alignment < sizeof(void*) || (alignment & (alignment - 1)) != 0) {
 				return nullptr;
@@ -164,5 +175,14 @@ namespace ControllerCommands {
 
 		static std::unordered_map<std::string, int> m_button;
 		static std::unordered_map<std::string, int> m_stick;
+
+		std::thread m_ccThread;
+		std::queue<ControllerCommand> m_ccQueue;
+		std::mutex m_ccMutex;
+		std::condition_variable m_ccCv;
+
+		ControllerCommand m_controllerCommand;
+		std::atomic_bool m_replaceOnNext;
+		WallClock m_nextStateChange;
     };
 }

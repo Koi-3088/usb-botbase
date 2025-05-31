@@ -8,11 +8,6 @@ namespace ControllerCommands {
     using namespace Util;
     using namespace SbbLog;
 
-    std::mutex Controller::m_stateMutex;
-    Controller::ControllerCommand Controller::m_controllerCommand { 0 };
-    Controller::WallClock Controller::m_nextStateChange = WallClock::max();
-    std::atomic_bool Controller::m_replaceOnNext { false };
-
     void Controller::initController() {
         if (m_controllerIsInitialised) {
             return;
@@ -89,16 +84,12 @@ namespace ControllerCommands {
     }
 
     void Controller::click(const HidNpadButton& btn) {
-        std::lock_guard<std::mutex> lock(m_stateMutex);
-
         initController();
         press(btn);
         release(btn);
     }
 
     void Controller::press(const HidNpadButton& btn) {
-        std::lock_guard<std::mutex> lock(m_stateMutex);
-
         initController();
         m_hiddbgHdlsState.buttons |= btn;
         Result rc = hiddbgSetHdlsState(m_controllerHandle, &m_hiddbgHdlsState);
@@ -108,8 +99,6 @@ namespace ControllerCommands {
     }
 
     void Controller::release(const HidNpadButton& btn) {
-        std::lock_guard<std::mutex> lock(m_stateMutex);
-
         initController();
         m_hiddbgHdlsState.buttons &= ~btn;
         Result rc = hiddbgSetHdlsState(m_controllerHandle, &m_hiddbgHdlsState);
@@ -119,8 +108,6 @@ namespace ControllerCommands {
     }
 
     void Controller::setStickState(const Joystick& stick, int dxVal, int dyVal) {
-        std::lock_guard<std::mutex> lock(m_stateMutex);
-
         initController();
         if (stick == Joystick::Left) {
             m_hiddbgHdlsState.analog_stick_l.x = dxVal;
@@ -188,10 +175,86 @@ namespace ControllerCommands {
         m_controllerInitializedType = (HidDeviceType)Utils::parseStringToInt(params[0]);
     }
 
-    void Controller::cqControllerState(const ControllerCommand& cmd, std::vector<char>& buffer) {
-        initController();
-        m_controllerCommand.state = cmd.state;
+    void Controller::startControllerThread(std::queue<std::vector<char>>& senderQueue, std::mutex& senderMutex, std::condition_variable& senderCv, std::atomic_bool& error) {
+        std::lock_guard<std::mutex> lock(m_ccMutex);
+        if (m_ccThreadRunning) {
+            Logger::logToFile("Controller thread already running.");
+            return;
+        }
 
+        Logger::logToFile("Starting commandLoopPA thread.");
+        m_ccThreadRunning = true;
+        m_ccThread = std::thread(&Controller::commandLoopPA, this, std::ref(senderQueue), std::ref(senderMutex), std::ref(senderCv), std::ref(error));
+    }
+
+    void Controller::commandLoopPA(std::queue<std::vector<char>>& senderQueue, std::mutex& senderMutex, std::condition_variable& senderCv, std::atomic_bool& error) {
+        const std::chrono::microseconds EARLY_WAKE(500);
+        uint64_t seqnum = 0;
+        ControllerState currentState {};
+        std::vector<char> buffer;
+
+        std::unique_lock<std::mutex> lock(m_ccMutex);
+        Logger::logToFile("commandLoopPA() started.");
+
+        while (!error) {
+            WallClock now = std::chrono::steady_clock::now();
+            if (now >= m_nextStateChange) {
+                if (m_ccQueue.empty()) {
+                    currentState.clear();
+                    m_controllerCommand.state = currentState;
+
+                    cqControllerState(m_controllerCommand, buffer);
+                    if (!buffer.empty()) {
+                        //Logger::logToFile("commandLoopPA() sending empty state change.");
+                        std::lock_guard<std::mutex> sendLock(senderMutex);
+                        senderQueue.push(buffer);
+                        senderCv.notify_one();
+                    }
+
+                    seqnum = 0;
+                    m_nextStateChange = WallClock::max();
+                } else {
+                    m_controllerCommand = m_ccQueue.front();
+                    currentState = m_controllerCommand.state;
+                    if (m_nextStateChange == WallClock::min()) {
+                        m_nextStateChange = now;
+                    }
+
+                    cqControllerState(m_controllerCommand, buffer);
+                    if (!buffer.empty()) {
+                        //Logger::logToFile("commandLoopPA() sending state change with seqnum: " + std::to_string(m_controllerCommand.seqnum));
+                        std::lock_guard<std::mutex> sendLock(senderMutex);
+                        senderQueue.push(buffer);
+                        senderCv.notify_one();
+                    }
+
+                    seqnum = m_controllerCommand.seqnum;
+                    m_nextStateChange += std::chrono::milliseconds(m_controllerCommand.milliseconds);
+                    m_ccQueue.pop();
+                }
+
+                buffer.clear();
+                m_ccCv.notify_all();
+                continue;
+            }
+
+            if (now + EARLY_WAKE >= m_nextStateChange) {
+                continue;
+            }
+
+            m_ccCv.wait_until(lock, m_nextStateChange - EARLY_WAKE);
+        }
+
+        Logger::logToFile("commandLoopPA() stopping thread.");
+        currentState.clear();
+        m_controllerCommand.state = currentState;
+        cqControllerState(m_controllerCommand, buffer);
+        error = true;
+    }
+
+    void Controller::cqControllerState(const ControllerCommand& cmd, std::vector<char>& buffer) {
+        //Logger::logToFile("cqControllerState() called with seqnum: " + std::to_string(cmd.seqnum));
+        initController();
         m_hiddbgHdlsState.buttons = cmd.state.buttons;
         m_hiddbgHdlsState.analog_stick_l.x = cmd.state.left_joystick_x;
         m_hiddbgHdlsState.analog_stick_l.y = cmd.state.left_joystick_y;
@@ -203,40 +266,45 @@ namespace ControllerCommands {
             Logger::logToFile("cqControllerState() hiddbgSetHdlsState() press failed.", rc);
         }
 
-        if (cmd.state.isNeutral()) {
-            m_controllerCommand.seqnum = 0;
-            m_nextStateChange = WallClock::max();
-        } else {
-            m_controllerCommand.seqnum = cmd.seqnum;
-            m_nextStateChange += std::chrono::milliseconds(cmd.milliseconds);
-        }
-
         if (cmd.seqnum != 0) {
-            std::string res = "cqCommandFinished " + std::to_string(cmd.seqnum);
+            //Logger::logToFile("cqControllerState() command finished with seqnum: " + std::to_string(cmd.seqnum));
+            std::string res = "cqCommandFinished " + std::to_string(cmd.seqnum) + "\r\n";
             buffer.insert(buffer.begin(), res.begin(), res.end());
         }
     }
 
-    void Controller::cqControllerStateClear(const ControllerCommand& cmd, std::vector<char>& buffer) {
-        initController();
-        m_hiddbgHdlsState.buttons = cmd.state.buttons;
-        m_hiddbgHdlsState.analog_stick_l.x = cmd.state.left_joystick_x;
-        m_hiddbgHdlsState.analog_stick_l.y = cmd.state.left_joystick_y;
-        m_hiddbgHdlsState.analog_stick_r.x = cmd.state.right_joystick_x;
-        m_hiddbgHdlsState.analog_stick_r.y = cmd.state.right_joystick_y;
-
-        Result rc = hiddbgSetHdlsState(m_controllerHandle, &m_hiddbgHdlsState);
-        if (R_FAILED(rc)) {
-            Logger::logToFile("cqControllerStateClear() hiddbgSetHdlsState() clear failed.", rc);
+    void Controller::cqEnqueueCommand(const ControllerCommand& cmd) {
+        //Logger::logToFile("cqEnqueueCommand() called with seqnum: " + std::to_string(cmd.seqnum));
+        std::unique_lock<std::mutex> lock(m_ccMutex);
+        m_ccCv.wait(lock, [&]() { return m_nextStateChange == WallClock::max() || m_replaceOnNext; });
+        if (m_replaceOnNext) {
+            //Logger::logToFile("cqEnqueueCommand() replacing current command with seqnum: " + std::to_string(cmd.seqnum));
+            m_replaceOnNext = false;
+            std::queue<ControllerCommand> tmpQueue;
+            std::swap(tmpQueue, m_ccQueue);
+            m_nextStateChange = WallClock::min();
+        } else if (m_nextStateChange == WallClock::max()) {
+            //Logger::logToFile("cqEnqueueCommand() setting next state change to min.");
+            m_nextStateChange = WallClock::min();
         }
 
-        if (cmd.seqnum != 0) {
-            std::string res = "cqCommandFinished " + std::to_string(cmd.seqnum);
-            buffer.insert(buffer.begin(), res.begin(), res.end());
-        }
+        //Logger::logToFile("cqEnqueueCommand() pushing command with seqnum: " + std::to_string(cmd.seqnum));
+        m_ccQueue.push(cmd);
+        m_ccCv.notify_all();
+    }
 
-        m_controllerCommand.seqnum = 0;
-        m_nextStateChange = WallClock::max();
+    void Controller::cqCancel() {
+        std::lock_guard<std::mutex> lock(m_ccMutex);
+        m_replaceOnNext = false;
+        m_nextStateChange = WallClock::min();
+        m_controllerCommand.state.clear();
+        m_ccCv.notify_all();
+    }
+
+    void Controller::cqReplaceOnNext() {
+        std::lock_guard<std::mutex> lock(m_ccMutex);
+        m_replaceOnNext = true;
+        m_ccCv.notify_all();
     }
 
     int Controller::parseStringToButton(const std::string& arg) {

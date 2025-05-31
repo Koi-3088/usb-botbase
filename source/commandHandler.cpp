@@ -6,7 +6,6 @@
 #include <algorithm>
 #include <cstring>
 #include <switch.h>
-#include <chrono>
 
 namespace CommandHandler {
 	using namespace SbbLog;
@@ -523,23 +522,19 @@ namespace CommandHandler {
 			return;
 		}
 
-		cqControllerState(cmd, buffer);
+        cqEnqueueCommand(cmd);
 	}
 
-	void Handler::cqCancel_cmd(std::vector<char>& buffer) {
-		//Logger::logToFile("Entering cqCancel_cmd");
-		std::queue<std::string> tmp;
-		m_commandQueue.swap(tmp);
-		m_nextStateChange = WallClock::min();
-		//m_commandCv.notify_all();
-		//Logger::logToFile("Leaving cqCancel_cmd");
+	void Handler::cqCancel_cmd() {
+        cqCancel();
 	}
 
-	void Handler::cqReplaceOnNext_cmd(std::vector<char>& buffer) {
-		//Logger::logToFile("Entering cqReplaceOnNext_cmd");
-		m_replaceOnNext = true;
-		//m_commandCv.notify_all();
-		//Logger::logToFile("Leaving cqReplaceOnNext_cmd");
+	void Handler::cqReplaceOnNext_cmd() {
+        cqReplaceOnNext();
+	}
+
+	bool Handler::getIsRunningPA() {
+        return m_ccThreadRunning.load();
 	}
 #pragma endregion Various controller commands.
 #pragma region Base
@@ -701,12 +696,12 @@ namespace CommandHandler {
 			return;
 		}
 
-		std::string value("ping ");
+		std::string value;
 		try {
-			value += std::to_string(Utils::parseStringToInt(params[0]));
+			value = std::to_string(Utils::parseStringToInt(params[0]));
 		} catch (...) {
 			Logger::logToFile("ping_cmd() failed to parse value.");
-			value += std::to_string(-1);
+			value = std::to_string(0);
 		}
 
         buffer.insert(buffer.begin(), value.begin(), value.end());

@@ -10,7 +10,6 @@
 #include <sys/errno.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <chrono>
 
 namespace SocketConnection {
 	using namespace Util;
@@ -37,12 +36,9 @@ namespace SocketConnection {
 		Utils::flashLed();
 		while (m_tcp.clientFd == -1) {
 			m_tcp.clientFd = accept(m_tcp.serverFd, (struct sockaddr*)&clientAddr, &clientSize);
-			if (m_tcp.clientFd < 0 && (errno == EWOULDBLOCK || errno == EAGAIN)) {
+			if (m_tcp.clientFd == -1) {
 				svcSleepThread(1e+6L);
 				continue;
-			} else if (m_tcp.clientFd < 0) {
-				Logger::logToFile("Socket connect() accept() failed.");
-				return false;
 			}
 		}
 
@@ -52,36 +48,6 @@ namespace SocketConnection {
 
 	bool SocketConnection::run() {
 		std::string persistentBuffer;
-		m_readerThread = std::thread([&]() {
-			try {
-				while (!m_error) {
-					auto commands = receiveData(persistentBuffer, m_tcp.clientFd);
-					if (commands.empty()) {
-						m_error = true;
-						notifyAll();
-						break;
-					}
-
-					{
-						std::lock_guard<std::mutex> lock(m_handler->m_commandMutex);
-						for (auto& cmd : commands) {
-							m_handler->m_commandQueue.push(std::move(cmd));
-						}
-
-						m_handler->m_commandCv.notify_one();
-					}
-				}
-			} catch (const std::exception& e) {
-				Logger::logToFile(std::string("Socket reader thread exception: ") + e.what());
-				m_error = true;
-				notifyAll();
-			} catch (...) {
-				Logger::logToFile("Unknown socket reader thread exception.");
-				m_error = true;
-				notifyAll();
-			}
-		});
-
 		m_senderThread = std::thread([&]() {
 			try {
 				std::unique_lock<std::mutex> lock(m_senderMutex);
@@ -93,7 +59,7 @@ namespace SocketConnection {
 						auto buffer = std::move(m_senderQueue.front());
 						m_senderQueue.pop();
 						lock.unlock();
-                        Logger::logToFile("Sending data to client, size: " + std::to_string(buffer.size()));
+
 						int sent = SocketConnection::sendData(buffer, buffer.size(), m_tcp.clientFd);
 						if (sent <= 0) {
 							m_error = true;
@@ -117,19 +83,12 @@ namespace SocketConnection {
 		m_commandThread = std::thread([&]() {
 			try {
 				while (!m_error) {
-					if (m_handler->getIsEnabledPA()) {
-						controllerLoopPA();
-						m_error = true;
-                        Logger::logToFile("Exiting command thread.");
-						break;
-					}
-
-					std::unique_lock<std::mutex> lock(m_handler->m_commandMutex);
-					m_handler->m_commandCv.wait(lock, [&]() { return !m_handler->m_commandQueue.empty() || m_error; });
+					std::unique_lock<std::mutex> lock(m_commandMutex);
+					m_commandCv.wait(lock, [&]() { return !m_commandQueue.empty() || m_error; });
 					if (m_error) break;
 
-					auto command = std::move(m_handler->m_commandQueue.front());
-					m_handler->m_commandQueue.pop();
+					auto command = std::move(m_commandQueue.front());
+					m_commandQueue.pop();
 					lock.unlock();
 
 					try {
@@ -171,13 +130,37 @@ namespace SocketConnection {
 			}
 		});
 
-		while (!m_error) {
-			std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		try {
+			while (!m_error) {
+				if (!m_handler->getIsRunningPA() && m_handler->getIsEnabledPA()) {
+                    m_handler->startControllerThread(m_senderQueue, m_senderMutex, m_senderCv, m_error);
+				}
+
+				auto commands = receiveData(persistentBuffer, m_tcp.clientFd);
+				if (commands.empty()) {
+					m_error = true;
+					notifyAll();
+					break;
+				}
+
+				std::lock_guard<std::mutex> lock(m_commandMutex);
+				for (auto& cmd : commands) {
+					m_commandQueue.push(std::move(cmd));
+				}
+
+				m_commandCv.notify_one();
+			}
+		} catch (const std::exception& e) {
+			Logger::logToFile(std::string("Socket reader thread exception: ") + e.what());
+			m_error = true;
+			notifyAll();
+		} catch (...) {
+			Logger::logToFile("Unknown socket reader thread exception.");
+			m_error = true;
+			notifyAll();
 		}
 
-		m_senderCv.notify_all();
-		m_handler->m_commandCv.notify_all();
-		if (m_readerThread.joinable()) m_readerThread.join();
+		notifyAll();
 		if (m_senderThread.joinable()) m_senderThread.join();
 		if (m_commandThread.joinable()) m_commandThread.join();
 
@@ -272,130 +255,5 @@ namespace SocketConnection {
 
 		buffer.clear();
 		return total;
-	}
-
-	void SocketConnection::controllerLoopPA() {
-		std::unique_lock<std::mutex> lock(m_handler->m_commandMutex);
-		const std::chrono::microseconds EARLY_WAKE(500);
-		char hex[65] = { 0 };
-        Logger::logToFile("Controller loop started.");
-		try {
-			while (!m_error) {
-				memset(hex, 0, 65);
-				WallClock now = std::chrono::steady_clock::now();
-				std::lock_guard<std::mutex> state(Controller::m_stateMutex);
-				if (Controller::m_replaceOnNext) {
-					Controller::m_replaceOnNext = false;
-					std::queue<std::string> tmp;
-					m_handler->m_commandQueue.swap(tmp);
-					Controller::m_nextStateChange = WallClock::min();
-				}
-
-				if (Controller::m_nextStateChange == WallClock::max()) {
-					Controller::m_nextStateChange = WallClock::min();
-				}
-
-				if (now >= Controller::m_nextStateChange) {
-					if (m_handler->m_commandQueue.empty()) {
-						Controller::m_controllerCommand.state.clear();
-						Controller::m_controllerCommand.writeToHex(hex);
-						std::string cmdStr = "cqControllerState " + std::string(hex) + "\r\n";
-						lock.unlock();
-
-						Logger::logToFile("Controller state changed, clearing state: " + std::string(hex));
-						Utils::parseArgs(cmdStr, [&](const std::string& x, const std::vector<std::string>& y) {
-							auto buffer = m_handler->HandleCommand(x, y);
-							if (!buffer.empty()) {
-								if (buffer.back() != '\n') {
-									buffer.push_back('\n');
-								}
-
-								std::lock_guard<std::mutex> sendLock(m_senderMutex);
-								m_senderQueue.push(buffer);
-								m_senderCv.notify_all();
-								//Logger::logToFile("Controller command processed: " + x);
-							} else {
-								//Logger::logToFile("Controller command returned empty buffer: " + x);
-							}
-						});
-					} else {
-						//Logger::logToFile("Processing command in controller loop.");
-						auto command = std::move(m_handler->m_commandQueue.front());
-						m_handler->m_commandQueue.pop();
-						if (Controller::m_nextStateChange == WallClock::min()) {
-							Controller::m_nextStateChange = now;
-						}
-
-						lock.unlock();
-						Utils::parseArgs(command, [&](const std::string& x, const std::vector<std::string>& y) {
-							auto buffer = m_handler->HandleCommand(x, y);
-							if (!buffer.empty()) {
-								if (buffer.back() != '\n') {
-									buffer.push_back('\n');
-								}
-
-								std::lock_guard<std::mutex> sendLock(m_senderMutex);
-								m_senderQueue.push(buffer);
-								m_senderCv.notify_all();
-								//Logger::logToFile("Controller command processed: " + x);
-							} else {
-								//Logger::logToFile("Controller command returned empty buffer: " + x);
-							}
-						});
-					}
-
-					//m_handler->m_commandCv.notify_all();
-					lock.lock();
-					continue;
-				}
-
-				if (now + EARLY_WAKE >= Controller::m_nextStateChange) {
-					Logger::logToFile("Controller loop early wake, waiting for next state change.");
-					continue;
-				}
-
-				m_handler->m_commandCv.wait_until(lock, Controller::m_nextStateChange - EARLY_WAKE);
-				if (m_error) {
-					break;
-				}
-
-				//Logger::logToFile("Controller loop woke up, checking for state change.");
-			}
-
-			memset(hex, 0, 65);
-			Controller::m_controllerCommand.state.clear();
-			Controller::m_controllerCommand.writeToHex(hex);
-
-			std::string cmdStr = "cqControllerState " + std::string(hex) + "\r\n";
-			lock.unlock();
-
-			Utils::parseArgs(cmdStr, [&](const std::string& x, const std::vector<std::string>& y) {
-				auto buffer = m_handler->HandleCommand(x, y);
-				if (!buffer.empty()) {
-					if (buffer.back() != '\n') {
-						buffer.push_back('\n');
-					}
-
-					std::lock_guard<std::mutex> sendLock(m_senderMutex);
-					m_senderQueue.push(buffer);
-					m_senderCv.notify_all();
-					//Logger::logToFile("Controller command processed: " + x);
-				} else {
-					//Logger::logToFile("Controller command returned empty buffer: " + x);
-				}
-			});
-
-            lock.lock();
-		} catch (const std::exception& e) {
-			Logger::logToFile(std::string("controllerLoopPA exception: ") + e.what());
-			m_error = true;
-			m_senderCv.notify_all();
-			m_handler->m_commandCv.notify_all();
-		} catch (...) {
-			Logger::logToFile("Unknown exception in controllerLoopPA.");
-			m_error = true;
-			m_senderCv.notify_all();
-			m_handler->m_commandCv.notify_all();
-		}
 	}
 }

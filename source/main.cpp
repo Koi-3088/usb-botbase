@@ -133,17 +133,10 @@ int main() {
             m_connection->run();
         }
 
-        if (!appletMainLoop()) {
-            m_connection->disconnect();
-            delete m_connection;
-            m_connection = nullptr;
-            break;
-        }
-
-        Logger::logToFile("Resetting connection...");
         m_connection->disconnect();
         delete m_connection;
         m_connection = nullptr;
+        Logger::logToFile("Resetting connection...");
     }
 
     Logger::logToFile("Exiting main()...");

@@ -1,10 +1,9 @@
 #pragma once
 
 #include "connection.h"
-#include "commandHandler.h"
+#include <memory>
 #include <string>
 #include <vector>
-#include <memory>
 
 namespace UsbConnection {
 	class UsbConnection : public Connection::ConnectionHandler {

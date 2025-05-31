@@ -1,13 +1,9 @@
 #pragma once
 
 #include "connection.h"
-#include "commandHandler.h"
 #include <string>
 #include <vector>
 #include <memory>
-#include <queue>
-#include <condition_variable>
-#include <atomic>
 
 namespace CommandHandler {
 	class Handler;
@@ -23,7 +19,6 @@ namespace SocketConnection {
 		~SocketConnection() override {
 			m_error = true;
             notifyAll();
-			if (m_readerThread.joinable()) m_readerThread.join();
 			if (m_senderThread.joinable()) m_senderThread.join();
 			if (m_commandThread.joinable()) m_commandThread.join();
 
@@ -41,7 +36,6 @@ namespace SocketConnection {
 		int sendData(std::vector<char>& data, size_t data_size, int sockfd) override;
 
 	private:
-		using WallClock = std::chrono::steady_clock::time_point;
 		struct TcpConnection {
 			int serverFd = -1;
 			int clientFd = -1;
@@ -50,26 +44,9 @@ namespace SocketConnection {
 
 		TcpConnection m_tcp;
 
-		std::thread m_readerThread;
-		std::thread m_senderThread;
-		std::thread m_commandThread;
-
-		std::queue<std::vector<char>> m_senderQueue;
-		std::mutex m_senderMutex;
-		std::condition_variable m_senderCv;
-
-		std::atomic_bool m_error { false };
-		std::unique_ptr<CommandHandler::Handler> m_handler;
-
 		int setupServerSocket();
-
-		void controllerLoopPA();
 		void notifyAll() {
-			if (m_handler) {
-				std::lock_guard<std::mutex> lock(m_handler->m_commandMutex);
-				m_handler->m_commandCv.notify_all();
-			}
-
+			m_commandCv.notify_all();
             m_senderCv.notify_all();
 		}
 	};
