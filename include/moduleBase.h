@@ -84,18 +84,19 @@ namespace ModuleBase {
 
 	private:
 		const std::string m_sbbVersion = "3.0.0";
-		std::atomic_bool m_isEnabledPA { true };
+		std::atomic_bool m_isEnabledPA { false };
 
 		void setKeySleepTime(const std::vector<std::string>& params);
 		void setFingerDiameter(const std::vector<std::string>& params);
 		void setPollRate(const std::vector<std::string>& params);
-		void setEnabledPA(const std::vector<std::string>& params);
 
 		void getGameIcon(std::vector<char>& buffer);
 		void getGameVersion(std::vector<char>& buffer);
 		void getGameRating(std::vector<char>& buffer);
 		void getGameAuthor(std::vector<char>& buffer);
 		void getGameName(std::vector<char>& buffer);
+
+		void setEnabledPA(const std::vector<std::string>& params);
 
 		bool isConnectedToInternet();
 		bool metaHasZeroValue(const MetaData& meta);

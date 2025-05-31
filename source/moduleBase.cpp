@@ -197,19 +197,39 @@ namespace ModuleBase {
 	}
 
 	void BaseCommands::setKeySleepTime(const std::vector<std::string>& params) {
-		keyPressSleepTime = Utils::parseStringToInt(params[0]);
+        if (params.size() < 2) {
+            Logger::logToFile("setKeySleepTime() params size is less than 2.");
+            return;
+        }
+
+		keyPressSleepTime = Utils::parseStringToInt(params[1]);
 	}
 
 	void BaseCommands::setFingerDiameter(const std::vector<std::string>& params) {
-		fingerDiameter = Utils::parseStringToInt(params[0]);
+        if (params.size() < 2) {
+            Logger::logToFile("setFingerDiameter() params size is less than 2.");
+            return;
+        }
+
+		fingerDiameter = Utils::parseStringToInt(params[1]);
 	}
 
 	void BaseCommands::setPollRate(const std::vector<std::string>& params) {
-		pollRate = Utils::parseStringToInt(params[0]);
+        if (params.size() < 2) {
+            Logger::logToFile("setPollRate() params size is less than 2.");
+            return;
+        }
+
+		pollRate = Utils::parseStringToInt(params[1]);
 	}
 
 	void BaseCommands::setEnabledPA(const std::vector<std::string>& params) {
-		m_isEnabledPA = (bool)Utils::parseStringToInt(params[0]);
+        if (params.size() < 2) {
+            Logger::logToFile("setEnabledPA() params size is less than 2.");
+            return;
+        }
+
+		m_isEnabledPA = (bool)Utils::parseStringToInt(params[1]);
 	}
 
 	void BaseCommands::getGameIcon(std::vector<char>& buffer) {
