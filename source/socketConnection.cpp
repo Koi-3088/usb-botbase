@@ -23,22 +23,24 @@ namespace SocketConnection {
 	}
 
 	bool SocketConnection::connect() {
-		m_tcp.serverFd = setupServerSocket();
-		if (m_tcp.serverFd < 0) {
-			Logger::logToFile("Socket error.");
-			return false;
+		if (m_tcp.serverFd == -1) {
+			m_tcp.serverFd = setupServerSocket();
+			if (m_tcp.serverFd < 0) {
+				Logger::logToFile("Socket error.");
+				return false;
+			}
+
+			Utils::flashLed();
 		}
 
 		struct sockaddr_in clientAddr {};
 		socklen_t clientSize = sizeof(clientAddr);
 		Logger::logToFile("Waiting for client to connect...");
 
-		Utils::flashLed();
 		while (m_tcp.clientFd == -1) {
 			m_tcp.clientFd = accept(m_tcp.serverFd, (struct sockaddr*)&clientAddr, &clientSize);
 			if (m_tcp.clientFd == -1) {
 				svcSleepThread(1e+6L);
-				continue;
 			}
 		}
 
@@ -47,6 +49,7 @@ namespace SocketConnection {
 	}
 
 	bool SocketConnection::run() {
+		m_error = false;
 		std::string persistentBuffer;
 		m_senderThread = std::thread([&]() {
 			try {
@@ -164,6 +167,8 @@ namespace SocketConnection {
 		if (m_senderThread.joinable()) m_senderThread.join();
 		if (m_commandThread.joinable()) m_commandThread.join();
 
+		close(m_tcp.clientFd);
+		m_tcp.clientFd = -1;
 		Logger::logToFile("Client disconnected.");
 		return m_error;
 	}
@@ -171,7 +176,8 @@ namespace SocketConnection {
 	void SocketConnection::disconnect() {
 		close(m_tcp.clientFd);
 		close(m_tcp.serverFd);
-		socketExit();
+		m_tcp.serverFd = -1;
+		m_tcp.clientFd = -1;
 	}
 
 	int SocketConnection::setupServerSocket() {
