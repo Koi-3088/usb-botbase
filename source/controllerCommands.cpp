@@ -1,13 +1,16 @@
 #include "defines.h"
-#include <cstring>
 #include "controllerCommands.h"
 #include "util.h"
 #include "logger.h"
+#include <cstring>
 
 namespace ControllerCommands {
     using namespace Util;
     using namespace SbbLog;
 
+    /**
+     * @brief Initialize the virtual controller and related state.
+     */
     void Controller::initController() {
         if (m_controllerIsInitialised) {
             return;
@@ -19,7 +22,7 @@ namespace ControllerCommands {
             Logger::logToFile("initController() hiddbgInitialize() failed.", rc);
             return;
         }
-        
+
         if (!m_workMem) {
             m_workMem = (u8*)aligned_alloc(0x1000, m_workMem_size);
             if (!m_workMem) {
@@ -60,6 +63,9 @@ namespace ControllerCommands {
         m_controllerIsInitialised = true;
     }
 
+    /**
+     * @brief Detach and clean up the virtual controller.
+     */
     void Controller::detachController() {
         initController();
 
@@ -83,12 +89,20 @@ namespace ControllerCommands {
         m_controllerIsInitialised = false;
     }
 
+    /**
+     * @brief Simulate a button click (press and release).
+     * @param btn The button to click.
+     */
     void Controller::click(const HidNpadButton& btn) {
         initController();
         press(btn);
         release(btn);
     }
 
+    /**
+     * @brief Simulate a button press.
+     * @param btn The button to press.
+     */
     void Controller::press(const HidNpadButton& btn) {
         initController();
         m_hiddbgHdlsState.buttons |= btn;
@@ -98,6 +112,10 @@ namespace ControllerCommands {
         }
     }
 
+    /**
+     * @brief Simulate a button release.
+     * @param btn The button to release.
+     */
     void Controller::release(const HidNpadButton& btn) {
         initController();
         m_hiddbgHdlsState.buttons &= ~btn;
@@ -107,13 +125,18 @@ namespace ControllerCommands {
         }
     }
 
+    /**
+     * @brief Set the state of a joystick.
+     * @param stick The joystick (left or right).
+     * @param dxVal X value.
+     * @param dyVal Y value.
+     */
     void Controller::setStickState(const Joystick& stick, int dxVal, int dyVal) {
         initController();
         if (stick == Joystick::Left) {
             m_hiddbgHdlsState.analog_stick_l.x = dxVal;
             m_hiddbgHdlsState.analog_stick_l.y = dyVal;
-        }
-        else {
+        } else {
             m_hiddbgHdlsState.analog_stick_r.x = dxVal;
             m_hiddbgHdlsState.analog_stick_r.y = dyVal;
         }
@@ -124,6 +147,13 @@ namespace ControllerCommands {
         }
     }
 
+    /**
+     * @brief Simulate touch input.
+     * @param state Touch state array.
+     * @param sequentialCount Number of sequential touches.
+     * @param holdTime Hold time in microseconds.
+     * @param hold Whether to hold the touch.
+     */
     void Controller::touch(std::vector<HidTouchState>& state, u64 sequentialCount, u64 holdTime, bool hold) {
         initController();
         state[0].delta_time = holdTime; // only the first touch needs this for whatever reason
@@ -145,6 +175,11 @@ namespace ControllerCommands {
         hiddbgUnsetTouchScreenAutoPilotState();
     }
 
+    /**
+     * @brief Simulate keyboard input.
+     * @param states Keyboard autopilot states.
+     * @param sequentialCount Number of sequential key presses.
+     */
     void Controller::key(const std::vector<HiddbgKeyboardAutoPilotState>& states, u64 sequentialCount) {
         initController();
         HiddbgKeyboardAutoPilotState tempState = { 0 };
@@ -160,8 +195,7 @@ namespace ControllerCommands {
                     hiddbgSetKeyboardAutoPilotState(&m_dummyKeyboardState);
                     svcSleepThread(pollRate * 1e+6L);
                 }
-            }
-            else {
+            } else {
                 hiddbgSetKeyboardAutoPilotState(&m_dummyKeyboardState);
                 svcSleepThread(pollRate * 1e+6L);
             }
@@ -170,11 +204,22 @@ namespace ControllerCommands {
         hiddbgUnsetKeyboardAutoPilotState();
     }
 
+    /**
+     * @brief Set the controller type from parameters.
+     * @param params Parameters vector.
+     */
     void Controller::setControllerType(const std::vector<std::string>& params) {
         detachController();
         m_controllerInitializedType = (HidDeviceType)Utils::parseStringToInt(params[0]);
     }
 
+    /**
+     * @brief Start the controller thread for processing commands.
+     * @param senderQueue Queue for sending data.
+     * @param senderMutex Mutex for the sender queue.
+     * @param senderCv Condition variable for the sender queue.
+     * @param error Atomic flag for error state.
+     */
     void Controller::startControllerThread(std::queue<std::vector<char>>& senderQueue, std::mutex& senderMutex, std::condition_variable& senderCv, std::atomic_bool& error) {
         std::lock_guard<std::mutex> lock(m_ccMutex);
         if (m_ccThreadRunning) {
@@ -187,10 +232,16 @@ namespace ControllerCommands {
         m_ccThread = std::thread(&Controller::commandLoopPA, this, std::ref(senderQueue), std::ref(senderMutex), std::ref(senderCv), std::ref(error));
     }
 
+    /**
+     * @brief Main loop for processing controller commands in a thread.
+     * @param senderQueue Queue for sending data.
+     * @param senderMutex Mutex for the sender queue.
+     * @param senderCv Condition variable for the sender queue.
+     * @param error Atomic flag for error state.
+     */
     void Controller::commandLoopPA(std::queue<std::vector<char>>& senderQueue, std::mutex& senderMutex, std::condition_variable& senderCv, std::atomic_bool& error) {
         const std::chrono::microseconds EARLY_WAKE(500);
-        uint64_t seqnum = 0;
-        ControllerState currentState {};
+        ControllerState currentState{};
         std::vector<char> buffer;
 
         std::unique_lock<std::mutex> lock(m_ccMutex);
@@ -211,7 +262,7 @@ namespace ControllerCommands {
                         senderCv.notify_one();
                     }
 
-                    seqnum = 0;
+                    m_controllerCommand.seqnum = 0;
                     m_nextStateChange = WallClock::max();
                 } else {
                     m_controllerCommand = m_ccQueue.pop_front();
@@ -228,7 +279,6 @@ namespace ControllerCommands {
                         senderCv.notify_one();
                     }
 
-                    seqnum = m_controllerCommand.seqnum;
                     m_nextStateChange += std::chrono::milliseconds(m_controllerCommand.milliseconds);
                 }
 
@@ -251,6 +301,11 @@ namespace ControllerCommands {
         error = true;
     }
 
+    /**
+     * @brief Update the controller state and optionally send a response.
+     * @param cmd The controller command.
+     * @param[out] buffer Output buffer for response.
+     */
     void Controller::cqControllerState(const ControllerCommand& cmd, std::vector<char>& buffer) {
         //Logger::logToFile("cqControllerState() called with seqnum: " + std::to_string(cmd.seqnum));
         initController();
@@ -272,6 +327,10 @@ namespace ControllerCommands {
         }
     }
 
+    /**
+     * @brief Enqueue a controller command for processing.
+     * @param cmd The controller command.
+     */
     void Controller::cqEnqueueCommand(const ControllerCommand& cmd) {
         //Logger::logToFile("cqEnqueueCommand() called with seqnum: " + std::to_string(cmd.seqnum));
         std::unique_lock<std::mutex> lock(m_ccMutex);
@@ -291,6 +350,9 @@ namespace ControllerCommands {
         m_ccCv.notify_all();
     }
 
+    /**
+     * @brief Cancel all queued controller commands.
+     */
     void Controller::cqCancel() {
         std::lock_guard<std::mutex> lock(m_ccMutex);
         m_replaceOnNext = false;
@@ -299,29 +361,40 @@ namespace ControllerCommands {
         m_ccCv.notify_all();
     }
 
+    /**
+     * @brief Replace the next controller command on the next enqueue.
+     */
     void Controller::cqReplaceOnNext() {
         std::lock_guard<std::mutex> lock(m_ccMutex);
         m_replaceOnNext = true;
         m_ccCv.notify_all();
     }
 
+    /**
+     * @brief Parse a string to a button value.
+     * @param arg The string argument.
+     * @return The button value, or -1 if not found.
+     */
     int Controller::parseStringToButton(const std::string& arg) {
         auto it = Controller::m_button.find(arg);
         if (it != Controller::m_button.end()) {
             return it->second;
-        }
-        else {
+        } else {
             Logger::logToFile("parseStringToButton() button not found (" + arg + ").");
             return -1;
         }
     }
 
+    /**
+     * @brief Parse a string to a stick value.
+     * @param arg The string argument.
+     * @return The stick value, or -1 if not found.
+     */
     int Controller::parseStringToStick(const std::string& arg) {
         auto it = Controller::m_stick.find(arg);
         if (it != Controller::m_stick.end()) {
             return it->second;
-        }
-        else {
+        } else {
             Logger::logToFile("parseStringToStick() stick not found (" + arg + ").");
             return -1;
         }

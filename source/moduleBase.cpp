@@ -10,429 +10,519 @@ namespace ModuleBase {
     using namespace SbbLog;
 	using namespace NTP;
 
-	bool BaseCommands::attach() {
-		u64 pid = 0;
+    /**
+     * @brief Attach to the current application process for debugging.
+     * @return true if attach succeeded, false otherwise.
+     */
+    bool BaseCommands::attach() {
+        u64 pid = 0;
         Result rc = pmdmntGetApplicationProcessId(&pid);
         if (R_FAILED(rc)) {
             Logger::logToFile("attach() pmdmntGetApplicationProcessId() failed.", rc);
-			return false;
+            return false;
         }
 
-		if (m_metaData.pid != pid) {
-			Logger::logToFile("attach() m_metaData.pid != pid, calling initMetaData().");
-			m_metaData.pid = pid;
-			initMetaData();
-		}
-		else {
-			detach();
-		}
+        if (m_metaData.pid != pid) {
+            Logger::logToFile("attach() m_metaData.pid != pid, calling initMetaData().");
+            m_metaData.pid = pid;
+            initMetaData();
+        } else {
+            detach();
+        }
 
         rc = svcDebugActiveProcess(&m_debugHandle, pid);
         if (R_FAILED(rc)) {
             Logger::logToFile("attach() svcDebugActiveProcess() failed.", rc);
-			return false;
+            return false;
         }
 
-		return true;
+        return true;
     }
 
-	void BaseCommands::detach() {
+    /**
+     * @brief Detach from the debugged process.
+     */
+    void BaseCommands::detach() {
         if (m_debugHandle != 0) {
             svcCloseHandle(m_debugHandle);
         }
     }
 
-	void BaseCommands::initMetaData() {
-		if (!attach()) {
-			Logger::logToFile("initMetaData() attach() failed.");
-			detach();
-			return;
-		}
+    /**
+     * @brief Initialize metadata for the current process.
+     */
+    void BaseCommands::initMetaData() {
+        if (!attach()) {
+            Logger::logToFile("initMetaData() attach() failed.");
+            detach();
+            return;
+        }
 
-		m_metaData.main_nso_base = getMainNsoBase();
-		m_metaData.heap_base = getHeapBase();
-		m_metaData.titleID = getTitleId();
-		m_metaData.titleVersion = GetTitleVersion();
-		m_metaData.buildID = getBuildID();
+        m_metaData.main_nso_base = getMainNsoBase();
+        m_metaData.heap_base = getHeapBase();
+        m_metaData.titleID = getTitleId();
+        m_metaData.titleVersion = GetTitleVersion();
+        m_metaData.buildID = getBuildID();
 
-		detach();
-		if (metaHasZeroValue(m_metaData)) {
-			Logger::logToFile("initMetaData() MetaData had one or more zero value.");
-		}
-	}
+        detach();
+        if (metaHasZeroValue(m_metaData)) {
+            Logger::logToFile("initMetaData() MetaData had one or more zero value.");
+        }
+    }
 
-	u8 BaseCommands::getBuildID() {
-		LoaderModuleInfo proc_modules[2];
-		s32 numModules = 0;
-		Result rc = ldrDmntGetProcessModuleInfo(m_metaData.pid, proc_modules, 2, &numModules);
-		if (R_FAILED(rc)) {
-			Logger::logToFile("getBuildID() ldrDmntGetProcessModuleInfo() failed.", rc);
-			return 0;
-		}
+    /**
+     * @brief Get the build ID of the main module.
+     * @return The build ID byte.
+     */
+    u8 BaseCommands::getBuildID() {
+        LoaderModuleInfo proc_modules[2];
+        s32 numModules = 0;
+        Result rc = ldrDmntGetProcessModuleInfo(m_metaData.pid, proc_modules, 2, &numModules);
+        if (R_FAILED(rc)) {
+            Logger::logToFile("getBuildID() ldrDmntGetProcessModuleInfo() failed.", rc);
+            return 0;
+        }
 
-		if (numModules == 2) {
-			return proc_modules[1].build_id[0];
-		}
-		else {
-			return proc_modules[0].build_id[0];
-		}
-	}
+        if (numModules == 2) {
+            return proc_modules[1].build_id[0];
+        } else {
+            return proc_modules[0].build_id[0];
+        }
+    }
 
-	u64 BaseCommands::getMainNsoBase() {
-		LoaderModuleInfo proc_modules[2];
-		s32 numModules = 0;
-		Result rc = ldrDmntGetProcessModuleInfo(m_metaData.pid, proc_modules, 2, &numModules);
-		if (R_FAILED(rc)) {
-			Logger::logToFile("getMainNsoBase() ldrDmntGetProcessModuleInfo() failed.", rc);
-			return 0;
-		}
+    /**
+     * @brief Get the base address of the main NSO module.
+     * @return The base address.
+     */
+    u64 BaseCommands::getMainNsoBase() {
+        LoaderModuleInfo proc_modules[2];
+        s32 numModules = 0;
+        Result rc = ldrDmntGetProcessModuleInfo(m_metaData.pid, proc_modules, 2, &numModules);
+        if (R_FAILED(rc)) {
+            Logger::logToFile("getMainNsoBase() ldrDmntGetProcessModuleInfo() failed.", rc);
+            return 0;
+        }
 
-		if (numModules == 2) {
-			return proc_modules[1].base_address;
-		}
-		else {
-			return proc_modules[0].base_address;
-		}
-	}
+        if (numModules == 2) {
+            return proc_modules[1].base_address;
+        } else {
+            return proc_modules[0].base_address;
+        }
+    }
 
-	u64 BaseCommands::getHeapBase() {
-		u64 heap_base = 0;
-		Result rc = svcGetInfo(&heap_base, InfoType_HeapRegionAddress, m_debugHandle, 0);
-		if (R_FAILED(rc)) {
-			Logger::logToFile("getHeapBase() svcGetInfo() failed.", rc);
-			return 0;
-		}
+    /**
+     * @brief Get the base address of the heap region.
+     * @return The heap base address.
+     */
+    u64 BaseCommands::getHeapBase() {
+        u64 heap_base = 0;
+        Result rc = svcGetInfo(&heap_base, InfoType_HeapRegionAddress, m_debugHandle, 0);
+        if (R_FAILED(rc)) {
+            Logger::logToFile("getHeapBase() svcGetInfo() failed.", rc);
+            return 0;
+        }
 
-		return heap_base;
-	}
+        return heap_base;
+    }
 
-	u64 BaseCommands::getTitleId() {
-		u64 titleId = 0;
-		Result rc = pminfoGetProgramId(&titleId, m_metaData.pid);
-		if (R_FAILED(rc)) {
-			Logger::logToFile("getTitleId() pminfoGetProgramId() failed.", rc);
-			return 0;
-		}
+    /**
+     * @brief Get the title ID of the current process.
+     * @return The title ID.
+     */
+    u64 BaseCommands::getTitleId() {
+        u64 titleId = 0;
+        Result rc = pminfoGetProgramId(&titleId, m_metaData.pid);
+        if (R_FAILED(rc)) {
+            Logger::logToFile("getTitleId() pminfoGetProgramId() failed.", rc);
+            return 0;
+        }
 
-		return titleId;
-	}
+        return titleId;
+    }
 
-	u64 BaseCommands::GetTitleVersion() {
-		Result rc = nsInitialize();
-		if (R_FAILED(rc)) {
-			Logger::logToFile("GetTitleVersion() nsInitialize() failed.", rc);
-			return 0;
-		}
+    /**
+     * @brief Get the title version of the current process.
+     * @return The title version.
+     */
+    u64 BaseCommands::GetTitleVersion() {
+        Result rc = nsInitialize();
+        if (R_FAILED(rc)) {
+            Logger::logToFile("GetTitleVersion() nsInitialize() failed.", rc);
+            return 0;
+        }
 
-		u64 titleV = 0;
-		s32 out = 0;
-		std::vector<NsApplicationContentMetaStatus> metaStatus(100U);
-		rc = nsListApplicationContentMetaStatus(m_metaData.titleID, 0, metaStatus.data(), sizeof(NsApplicationContentMetaStatus), &out);
-		nsExit();
-		if (R_FAILED(rc)) {
-			Logger::logToFile("GetTitleVersion() nsListApplicationContentMetaStatus() failed.", rc);
-			return 0;
-		}
+        u64 titleV = 0;
+        s32 out = 0;
+        std::vector<NsApplicationContentMetaStatus> metaStatus(100U);
+        rc = nsListApplicationContentMetaStatus(m_metaData.titleID, 0, metaStatus.data(), sizeof(NsApplicationContentMetaStatus), &out);
+        nsExit();
+        if (R_FAILED(rc)) {
+            Logger::logToFile("GetTitleVersion() nsListApplicationContentMetaStatus() failed.", rc);
+            return 0;
+        }
 
-		for (int i = 0; i < out; i++) {
-			if (titleV < metaStatus[i].version) {
-				titleV = metaStatus[i].version;
-			}
-		}
+        for (int i = 0; i < out; i++) {
+            if (titleV < metaStatus[i].version) {
+                titleV = metaStatus[i].version;
+            }
+        }
 
-		return (titleV / 0x10000);
-	}
+        return (titleV / 0x10000);
+    }
 
-	std::vector<NsApplicationControlData> BaseCommands::getNsApplicationControlData(u64& out) {
-		Result rc = nsInitialize();
-		if (R_FAILED(rc)) {
-			Logger::logToFile("getNsApplicationControlData() nsInitialize() failed.", rc);
-			return {};
-		}
+    /**
+     * @brief Get application control data for the current title.
+     * @param[out] out Output size.
+     * @return Vector of NsApplicationControlData.
+     */
+    std::vector<NsApplicationControlData> BaseCommands::getNsApplicationControlData(u64& out) {
+        Result rc = nsInitialize();
+        if (R_FAILED(rc)) {
+            Logger::logToFile("getNsApplicationControlData() nsInitialize() failed.", rc);
+            return {};
+        }
 
-		std::vector<NsApplicationControlData> buf(1);
-		rc = nsGetApplicationControlData(NsApplicationControlSource_Storage, m_metaData.titleID, buf.data(), sizeof(NsApplicationControlData), &out);
-		nsExit();
-		if (R_FAILED(rc)) {
-			Logger::logToFile("getNsApplicationControlData() nsGetApplicationControlData() failed.", rc);
-			return {};
-		}
+        std::vector<NsApplicationControlData> buf(1);
+        rc = nsGetApplicationControlData(NsApplicationControlSource_Storage, m_metaData.titleID, buf.data(), sizeof(NsApplicationControlData), &out);
+        nsExit();
+        if (R_FAILED(rc)) {
+            Logger::logToFile("getNsApplicationControlData() nsGetApplicationControlData() failed.", rc);
+            return {};
+        }
 
-		return buf;
-	}
+        return buf;
+    }
 
-	void BaseCommands::setScreen(const ViPowerState& state) {
-		ViDisplay temp_display;
-		Result rc = viOpenDisplay("Internal", &temp_display);
-		if (R_FAILED(rc)) {
-			Logger::logToFile("setScreen() viOpenDisplay() failed.", rc);
-			rc = viOpenDefaultDisplay(&temp_display);
-		}
+    /**
+     * @brief Set the display power state.
+     * @param state The desired power state.
+     */
+    void BaseCommands::setScreen(const ViPowerState& state) {
+        ViDisplay temp_display;
+        Result rc = viOpenDisplay("Internal", &temp_display);
+        if (R_FAILED(rc)) {
+            Logger::logToFile("setScreen() viOpenDisplay() failed.", rc);
+            rc = viOpenDefaultDisplay(&temp_display);
+        }
 
-		if (R_SUCCEEDED(rc)) {
-			rc = viSetDisplayPowerState(&temp_display, state);
-			svcSleepThread(1e+6l);
-			viCloseDisplay(&temp_display);
+        if (R_SUCCEEDED(rc)) {
+            rc = viSetDisplayPowerState(&temp_display, state);
+            svcSleepThread(1e+6l);
+            viCloseDisplay(&temp_display);
 
-			rc = lblInitialize();
-			if (R_FAILED(rc)) {
-				Logger::logToFile("setScreen() lblInitialize() failed.", rc);
-			}
+            rc = lblInitialize();
+            if (R_FAILED(rc)) {
+                Logger::logToFile("setScreen() lblInitialize() failed.", rc);
+            }
 
-			if (state == ViPowerState_On) {
-				lblSwitchBacklightOn(1ul);
-			}
-			else {
-				lblSwitchBacklightOff(1ul);
-			}
+            if (state == ViPowerState_On) {
+                lblSwitchBacklightOn(1ul);
+            } else {
+                lblSwitchBacklightOff(1ul);
+            }
 
-			lblExit();
-		}
-	}
+            lblExit();
+        }
+    }
 
-	bool BaseCommands::getIsProgramOpen(u64 id) {
-		u64 pid = 0;
-		Result rc = pmdmntGetProcessId(&pid, id);
-		return !(pid == 0 || R_FAILED(rc));
-	}
+    /**
+     * @brief Check if a program with the given ID is open.
+     * @param id The program ID.
+     * @return true if open, false otherwise.
+     */
+    bool BaseCommands::getIsProgramOpen(u64 id) {
+        u64 pid = 0;
+        Result rc = pmdmntGetProcessId(&pid, id);
+        return !(pid == 0 || R_FAILED(rc));
+    }
 
-	void BaseCommands::setKeySleepTime(const std::vector<std::string>& params) {
+    /**
+     * @brief Set the key press sleep time from parameters.
+     * @param params The parameters vector.
+     */
+    void BaseCommands::setKeySleepTime(const std::vector<std::string>& params) {
         if (params.size() < 2) {
             Logger::logToFile("setKeySleepTime() params size is less than 2.");
             return;
         }
 
-		keyPressSleepTime = Utils::parseStringToInt(params[1]);
-	}
+        keyPressSleepTime = Utils::parseStringToInt(params[1]);
+    }
 
-	void BaseCommands::setFingerDiameter(const std::vector<std::string>& params) {
+    /**
+     * @brief Set the finger diameter from parameters.
+     * @param params The parameters vector.
+     */
+    void BaseCommands::setFingerDiameter(const std::vector<std::string>& params) {
         if (params.size() < 2) {
             Logger::logToFile("setFingerDiameter() params size is less than 2.");
             return;
         }
 
-		fingerDiameter = Utils::parseStringToInt(params[1]);
-	}
+        fingerDiameter = Utils::parseStringToInt(params[1]);
+    }
 
-	void BaseCommands::setPollRate(const std::vector<std::string>& params) {
+    /**
+     * @brief Set the poll rate from parameters.
+     * @param params The parameters vector.
+     */
+    void BaseCommands::setPollRate(const std::vector<std::string>& params) {
         if (params.size() < 2) {
             Logger::logToFile("setPollRate() params size is less than 2.");
             return;
         }
 
-		pollRate = Utils::parseStringToInt(params[1]);
-	}
+        pollRate = Utils::parseStringToInt(params[1]);
+    }
 
-	void BaseCommands::setEnabledPA(const std::vector<std::string>& params) {
+    /**
+     * @brief Set whether PA is enabled from parameters.
+     * @param params The parameters vector.
+     */
+    void BaseCommands::setEnabledPA(const std::vector<std::string>& params) {
         if (params.size() < 2) {
             Logger::logToFile("setEnabledPA() params size is less than 2.");
             return;
         }
 
-		m_isEnabledPA = (bool)Utils::parseStringToInt(params[1]);
-	}
+        m_isEnabledPA = (bool)Utils::parseStringToInt(params[1]);
+    }
 
-	void BaseCommands::getGameIcon(std::vector<char>& buffer) {
-		u64 out = 0;
-		auto data = getNsApplicationControlData(out);
-		if (data.empty()) {
-			return;
-		}
+    /**
+     * @brief Get the game icon data.
+     * @param[out] buffer Output buffer for icon data.
+     */
+    void BaseCommands::getGameIcon(std::vector<char>& buffer) {
+        u64 out = 0;
+        auto data = getNsApplicationControlData(out);
+        if (data.empty()) {
+            return;
+        }
 
-		out -= sizeof(data[0].nacp);
-		buffer.resize(out);
-		std::copy(reinterpret_cast<const char*>(&data[0].icon),
-			reinterpret_cast<const char*>(&data[0].icon) + out,
-			buffer.begin());
-	}
+        out -= sizeof(data[0].nacp);
+        buffer.resize(out);
+        std::copy(reinterpret_cast<const char*>(&data[0].icon),
+            reinterpret_cast<const char*>(&data[0].icon) + out,
+            buffer.begin());
+    }
 
-	void BaseCommands::getGameVersion(std::vector<char>& buffer) {
-		u64 out = 0;
-		auto data = getNsApplicationControlData(out);
-		if (data.empty()) {
-			return;
-		}
+    /**
+     * @brief Get the game version string.
+     * @param[out] buffer Output buffer for version string.
+     */
+    void BaseCommands::getGameVersion(std::vector<char>& buffer) {
+        u64 out = 0;
+        auto data = getNsApplicationControlData(out);
+        if (data.empty()) {
+            return;
+        }
 
-		buffer.resize(sizeof(data[0].nacp.display_version));
-		std::copy(reinterpret_cast<const char*>(&data[0].nacp.display_version[0]),
-			reinterpret_cast<const char*>(&data[0].nacp.display_version[15]),
-			buffer.begin());
-	}
+        buffer.resize(sizeof(data[0].nacp.display_version));
+        std::copy(reinterpret_cast<const char*>(&data[0].nacp.display_version[0]),
+            reinterpret_cast<const char*>(&data[0].nacp.display_version[15]),
+            buffer.begin());
+    }
 
-	void BaseCommands::getGameRating(std::vector<char>& buffer) {
-		u64 out = 0;
-		auto data = getNsApplicationControlData(out);
-		if (data.empty()) {
-			return;
-		}
+    /**
+     * @brief Get the game rating.
+     * @param[out] buffer Output buffer for rating.
+     */
+    void BaseCommands::getGameRating(std::vector<char>& buffer) {
+        u64 out = 0;
+        auto data = getNsApplicationControlData(out);
+        if (data.empty()) {
+            return;
+        }
 
-		buffer.resize(sizeof(int));
-		std::copy(reinterpret_cast<const char*>(&data[0].nacp.rating_age[0]),
-			reinterpret_cast<const char*>(&data[0].nacp.rating_age[1] + sizeof(int)),
-			buffer.begin());
-	}
+        buffer.resize(sizeof(int));
+        std::copy(reinterpret_cast<const char*>(&data[0].nacp.rating_age[0]),
+            reinterpret_cast<const char*>(&data[0].nacp.rating_age[1] + sizeof(int)),
+            buffer.begin());
+    }
 
-	void BaseCommands::getGameAuthor(std::vector<char>& buffer) {
-		u64 out = 0;
-		auto data = getNsApplicationControlData(out);
-		if (data.empty()) {
-			return;
-		}
+    /**
+     * @brief Get the game author string.
+     * @param[out] buffer Output buffer for author string.
+     */
+    void BaseCommands::getGameAuthor(std::vector<char>& buffer) {
+        u64 out = 0;
+        auto data = getNsApplicationControlData(out);
+        if (data.empty()) {
+            return;
+        }
 
-		NacpLanguageEntry* lang = nullptr;	
-		Result rc = nacpGetLanguageEntry(&data[0].nacp, &lang);
-		if (R_FAILED(rc)) {
-			Logger::logToFile("getGameAuthor() nacpGetLanguageEntry() failed.", rc);
-			delete lang;
-			return;
-		}
+        NacpLanguageEntry* lang = nullptr;
+        Result rc = nacpGetLanguageEntry(&data[0].nacp, &lang);
+        if (R_FAILED(rc)) {
+            Logger::logToFile("getGameAuthor() nacpGetLanguageEntry() failed.", rc);
+            delete lang;
+            return;
+        }
 
-		buffer.resize(out);
-		std::copy(reinterpret_cast<const char*>(&lang->author[0]),
-			reinterpret_cast<const char*>(&lang->author[255]),
-			buffer.begin());
-		delete lang;
-	}
+        buffer.resize(out);
+        std::copy(reinterpret_cast<const char*>(&lang->author[0]),
+            reinterpret_cast<const char*>(&lang->author[255]),
+            buffer.begin());
+        delete lang;
+    }
 
-	void BaseCommands::getGameName(std::vector<char>& buffer) {
-		u64 out = 0;
-		auto data = getNsApplicationControlData(out);
-		if (data.empty()) {
-			return;
-		}
+    /**
+     * @brief Get the game name string.
+     * @param[out] buffer Output buffer for name string.
+     */
+    void BaseCommands::getGameName(std::vector<char>& buffer) {
+        u64 out = 0;
+        auto data = getNsApplicationControlData(out);
+        if (data.empty()) {
+            return;
+        }
 
-		NacpLanguageEntry* lang = nullptr;
-		Result rc = nacpGetLanguageEntry(&data[0].nacp, &lang);
-		if (R_FAILED(rc)) {
-			Logger::logToFile("getGameName() nacpGetLanguageEntry() failed.", rc);
-			delete lang;
-			return;
-		}
+        NacpLanguageEntry* lang = nullptr;
+        Result rc = nacpGetLanguageEntry(&data[0].nacp, &lang);
+        if (R_FAILED(rc)) {
+            Logger::logToFile("getGameName() nacpGetLanguageEntry() failed.", rc);
+            delete lang;
+            return;
+        }
 
-		buffer.resize(out);
-		std::copy(reinterpret_cast<const char*>(&lang->name[0]),
-			reinterpret_cast<const char*>(&lang->name[511]),
-			buffer.begin());
-		delete lang;
-	}
+        buffer.resize(out);
+        std::copy(reinterpret_cast<const char*>(&lang->name[0]),
+            reinterpret_cast<const char*>(&lang->name[511]),
+            buffer.begin());
+        delete lang;
+    }
 
-	void BaseCommands::getSwitchTime(std::vector<char>& buffer) {
-		time_t posix = 0;
-		buffer.resize(sizeof(posix));
+    /**
+     * @brief Get the current Switch time.
+     * @param[out] buffer Output buffer for time value.
+     */
+    void BaseCommands::getSwitchTime(std::vector<char>& buffer) {
+        time_t posix = 0;
+        buffer.resize(sizeof(posix));
 
-		Result rc = timeGetCurrentTime(TimeType_UserSystemClock, (u64*)&posix);
-		if (R_SUCCEEDED(rc)) {
-			std::tm* time = localtime(&posix);
-			if (time->tm_year >= 160 || time->tm_year < 100) { // >= 2060 || < 2000
-				Logger::Logger::logToFile("getSwitchTime() invalid time range, setting time to 2000-01-01.");
-				time->tm_year = 100;
-				time->tm_mon = 0;
-				time->tm_mday = 1;
+        Result rc = timeGetCurrentTime(TimeType_UserSystemClock, (u64*)&posix);
+        if (R_SUCCEEDED(rc)) {
+            std::tm* time = localtime(&posix);
+            if (time->tm_year >= 160 || time->tm_year < 100) { // >= 2060 || < 2000
+                Logger::Logger::logToFile("getSwitchTime() invalid time range, setting time to 2000-01-01.");
+                time->tm_year = 100;
+                time->tm_mon = 0;
+                time->tm_mday = 1;
 
-				rc = timeSetCurrentTime(TimeType_NetworkSystemClock, mktime(time));
-				if (R_SUCCEEDED(rc)) {
-					Logger::Logger::logToFile("getSwitchTime() timeSetCurrentTime() succeeded, set time to 2000-01-01.");
-					posix = mktime(time);
-				}
-				else {
-					Logger::logToFile("getSwitchTime() timeSetCurrentTime() failed.", rc);
-					posix = 0;
-				}
-			}
-			else {
-				posix = mktime(time);
-			}
-		}
-		else {
-			Logger::logToFile("getSwitchTime() timeGetCurrentTime(TimeType_UserSystemClock) failed.", rc);
-			posix = 0;
-		}
+                rc = timeSetCurrentTime(TimeType_NetworkSystemClock, mktime(time));
+                if (R_SUCCEEDED(rc)) {
+                    Logger::Logger::logToFile("getSwitchTime() timeSetCurrentTime() succeeded, set time to 2000-01-01.");
+                    posix = mktime(time);
+                } else {
+                    Logger::logToFile("getSwitchTime() timeSetCurrentTime() failed.", rc);
+                    posix = 0;
+                }
+            } else {
+                posix = mktime(time);
+            }
+        } else {
+            Logger::logToFile("getSwitchTime() timeGetCurrentTime(TimeType_UserSystemClock) failed.", rc);
+            posix = 0;
+        }
 
-		std::copy(reinterpret_cast<const char*>(&posix),
-			reinterpret_cast<const char*>(&posix) + sizeof(time_t),
-			buffer.begin());
-	}
+        std::copy(reinterpret_cast<const char*>(&posix),
+            reinterpret_cast<const char*>(&posix) + sizeof(time_t),
+            buffer.begin());
+    }
 
-	void BaseCommands::setSwitchTime(const std::vector<std::string>& params, std::vector<char>& buffer) {
-		bool success = false;
-		buffer.resize(sizeof(success));
+    /**
+     * @brief Set the Switch time.
+     * @param params Parameters containing the time value.
+     * @param[out] buffer Output buffer indicating success.
+     */
+    void BaseCommands::setSwitchTime(const std::vector<std::string>& params, std::vector<char>& buffer) {
+        bool success = false;
+        buffer.resize(sizeof(success));
 
-		time_t input = (time_t)std::stoull(params[0], NULL, 10);
-		std::tm* toSet = localtime(&input);
-		if (toSet->tm_year >= 100 || toSet->tm_year <= 160) { // >= 2000 || <= 2060
-			Result rc = timeSetCurrentTime(TimeType_NetworkSystemClock, input);
-			if (R_SUCCEEDED(rc)) {
-				success = true;
-			}
-			else {
-				Logger::logToFile("setSwitchTime() timeSetCurrentTime() failed.", rc);
-			}
-		}
-		else {
-			Logger::logToFile("setSwitchTime() invalid time range.");
-		}
+        time_t input = (time_t)std::stoull(params[0], NULL, 10);
+        std::tm* toSet = localtime(&input);
+        if (toSet->tm_year >= 100 || toSet->tm_year <= 160) { // >= 2000 || <= 2060
+            Result rc = timeSetCurrentTime(TimeType_NetworkSystemClock, input);
+            if (R_SUCCEEDED(rc)) {
+                success = true;
+            } else {
+                Logger::logToFile("setSwitchTime() timeSetCurrentTime() failed.", rc);
+            }
+        } else {
+            Logger::logToFile("setSwitchTime() invalid time range.");
+        }
 
-		std::copy(reinterpret_cast<const char*>(&success),
-			reinterpret_cast<const char*>(&success) + sizeof(bool),
-			buffer.begin());
-	}
+        std::copy(reinterpret_cast<const char*>(&success),
+            reinterpret_cast<const char*>(&success) + sizeof(bool),
+            buffer.begin());
+    }
 
-	void BaseCommands::resetSwitchTime(std::vector<char>& buffer) {
-		bool success = false;
-		buffer.resize(sizeof(success));
+    /**
+     * @brief Reset the Switch time using NTP if available.
+     * @param[out] buffer Output buffer indicating success.
+     */
+    void BaseCommands::resetSwitchTime(std::vector<char>& buffer) {
+        bool success = false;
+        buffer.resize(sizeof(success));
 
-		Result rc = setsysInitialize();
-		if (R_SUCCEEDED(rc)) {
-			bool sync;
-			rc = setsysIsUserSystemClockAutomaticCorrectionEnabled(&sync);
-			setsysExit();
+        Result rc = setsysInitialize();
+        if (R_SUCCEEDED(rc)) {
+            bool sync;
+            rc = setsysIsUserSystemClockAutomaticCorrectionEnabled(&sync);
+            setsysExit();
 
-			if (R_SUCCEEDED(rc) && isConnectedToInternet()) {
-				NTPClient ntpClient;
-				time_t ntp = ntpClient.getTime();
-				if (ntp != 0) {
-					rc = timeSetCurrentTime(TimeType_NetworkSystemClock, ntp);
-					if (R_SUCCEEDED(rc)) {
-						success = true;
-					}
-					else {
-						Logger::logToFile("resetSwitchTime() failed to set the network clock.", rc);
-					}
-				}
-			}
-			else {
-				Logger::logToFile("resetSwitchTime() failed to check if internet time sync is enabled.", rc);
-			}
-		}
-		else {
-			Logger::logToFile("resetSwitchTime() setsysInitialize() failed.", rc);
-		}
+            if (R_SUCCEEDED(rc) && isConnectedToInternet()) {
+                NTPClient ntpClient;
+                time_t ntp = ntpClient.getTime();
+                if (ntp != 0) {
+                    rc = timeSetCurrentTime(TimeType_NetworkSystemClock, ntp);
+                    if (R_SUCCEEDED(rc)) {
+                        success = true;
+                    } else {
+                        Logger::logToFile("resetSwitchTime() failed to set the network clock.", rc);
+                    }
+                }
+            } else {
+                Logger::logToFile("resetSwitchTime() failed to check if internet time sync is enabled.", rc);
+            }
+        } else {
+            Logger::logToFile("resetSwitchTime() setsysInitialize() failed.", rc);
+        }
 
-		std::copy(reinterpret_cast<const char*>(&success),
-			reinterpret_cast<const char*>(&success) + sizeof(bool),
-			buffer.begin());
-	}
+        std::copy(reinterpret_cast<const char*>(&success),
+            reinterpret_cast<const char*>(&success) + sizeof(bool),
+            buffer.begin());
+    }
 
-	bool BaseCommands::isConnectedToInternet() {
-		Result rc = nifmInitialize(NifmServiceType_User);
-		if (R_FAILED(rc)) {
-			Logger::logToFile("isConnectedToInternet() nifmInitialize() failed.", rc);
-			return false;
-		}
+    /**
+     * @brief Check if the system is connected to the internet.
+     * @return true if connected, false otherwise.
+     */
+    bool BaseCommands::isConnectedToInternet() {
+        Result rc = nifmInitialize(NifmServiceType_User);
+        if (R_FAILED(rc)) {
+            Logger::logToFile("isConnectedToInternet() nifmInitialize() failed.", rc);
+            return false;
+        }
 
-		NifmInternetConnectionStatus status;
-		rc = nifmGetInternetConnectionStatus(NULL, NULL, &status);
-		nifmExit();
-		if (R_FAILED(rc) || status != NifmInternetConnectionStatus_Connected) {
-			Logger::logToFile("isConnectedToInternet() nifmGetInternetConnectionStatus() failed or not connected.", rc);
-			return false;
-		}
+        NifmInternetConnectionStatus status;
+        rc = nifmGetInternetConnectionStatus(NULL, NULL, &status);
+        nifmExit();
+        if (R_FAILED(rc) || status != NifmInternetConnectionStatus_Connected) {
+            Logger::logToFile("isConnectedToInternet() nifmGetInternetConnectionStatus() failed or not connected.", rc);
+            return false;
+        }
 
-		return true;
-	}
+        return true;
+    }
 
-	bool BaseCommands::metaHasZeroValue(const MetaData& m) {
-		return (m.buildID == 0 || m.heap_base == 0 || m.main_nso_base == 0
-				|| m.pid == 0 || m.titleID == 0 || m.titleVersion == 0);
-	}
+    /**
+     * @brief Check if any value in MetaData is zero.
+     * @param m The MetaData struct.
+     * @return true if any value is zero, false otherwise.
+     */
+    bool BaseCommands::metaHasZeroValue(const MetaData& m) {
+        return (m.buildID == 0 || m.heap_base == 0 || m.main_nso_base == 0
+            || m.pid == 0 || m.titleID == 0 || m.titleVersion == 0);
+    }
 }

@@ -13,6 +13,12 @@ namespace CommandHandler {
 	using namespace ModuleBase;
 	using namespace MemoryCommands;
 
+	/**
+	 * @brief Handles a command by name and parameters, dispatching to the appropriate handler.
+	 * @param cmd The command name.
+	 * @param params The command parameters.
+	 * @return The result buffer.
+	 */
 	std::vector<char> Handler::HandleCommand(const std::string& cmd, const std::vector<std::string>& params) {
 		std::vector<char> buffer;
 		if (cmd.empty()) {
@@ -30,14 +36,13 @@ namespace CommandHandler {
 		if (!controllerInit && m_metaData.pid == 0) {
 			Logger::logToFile("HandleCommand pid is 0, calling initMetaData().");
 			initMetaData();
-            Logger::logToFile("Initialized MetaData.");
+			Logger::logToFile("Initialized MetaData.");
 		}
 
 		auto it = Handler::m_cmd.find(cmd);
 		if (it != Handler::m_cmd.end()) {
 			it->second(params, buffer);
-		}
-		else {
+		} else {
 			Logger::logToFile("HandleCommand cmd not found (" + cmd + ").");
 		}
 
@@ -46,6 +51,11 @@ namespace CommandHandler {
 
 	// All peek***, peek***Multi, poke***, etc. can be condensed to 1 command each using an enum, if desired.
 #pragma region Vision
+	/**
+	 * @brief Handle the "peek" command.
+	 * @param params Command parameters: [offset, size].
+	 * @param buffer Output buffer for result.
+	 */
 	void Handler::peek_cmd(const std::vector<std::string>& params, std::vector<char>& buffer) {
 		if (params.size() != 2) {
 			return;
@@ -56,6 +66,11 @@ namespace CommandHandler {
 		peek(m_metaData.heap_base + offset, size, buffer);
 	}
 
+	/**
+	 * @brief Handle the "peekMulti" command.
+	 * @param params Command parameters: [offset1, size1, offset2, size2, ...].
+	 * @param buffer Output buffer for result.
+	 */
 	void Handler::peekMulti_cmd(const std::vector<std::string>& params, std::vector<char>& buffer) {
 		if (params.size() < 2) {
 			return;
@@ -72,6 +87,11 @@ namespace CommandHandler {
 		peekMulti(offsets, sizes, buffer);
 	}
 
+	/**
+	 * @brief Handle the "peekAbsolute" command.
+	 * @param params Command parameters: [offset, size].
+	 * @param buffer Output buffer for result.
+	 */
 	void Handler::peekAbsolute_cmd(const std::vector<std::string>& params, std::vector<char>& buffer) {
 		if (params.size() != 2) {
 			return;
@@ -82,6 +102,11 @@ namespace CommandHandler {
 		peek(offset, size, buffer);
 	}
 
+	/**
+	 * @brief Handle the "peekAbsoluteMulti" command.
+	 * @param params Command parameters: [offset1, size1, offset2, size2, ...].
+	 * @param buffer Output buffer for result.
+	 */
 	void Handler::peekAbsoluteMulti_cmd(const std::vector<std::string>& params, std::vector<char>& buffer) {
 		if (params.size() < 2) {
 			return;
@@ -98,6 +123,11 @@ namespace CommandHandler {
 		peekMulti(offsets, sizes, buffer);
 	}
 
+	/**
+	 * @brief Handle the "peekMain" command.
+	 * @param params Command parameters: [offset, size].
+	 * @param buffer Output buffer for result.
+	 */
 	void Handler::peekMain_cmd(const std::vector<std::string>& params, std::vector<char>& buffer) {
 		if (params.size() != 2) {
 			return;
@@ -108,6 +138,11 @@ namespace CommandHandler {
 		peek(m_metaData.main_nso_base + offset, size, buffer);
 	}
 
+	/**
+	 * @brief Handle the "peekMainMulti" command.
+	 * @param params Command parameters: [offset1, size1, offset2, size2, ...].
+	 * @param buffer Output buffer for result.
+	 */
 	void Handler::peekMainMulti_cmd(const std::vector<std::string>& params, std::vector<char>& buffer) {
 		if (params.size() < 2) {
 			return;
@@ -124,6 +159,10 @@ namespace CommandHandler {
 		peekMulti(offsets, sizes, buffer);
 	}
 
+	/**
+	 * @brief Handle the "poke" command.
+	 * @param params Command parameters: [offset, data].
+	 */
 	void Handler::poke_cmd(const std::vector<std::string>& params) {
 		if (params.size() != 2) {
 			return;
@@ -134,6 +173,10 @@ namespace CommandHandler {
 		poke(m_metaData.heap_base + offset, buffer.size(), buffer);
 	}
 
+	/**
+	 * @brief Handle the "pokeAbsolute" command.
+	 * @param params Command parameters: [offset, data].
+	 */
 	void Handler::pokeAbsolute_cmd(const std::vector<std::string>& params) {
 		if (params.size() != 2) {
 			return;
@@ -144,6 +187,10 @@ namespace CommandHandler {
 		poke(offset, buffer.size(), buffer);
 	}
 
+	/**
+	 * @brief Handle the "pokeMain" command.
+	 * @param params Command parameters: [offset, data].
+	 */
 	void Handler::pokeMain_cmd(const std::vector<std::string>& params) {
 		if (params.size() != 2) {
 			return;
@@ -154,7 +201,11 @@ namespace CommandHandler {
 		poke(m_metaData.main_nso_base + offset, buffer.size(), buffer);
 	}
 
-	// pointerAll <first (main) jump> <additional jumps> <final jump in pointerexpr> 
+	/**
+	 * @brief Handle the "pointerAll" command.
+	 * @param params Command parameters: [mainJump, jump1, jump2, ..., finalJump].
+	 * @param buffer Output buffer for result.
+	 */
 	void Handler::pointerAll_cmd(const std::vector<std::string>& params, std::vector<char>& buffer) {
 		if (params.size() < 2) {
 			return;
@@ -177,14 +228,16 @@ namespace CommandHandler {
 		if (val != 0) {
 			val += finalJump;
 			std::memcpy(buffer.data(), &val, sizeof(val));
-		}
-		else {
+		} else {
 			Logger::logToFile("pointerAll_cmd() val is 0, not adding final jump.");
 		}
 	}
 
-	// pointerRelative <first (main) jump> <additional jumps> <final jump in pointerexpr> 
-	// returns offset relative to heap
+	/**
+	 * @brief Handle the "pointerRelative" command.
+	 * @param params Command parameters: [mainJump, jump1, jump2, ..., finalJump].
+	 * @param buffer Output buffer for result.
+	 */
 	void Handler::pointerRelative_cmd(const std::vector<std::string>& params, std::vector<char>& buffer) {
 		if (params.size() < 2) {
 			return;
@@ -209,14 +262,16 @@ namespace CommandHandler {
 			val += finalJump;
 			val -= m_metaData.heap_base;
 			std::memcpy(buffer.data(), &val, sizeof(val));
-		}
-		else {
+		} else {
 			Logger::logToFile("pointerRelative_cmd() val is 0, not adding final jump.");
 		}
 	}
 
-	// pointerPeek <amount of bytes in hex or dec> <first (main) jump> <additional jumps> <final jump in pointerexpr>
-	// warning: no validation
+	/**
+	 * @brief Handle the "pointerPeek" command.
+	 * @param params Command parameters: [size, mainJump, jump1, ..., finalJump].
+	 * @param buffer Output buffer for result.
+	 */
 	void Handler::pointerPeek_cmd(const std::vector<std::string>& params, std::vector<char>& buffer) {
 		if (params.size() < 3) {
 			return;
@@ -244,9 +299,11 @@ namespace CommandHandler {
 		peek(val, size, buffer);
 	}
 
-	// pointerPeekMulti <amount of bytes in hex or dec> <first (main) jump> <additional jumps> <final jump in pointerexpr> split by asterisks (*)
-	// warning: no validation
-	// Untested
+	/**
+	 * @brief Handle the "pointerPeekMulti" command.
+	 * @param params Command parameters: multiple pointer expressions separated by "*".
+	 * @param buffer Output buffer for result.
+	 */
 	void Handler::pointerPeekMulti_cmd(const std::vector<std::string>& params, std::vector<char>& buffer) {
 		if (params.size() < 3) {
 			return;
@@ -263,8 +320,7 @@ namespace CommandHandler {
 					groups.push_back(currentGroup);
 					currentGroup.clear();
 				}
-			}
-			else {
+			} else {
 				currentGroup.push_back(param);
 			}
 		}
@@ -306,8 +362,10 @@ namespace CommandHandler {
 		}
 	}
 
-	// pointerPoke <data to be sent> <first (main) jump> <additional jumps> <final jump in pointerexpr>
-	// warning: no validation
+	/**
+	 * @brief Handle the "pointerPoke" command.
+	 * @param params Command parameters: [data, mainJump, jump1, ..., finalJump].
+	 */
 	void Handler::pointerPoke_cmd(const std::vector<std::string>& params) {
 		if (params.size() < 3) {
 			return;
@@ -336,6 +394,10 @@ namespace CommandHandler {
 	}
 #pragma endregion Various memory read/write commands.
 #pragma region Controller
+	/**
+	 * @brief Handle the "click" command.
+	 * @param params Command parameters: [buttonName].
+	 */
 	void Handler::click_cmd(const std::vector<std::string>& params) {
 		if (params.size() != 1) {
 			return;
@@ -344,6 +406,10 @@ namespace CommandHandler {
 		click((HidNpadButton)parseStringToButton(params.front()));
 	}
 
+	/**
+	 * @brief Handle the "press" command.
+	 * @param params Command parameters: [buttonName].
+	 */
 	void Handler::press_cmd(const std::vector<std::string>& params) {
 		if (params.size() != 1) {
 			return;
@@ -353,6 +419,10 @@ namespace CommandHandler {
 		press(key);
 	}
 
+	/**
+	 * @brief Handle the "release" command.
+	 * @param params Command parameters: [buttonName].
+	 */
 	void Handler::release_cmd(const std::vector<std::string>& params) {
 		if (params.size() != 1) {
 			return;
@@ -362,6 +432,10 @@ namespace CommandHandler {
 		release(key);
 	}
 
+	/**
+	 * @brief Handle the "setStick" command.
+	 * @param params Command parameters: [stickName, dx, dy].
+	 */
 	void Handler::setStick_cmd(const std::vector<std::string>& params) {
 		if (params.size() != 3) {
 			return;
@@ -375,24 +449,25 @@ namespace CommandHandler {
 		int dxVal = std::stoull(params[1], NULL, 0);
 		if (dxVal > JOYSTICK_MAX) {
 			dxVal = JOYSTICK_MAX;
-		}
-		else if (dxVal < JOYSTICK_MIN) {
+		} else if (dxVal < JOYSTICK_MIN) {
 			dxVal = JOYSTICK_MIN;
 		}
-		
+
 
 		int dyVal = std::stoull(params[2], NULL, 0);
 		if (dyVal > JOYSTICK_MAX) {
 			dyVal = JOYSTICK_MAX;
-		}
-		else if (dyVal < JOYSTICK_MIN) {
+		} else if (dyVal < JOYSTICK_MIN) {
 			dyVal = JOYSTICK_MIN;
 		}
 
 		setStickState((Joystick)stick, dxVal, dyVal);
 	}
 
-	//touch followed by arrayof: <x in the range 0-1280> <y in the range 0-720>. Array is sequential taps, not different fingers. Functions in its own thread, but will not allow the call again while running. tapcount * pollRate * 2
+	/**
+	 * @brief Handle the "touch" command.
+	 * @param params Command parameters: [x1, y1, x2, y2, ...].
+	 */
 	void Handler::touch_cmd(const std::vector<std::string>& params) {
 		if (params.size() < 2) {
 			return;
@@ -401,8 +476,7 @@ namespace CommandHandler {
 		u32 count = params.size() / 2;
 		std::vector<HidTouchState> state(count);
 		u32 j = 0;
-		for (int i = 0; i < count; i++)
-		{
+		for (int i = 0; i < count; i++) {
 			state[i].diameter_x = state[i].diameter_y = fingerDiameter;
 			state[i].x = (u32)Utils::parseStringToInt(params[j++]);
 			state[i].y = (u32)Utils::parseStringToInt(params[j++]);
@@ -411,7 +485,10 @@ namespace CommandHandler {
 		touch(state, count, pollRate * 1e+6L, false);
 	}
 
-	//touchHold <x in the range 0-1280> <y in the range 0-720> <time in milliseconds (must be at least 15ms)>. Functions in its own thread, but will not allow the call again while running. pollRate + holdtime
+	/**
+	 * @brief Handle the "touchHold" command.
+	 * @param params Command parameters: [x, y, timeMs].
+	 */
 	void Handler::touchHold_cmd(const std::vector<std::string>& params) {
 		if (params.size() < 3) {
 			return;
@@ -425,7 +502,10 @@ namespace CommandHandler {
 		touch(state, 1, time * 1e+6L, false);
 	}
 
-	//touchDraw followed by arrayof: <x in the range 0-1280> <y in the range 0-720>. Array is vectors of where finger moves to, then removes the finger. Functions in its own thread, but will not allow the call again while running. (vectorcount * pollRate * 2) + pollRate
+	/**
+	 * @brief Handle the "touchDraw" command.
+	 * @param params Command parameters: [x1, y1, x2, y2, ...].
+	 */
 	void Handler::touchDraw_cmd(const std::vector<std::string>& params) {
 		if (params.size() < 2) {
 			return;
@@ -434,8 +514,7 @@ namespace CommandHandler {
 		u32 count = params.size() / 2;
 		std::vector<HidTouchState> state(count);
 		u32 j = 0;
-		for (int i = 0; i < count; i++)
-		{
+		for (int i = 0; i < count; i++) {
 			state[i].diameter_x = state[i].diameter_y = fingerDiameter;
 			state[i].x = (u32)Utils::parseStringToInt(params[j++]);
 			state[i].y = (u32)Utils::parseStringToInt(params[j++]);
@@ -444,8 +523,10 @@ namespace CommandHandler {
 		touch(state, count, pollRate * 1e+6L * 2, true);
 	}
 
-	//key followed by arrayof: <HidKeyboardKey> to be pressed in sequential order
-	//thank you Red (hp3721) for this functionality
+	/**
+	 * @brief Handle the "key" command.
+	 * @param params Command parameters: [key1, key2, ...].
+	 */
 	void Handler::key_cmd(const std::vector<std::string>& params) {
 		if (params.size() < 1) {
 			return;
@@ -453,8 +534,7 @@ namespace CommandHandler {
 
 		u64 count = params.size();
 		std::vector<HiddbgKeyboardAutoPilotState> keystates(count);
-		for (int i = 0; i < count; i++)
-		{
+		for (int i = 0; i < count; i++) {
 			u8 key = (u8)Utils::parseStringToInt(params[i]);
 			if (key >= HidKeyboardKey_A && key <= HidKeyboardKey_RightGui) {
 				keystates[i].keys[key / 64] = 1UL << key;
@@ -465,7 +545,10 @@ namespace CommandHandler {
 		key(keystates, count);
 	}
 
-	//keyMod followed by arrayof: <HidKeyboardKey> <HidKeyboardModifier>(without the bitfield shift) to be pressed in sequential order
+	/**
+	 * @brief Handle the "keyMod" command.
+	 * @param params Command parameters: [key1, mod1, key2, mod2, ...].
+	 */
 	void Handler::keyMod_cmd(const std::vector<std::string>& params) {
 		if (params.size() < 2) {
 			return;
@@ -474,8 +557,7 @@ namespace CommandHandler {
 		u64 count = params.size() / 2;
 		std::vector<HiddbgKeyboardAutoPilotState> keystates(count);
 		int j = 0;
-		for (int i = 0; i < count; i++)
-		{
+		for (int i = 0; i < count; i++) {
 			u8 key = (u8)Utils::parseStringToInt(params[j++]);
 			if (key >= HidKeyboardKey_A && key <= HidKeyboardKey_RightGui) {
 				keystates[i].keys[key / 64] = 1UL << key;
@@ -486,7 +568,10 @@ namespace CommandHandler {
 		key(keystates, count);
 	}
 
-	//keyMulti followed by arrayof: <HidKeyboardKey> to be pressed at the same time.
+	/**
+	 * @brief Handle the "keyMulti" command.
+	 * @param params Command parameters: [key1, key2, ...].
+	 */
 	void Handler::keyMulti_cmd(const std::vector<std::string>& params) {
 		if (params.size() < 1) {
 			return;
@@ -494,8 +579,7 @@ namespace CommandHandler {
 
 		u64 count = params.size();
 		std::vector<HiddbgKeyboardAutoPilotState> keystates(count);
-		for (int i = 0; i < count; i++)
-		{
+		for (int i = 0; i < count; i++) {
 			u8 key = (u8)Utils::parseStringToInt(params[i]);
 			if (key >= HidKeyboardKey_A && key <= HidKeyboardKey_RightGui) {
 				keystates[0].keys[key / 64] |= 1UL << key;
@@ -505,16 +589,24 @@ namespace CommandHandler {
 		key(keystates, count);
 	}
 
+	/**
+	 * @brief Handle the "detachController" command.
+	 */
 	void Handler::detachController_cmd() {
 		detachController();
 	}
 
-	void Handler::cqControllerState_cmd(const std::vector<std::string>& params, std::vector<char>& buffer) {
+	/**
+	 * @brief Handle the "cqControllerState" command.
+	 * @param params Command parameters: [hexString].
+	 * @param buffer Output buffer for result.
+	 */
+	void Handler::cqControllerState_cmd(const std::vector<std::string>& params) {
 		if (params.size() != 1) {
 			return;
 		}
 
-		ControllerCommand cmd {};
+		ControllerCommand cmd{};
 		try {
 			cmd.parseFromHex(params[0].data());
 		} catch (...) {
@@ -522,22 +614,37 @@ namespace CommandHandler {
 			return;
 		}
 
-        cqEnqueueCommand(cmd);
+		cqEnqueueCommand(cmd);
 	}
 
+	/**
+	 * @brief Handle the "cqCancel" command.
+	 */
 	void Handler::cqCancel_cmd() {
-        cqCancel();
+		cqCancel();
 	}
 
+	/**
+	 * @brief Handle the "cqReplaceOnNext" command.
+	 */
 	void Handler::cqReplaceOnNext_cmd() {
-        cqReplaceOnNext();
+		cqReplaceOnNext();
 	}
 
+	/**
+	 * @brief Returns whether the controller thread is running.
+	 * @return True if running, false otherwise.
+	 */
 	bool Handler::getIsRunningPA() {
-        return m_ccThreadRunning.load();
+		return m_ccThreadRunning.load();
 	}
 #pragma endregion Various controller commands.
 #pragma region Base
+	/**
+	 * @brief Handle the "game" command.
+	 * @param params Command parameters: [subcommand].
+	 * @param buffer Output buffer for result.
+	 */
 	void Handler::game_cmd(const std::vector<std::string>& params, std::vector<char>& buffer) {
 		if (params.size() != 1) {
 			return;
@@ -546,12 +653,15 @@ namespace CommandHandler {
 		auto it = BaseCommands::m_game.find(params.front());
 		if (it != BaseCommands::m_game.end()) {
 			it->second(buffer);
-		}
-		else {
+		} else {
 			Logger::logToFile("game_cmd() subcommand not found.");
 		}
 	}
 
+	/**
+	 * @brief Handle the "getTitleID" command.
+	 * @param buffer Output buffer for result.
+	 */
 	void Handler::getTitleID_cmd(std::vector<char>& buffer) {
 		buffer.resize(sizeof(m_metaData.titleID));
 		std::copy(reinterpret_cast<const char*>(&m_metaData.titleID),
@@ -559,6 +669,10 @@ namespace CommandHandler {
 			buffer.begin());
 	}
 
+	/**
+	 * @brief Handle the "getBuildID" command.
+	 * @param buffer Output buffer for result.
+	 */
 	void Handler::getBuildID_cmd(std::vector<char>& buffer) {
 		buffer.resize(sizeof(m_metaData.buildID));
 		std::copy(reinterpret_cast<const char*>(&m_metaData.buildID),
@@ -566,6 +680,10 @@ namespace CommandHandler {
 			buffer.begin());
 	}
 
+	/**
+	 * @brief Handle the "getTitleVersion" command.
+	 * @param buffer Output buffer for result.
+	 */
 	void Handler::getTitleVersion_cmd(std::vector<char>& buffer) {
 		buffer.resize(sizeof(m_metaData.titleVersion));
 		std::copy(reinterpret_cast<const char*>(&m_metaData.titleVersion),
@@ -573,6 +691,10 @@ namespace CommandHandler {
 			buffer.begin());
 	}
 
+	/**
+	 * @brief Handle the "getSystemLanguage" command.
+	 * @param buffer Output buffer for result.
+	 */
 	void Handler::getSystemLanguage_cmd(std::vector<char>& buffer) {
 		setInitialize();
 		u64 languageCode = 0;
@@ -587,6 +709,11 @@ namespace CommandHandler {
 			buffer.begin());
 	}
 
+	/**
+	 * @brief Handle the "isProgramRunning" command.
+	 * @param params Command parameters: [programID].
+	 * @param buffer Output buffer for result.
+	 */
 	void Handler::isProgramRunning_cmd(const std::vector<std::string>& params, std::vector<char>& buffer) {
 		if (params.size() != 1) {
 			return;
@@ -601,6 +728,10 @@ namespace CommandHandler {
 			buffer.begin());
 	}
 
+	/**
+	 * @brief Handle the "pixelPeek" command.
+	 * @param buffer Output buffer for result.
+	 */
 	void Handler::pixelPeek_cmd(std::vector<char>& buffer) {
 		try {
 			u64 outSize = 0;
@@ -612,21 +743,30 @@ namespace CommandHandler {
 			}
 
 			buffer.resize(outSize);
-		}
-		catch (const std::bad_alloc& e) {
+		} catch (const std::bad_alloc& e) {
 			Logger::logToFile("std::bad_alloc caught in pixelPeek_cmd(): " + std::string(e.what()));
 			throw;
 		}
 	}
 
+	/**
+	 * @brief Handle the "screenOn" command.
+	 */
 	void Handler::screenOn_cmd() {
 		setScreen(ViPowerState_On);
 	}
 
+	/**
+	 * @brief Handle the "screenOff" command.
+	 */
 	void Handler::screenOff_cmd() {
 		setScreen(ViPowerState_Off);
 	}
 
+	/**
+	 * @brief Handle the "getMainNsoBase" command.
+	 * @param buffer Output buffer for result.
+	 */
 	void Handler::getMainNsoBase_cmd(std::vector<char>& buffer) {
 		buffer.resize(sizeof(m_metaData.main_nso_base));
 		std::copy(reinterpret_cast<const char*>(&m_metaData.main_nso_base),
@@ -634,6 +774,10 @@ namespace CommandHandler {
 			buffer.begin());
 	}
 
+	/**
+	 * @brief Handle the "getHeapBase" command.
+	 * @param buffer Output buffer for result.
+	 */
 	void Handler::getHeapBase_cmd(std::vector<char>& buffer) {
 		buffer.resize(sizeof(m_metaData.heap_base));
 		std::copy(reinterpret_cast<const char*>(&m_metaData.heap_base),
@@ -641,6 +785,10 @@ namespace CommandHandler {
 			buffer.begin());
 	}
 
+	/**
+	 * @brief Handle the "charge" command.
+	 * @param buffer Output buffer for result.
+	 */
 	void Handler::charge_cmd(std::vector<char>& buffer) {
 		Result rc = psmInitialize();
 		if (R_FAILED(rc)) {
@@ -663,11 +811,19 @@ namespace CommandHandler {
 	}
 #pragma endregion Various base libnx commands.
 #pragma region Misc
+	/**
+	 * @brief Handle the "getVersion" command.
+	 * @param buffer Output buffer for result.
+	 */
 	void Handler::getVersion_cmd(std::vector<char>& buffer) {
 		auto sbb = getSbbVersion();
 		buffer.insert(buffer.begin(), sbb.begin(), sbb.end());
 	}
 
+	/**
+	 * @brief Handle the "configure" command.
+	 * @param params Command parameters: [name, value].
+	 */
 	void Handler::configure_cmd(const std::vector<std::string>& params) {
 		if (params.size() != 2) {
 			return;
@@ -681,16 +837,24 @@ namespace CommandHandler {
 		auto it = BaseCommands::m_configure.find(params.front());
 		if (it != BaseCommands::m_configure.end()) {
 			it->second(params);
-		}
-		else {
+		} else {
 			Logger::logToFile("configure_cmd() subfunction not found.");
 		}
 	}
 
+	/**
+	 * @brief Returns whether PA is enabled.
+	 * @return True if enabled, false otherwise.
+	 */
 	bool Handler::getIsEnabledPA() {
 		return BaseCommands::getIsEnabledPA();
 	}
 
+	/**
+	 * @brief Handle the "ping" command.
+	 * @param params Command parameters: [value].
+	 * @param buffer Output buffer for result.
+	 */
 	void Handler::ping_cmd(const std::vector<std::string>& params, std::vector<char>& buffer) {
 		if (params.size() != 1) {
 			return;
@@ -704,14 +868,23 @@ namespace CommandHandler {
 			value = std::to_string(0);
 		}
 
-        buffer.insert(buffer.begin(), value.begin(), value.end());
+		buffer.insert(buffer.begin(), value.begin(), value.end());
 	}
 #pragma endregion Miscellaneous commands that get/set parameters.
 #pragma region Time
+	/**
+	 * @brief Handle the "getSwitchTime" command.
+	 * @param buffer Output buffer for result.
+	 */
 	void Handler::getSwitchTime_cmd(std::vector<char>& buffer) {
 		getSwitchTime(buffer);
 	}
 
+	/**
+	 * @brief Handle the "setSwitchTime" command.
+	 * @param params Command parameters: [time].
+	 * @param buffer Output buffer for result.
+	 */
 	void Handler::setSwitchTime_cmd(const std::vector<std::string>& params, std::vector<char>& buffer) {
 		if (params.size() != 1) {
 			return;
@@ -720,6 +893,10 @@ namespace CommandHandler {
 		setSwitchTime(params, buffer);
 	}
 
+	/**
+	 * @brief Handle the "resetSwitchTime" command.
+	 * @param buffer Output buffer for result.
+	 */
 	void Handler::resetSwitchTime_cmd(std::vector<char>& buffer) {
 		resetSwitchTime(buffer);
 	}

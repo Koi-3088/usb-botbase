@@ -52,7 +52,7 @@ namespace CommandHandler {
 			REGISTER_CMD_PARAMS("keyMulti", keyMulti_cmd);
 			REGISTER_CMD_NOARGS("detachController", detachController_cmd);
 
-			REGISTER_CMD("cqControllerState", cqControllerState_cmd);
+			REGISTER_CMD_PARAMS("cqControllerState", cqControllerState_cmd);
 			REGISTER_CMD_NOARGS("cqCancel", cqCancel_cmd);
 			REGISTER_CMD_NOARGS("cqReplaceOnNext", cqReplaceOnNext_cmd);
 
@@ -116,7 +116,7 @@ namespace CommandHandler {
 		void keyMod_cmd(const std::vector<std::string>& params);
 		void keyMulti_cmd(const std::vector<std::string>& params);
 
-		void cqControllerState_cmd(const std::vector<std::string>& params, std::vector<char>& buffer);
+		void cqControllerState_cmd(const std::vector<std::string>& params);
 		void cqCancel_cmd();
 		void cqReplaceOnNext_cmd();
 #pragma endregion Various controller commands.
