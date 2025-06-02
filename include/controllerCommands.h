@@ -13,7 +13,7 @@
 namespace ControllerCommands {
 	class Controller : protected virtual ModuleBase::BaseCommands {
 	public:
-        Controller() : BaseCommands() {
+        Controller() : BaseCommands(), m_ccQueue(16) {
            m_workMem = (u8*)aligned_alloc(0x1000, m_workMem_size);
            m_controllerHandle = { 0 };
            m_controllerDevice = { 0 };
@@ -173,11 +173,64 @@ namespace ControllerCommands {
 			u8 state;
 		};
 
+		struct ControllerQueuePA {
+            ControllerQueuePA(size_t size) : m_maxSize(size) {}
+
+		public:
+            bool full() const {
+                return m_queue.size() >= m_maxSize;
+            }
+
+            bool empty() const {
+                return m_queue.empty();
+            }
+
+            void push(const ControllerCommand& cmd) {
+                if (full()) {
+                    throw std::runtime_error("ControllerQueuePA is full");
+                }
+
+                m_queue.push(cmd);
+            }
+
+            ControllerCommand front() const {
+                if (empty()) {
+                    throw std::runtime_error("ControllerQueuePA is empty");
+                }
+
+                return m_queue.front();
+            }
+
+            ControllerCommand pop_front() {
+                if (empty()) {
+                    throw std::runtime_error("ControllerQueuePA is empty");
+                }
+
+                ControllerCommand cmd = m_queue.front();
+                m_queue.pop();
+                return cmd;
+            }
+
+            void clear() {
+                while (!empty()) {
+                    m_queue.pop();
+                }
+            }
+
+            size_t size() const {
+                return m_queue.size();
+            }
+
+        private:
+            size_t m_maxSize;
+            std::queue<ControllerCommand> m_queue;
+		};
+
 		static std::unordered_map<std::string, int> m_button;
 		static std::unordered_map<std::string, int> m_stick;
 
 		std::thread m_ccThread;
-		std::queue<ControllerCommand> m_ccQueue;
+		ControllerQueuePA m_ccQueue;
 		std::mutex m_ccMutex;
 		std::condition_variable m_ccCv;
 

@@ -214,7 +214,7 @@ namespace ControllerCommands {
                     seqnum = 0;
                     m_nextStateChange = WallClock::max();
                 } else {
-                    m_controllerCommand = m_ccQueue.front();
+                    m_controllerCommand = m_ccQueue.pop_front();
                     currentState = m_controllerCommand.state;
                     if (m_nextStateChange == WallClock::min()) {
                         m_nextStateChange = now;
@@ -230,7 +230,6 @@ namespace ControllerCommands {
 
                     seqnum = m_controllerCommand.seqnum;
                     m_nextStateChange += std::chrono::milliseconds(m_controllerCommand.milliseconds);
-                    m_ccQueue.pop();
                 }
 
                 buffer.clear();
@@ -276,12 +275,11 @@ namespace ControllerCommands {
     void Controller::cqEnqueueCommand(const ControllerCommand& cmd) {
         //Logger::logToFile("cqEnqueueCommand() called with seqnum: " + std::to_string(cmd.seqnum));
         std::unique_lock<std::mutex> lock(m_ccMutex);
-        m_ccCv.wait(lock, [&]() { return m_nextStateChange == WallClock::max() || m_replaceOnNext; });
+        m_ccCv.wait(lock, [&]() { return !m_ccQueue.full() || m_replaceOnNext; });
         if (m_replaceOnNext) {
             //Logger::logToFile("cqEnqueueCommand() replacing current command with seqnum: " + std::to_string(cmd.seqnum));
             m_replaceOnNext = false;
-            std::queue<ControllerCommand> tmpQueue;
-            std::swap(tmpQueue, m_ccQueue);
+            m_ccQueue.clear();
             m_nextStateChange = WallClock::min();
         } else if (m_nextStateChange == WallClock::max()) {
             //Logger::logToFile("cqEnqueueCommand() setting next state change to min.");
