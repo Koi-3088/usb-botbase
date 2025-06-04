@@ -40,6 +40,11 @@ namespace SocketConnection {
 		while (m_tcp.clientFd == -1) {
 			m_tcp.clientFd = accept(m_tcp.serverFd, (struct sockaddr*)&clientAddr, &clientSize);
 			if (m_tcp.clientFd == -1) {
+				m_tcp.serverFd = setupServerSocket();
+				if (m_tcp.serverFd < 0) {
+					Logger::logToFile("Socket error.");
+					return false;
+				}
 				svcSleepThread(1e+6L);
 			}
 		}
