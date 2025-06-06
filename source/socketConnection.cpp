@@ -68,6 +68,7 @@ namespace SocketConnection {
 						m_senderQueue.pop();
 						lock.unlock();
 
+                        Logger::logToFile("Sending data to client: " + std::string(buffer.data(), buffer.size()));
 						int sent = SocketConnection::sendData(buffer, buffer.size(), m_tcp.clientFd);
 						if (sent <= 0) {
 							m_error = true;
@@ -230,6 +231,7 @@ namespace SocketConnection {
 				size_t pos;
 				while ((pos = persistentBuffer.find("\r\n")) != std::string::npos) {
 					commands.push_back(persistentBuffer.substr(0, pos));
+                    Logger::logToFile("Received command: " + commands.back());
 					persistentBuffer.erase(0, pos + 2);
 				}
 

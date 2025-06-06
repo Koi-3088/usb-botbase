@@ -32,11 +32,13 @@ namespace CommandHandler {
 			Logger::logToFile("HandleCommand param " + std::to_string(i) + ": " + params.at(i));
 		}
 
-		bool controllerInit = params.size() >= 1 && cmd == "click" && params[0] == "UNUSED";
-		if (!controllerInit && m_metaData.pid == 0) {
-			Logger::logToFile("HandleCommand pid is 0, calling initMetaData().");
-			initMetaData();
-			Logger::logToFile("Initialized MetaData.");
+		if (!getIsEnabledPA()) {
+			// Need to either remove this or add a dummy click again due to HOME button shenanigans.
+			bool controllerInit = params.size() >= 1 && cmd == "click" && params[0] == "UNUSED";
+			if (!controllerInit && m_metaData.pid == 0) {
+				Logger::logToFile("HandleCommand pid is 0, calling initMetaData().");
+				initMetaData();
+			}
 		}
 
 		auto it = Handler::m_cmd.find(cmd);

@@ -257,7 +257,7 @@ namespace ControllerCommands {
                     cqControllerState(m_controllerCommand, buffer);
                     m_controllerCommand.seqnum = 0;
                     if (!buffer.empty()) {
-                        //Logger::logToFile("commandLoopPA() sending empty state change.");
+                        Logger::logToFile("commandLoopPA() sending empty state change.");
                         std::lock_guard<std::mutex> sendLock(senderMutex);
                         senderQueue.push(buffer);
                         senderCv.notify_one();
@@ -273,7 +273,7 @@ namespace ControllerCommands {
 
                     cqControllerState(m_controllerCommand, buffer);
                     if (!buffer.empty()) {
-                        //Logger::logToFile("commandLoopPA() sending state change with seqnum: " + std::to_string(m_controllerCommand.seqnum));
+                        Logger::logToFile("commandLoopPA() sending state change with seqnum: " + std::to_string(m_controllerCommand.seqnum));
                         std::lock_guard<std::mutex> sendLock(senderMutex);
                         senderQueue.push(buffer);
                         senderCv.notify_one();
@@ -307,7 +307,7 @@ namespace ControllerCommands {
      * @param[out] buffer Output buffer for response.
      */
     void Controller::cqControllerState(const ControllerCommand& cmd, std::vector<char>& buffer) {
-        //Logger::logToFile("cqControllerState() called with seqnum: " + std::to_string(cmd.seqnum));
+        Logger::logToFile("cqControllerState() called with seqnum: " + std::to_string(cmd.seqnum));
         initController();
         m_hiddbgHdlsState.buttons = cmd.state.buttons;
         m_hiddbgHdlsState.analog_stick_l.x = cmd.state.left_joystick_x;
@@ -321,7 +321,7 @@ namespace ControllerCommands {
         }
 
         if (cmd.seqnum != 0) {
-            //Logger::logToFile("cqControllerState() command finished with seqnum: " + std::to_string(cmd.seqnum));
+            Logger::logToFile("cqControllerState() command finished with seqnum: " + std::to_string(cmd.seqnum));
             std::string res = "cqCommandFinished " + std::to_string(cmd.seqnum) + "\r\n";
             buffer.insert(buffer.begin(), res.begin(), res.end());
         }
@@ -332,20 +332,20 @@ namespace ControllerCommands {
      * @param cmd The controller command.
      */
     void Controller::cqEnqueueCommand(const ControllerCommand& cmd) {
-        //Logger::logToFile("cqEnqueueCommand() called with seqnum: " + std::to_string(cmd.seqnum));
         std::unique_lock<std::mutex> lock(m_ccMutex);
+        Logger::logToFile("cqEnqueueCommand() called with seqnum: " + std::to_string(cmd.seqnum));
         m_ccCv.wait(lock, [&]() { return !m_ccQueue.full() || m_replaceOnNext; });
         if (m_replaceOnNext) {
-            //Logger::logToFile("cqEnqueueCommand() replacing current command with seqnum: " + std::to_string(cmd.seqnum));
+            Logger::logToFile("cqEnqueueCommand() replacing current command with seqnum: " + std::to_string(cmd.seqnum));
             m_replaceOnNext = false;
             m_ccQueue.clear();
             m_nextStateChange = WallClock::min();
         } else if (m_nextStateChange == WallClock::max()) {
-            //Logger::logToFile("cqEnqueueCommand() setting next state change to min.");
+            Logger::logToFile("cqEnqueueCommand() setting next state change to min.");
             m_nextStateChange = WallClock::min();
         }
 
-        //Logger::logToFile("cqEnqueueCommand() pushing command with seqnum: " + std::to_string(cmd.seqnum));
+        Logger::logToFile("cqEnqueueCommand() pushing command with seqnum: " + std::to_string(cmd.seqnum));
         m_ccQueue.push(cmd);
         m_ccCv.notify_all();
     }
