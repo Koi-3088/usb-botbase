@@ -214,7 +214,7 @@ namespace ControllerCommands {
     }
 
     /**
-     * @brief Start the controller thread for processing commands.
+     * @brief Start the PA controller thread for processing commands.
      * @param senderQueue Queue for sending data.
      * @param senderMutex Mutex for the sender queue.
      * @param senderCv Condition variable for the sender queue.
@@ -233,7 +233,7 @@ namespace ControllerCommands {
     }
 
     /**
-     * @brief Main loop for processing controller commands in a thread.
+     * @brief Main loop for processing PA controller commands in a thread.
      * @param senderQueue Queue for sending data.
      * @param senderMutex Mutex for the sender queue.
      * @param senderCv Condition variable for the sender queue.
@@ -255,6 +255,7 @@ namespace ControllerCommands {
                     m_controllerCommand.state = currentState;
 
                     cqControllerState(m_controllerCommand, buffer);
+                    m_controllerCommand.seqnum = 0;
                     if (!buffer.empty()) {
                         //Logger::logToFile("commandLoopPA() sending empty state change.");
                         std::lock_guard<std::mutex> sendLock(senderMutex);
@@ -262,7 +263,6 @@ namespace ControllerCommands {
                         senderCv.notify_one();
                     }
 
-                    m_controllerCommand.seqnum = 0;
                     m_nextStateChange = WallClock::max();
                 } else {
                     m_controllerCommand = m_ccQueue.pop_front();
@@ -302,8 +302,8 @@ namespace ControllerCommands {
     }
 
     /**
-     * @brief Update the controller state and optionally send a response.
-     * @param cmd The controller command.
+     * @brief Update the PA controller state and optionally send a response.
+     * @param cmd The PA controller command.
      * @param[out] buffer Output buffer for response.
      */
     void Controller::cqControllerState(const ControllerCommand& cmd, std::vector<char>& buffer) {
@@ -328,7 +328,7 @@ namespace ControllerCommands {
     }
 
     /**
-     * @brief Enqueue a controller command for processing.
+     * @brief Enqueue a PA controller command for processing.
      * @param cmd The controller command.
      */
     void Controller::cqEnqueueCommand(const ControllerCommand& cmd) {
@@ -351,18 +351,18 @@ namespace ControllerCommands {
     }
 
     /**
-     * @brief Cancel all queued controller commands.
+     * @brief Cancel all queued PA controller commands.
      */
     void Controller::cqCancel() {
         std::lock_guard<std::mutex> lock(m_ccMutex);
         m_replaceOnNext = false;
         m_nextStateChange = WallClock::min();
-        m_controllerCommand.state.clear();
+        m_ccQueue.clear();
         m_ccCv.notify_all();
     }
 
     /**
-     * @brief Replace the next controller command on the next enqueue.
+     * @brief Replace the next PA controller command on the next enqueue.
      */
     void Controller::cqReplaceOnNext() {
         std::lock_guard<std::mutex> lock(m_ccMutex);

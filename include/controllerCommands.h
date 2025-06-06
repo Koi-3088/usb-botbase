@@ -13,7 +13,7 @@
 namespace ControllerCommands {
 	class Controller : protected virtual ModuleBase::BaseCommands {
 	public:
-        Controller() : BaseCommands(), m_ccQueue(16) {
+        Controller() : BaseCommands(), m_ccQueue(512) {
            m_workMem = (u8*)aligned_alloc(0x1000, m_workMem_size);
            m_controllerHandle = { 0 };
            m_controllerDevice = { 0 };
@@ -28,15 +28,17 @@ namespace ControllerCommands {
         };
 
 		~Controller() override {
+            std::lock_guard<std::mutex> lock(m_ccMutex);
+			m_ccThreadRunning = false;
+			m_ccCv.notify_all();
+			if (m_ccThread.joinable()) {
+				m_ccThread.join();
+			}
+
 			detachController();
 			aligned_free(m_workMem);
 			m_workMem = nullptr;
 			m_controllerIsInitialised = false;
-			m_ccThreadRunning = false;
-            m_ccCv.notify_all();
-            if (m_ccThread.joinable()) {
-                m_ccThread.join();
-            }
 		};
 
 	public:

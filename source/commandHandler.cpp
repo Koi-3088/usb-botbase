@@ -642,7 +642,7 @@ namespace CommandHandler {
 #pragma region Base
 	/**
 	 * @brief Handle the "game" command.
-	 * @param params Command parameters: [subcommand].
+	 * @param params Command parameters: [subcommand] (name, author, rating, version, icon).
 	 * @param buffer Output buffer for result.
 	 */
 	void Handler::game_cmd(const std::vector<std::string>& params, std::vector<char>& buffer) {
@@ -843,7 +843,7 @@ namespace CommandHandler {
 	}
 
 	/**
-	 * @brief Returns whether PA is enabled.
+	 * @brief Returns whether PA controller commands are enabled.
 	 * @return True if enabled, false otherwise.
 	 */
 	bool Handler::getIsEnabledPA() {
