@@ -56,6 +56,7 @@ namespace SocketConnection {
 	bool SocketConnection::run() {
 		m_error = false;
 		std::string persistentBuffer;
+
 		m_senderThread = std::thread([&]() {
 			try {
 				std::unique_lock<std::mutex> lock(m_senderMutex);
@@ -66,16 +67,17 @@ namespace SocketConnection {
 					if (!m_senderQueue.empty()) {
 						auto buffer = std::move(m_senderQueue.front());
 						m_senderQueue.pop();
-						lock.unlock();
+						//lock.unlock();
 
-                        Logger::logToFile("Sending data to client: " + std::string(buffer.data(), buffer.size()));
-						int sent = SocketConnection::sendData(buffer, buffer.size(), m_tcp.clientFd);
+                        //Logger::logToFile("Sending data to client: " + std::string(buffer.data(), buffer.size()));
+						int sent = SocketConnection::sendData(buffer.data(), buffer.size(), m_tcp.clientFd);
 						if (sent <= 0) {
+							Logger::logToFile("sendData() failed or client disconnected.");
 							m_error = true;
 							notifyAll();
 							break;
 						}
-						lock.lock();
+						//lock.lock();
 					}
 				}
 			} catch (const std::exception& e) {
@@ -98,7 +100,7 @@ namespace SocketConnection {
 
 					auto command = std::move(m_commandQueue.front());
 					m_commandQueue.pop();
-					lock.unlock();
+					//lock.unlock();
 
 					try {
 						Utils::parseArgs(command, [&](const std::string& x, const std::vector<std::string>& y) {
@@ -126,7 +128,7 @@ namespace SocketConnection {
 					}
 
 					persistentBuffer.clear();
-					lock.lock();
+					//lock.lock();
 				}
 			} catch (const std::exception& e) {
 				Logger::logToFile(std::string("Main command thread exception: ") + e.what());
@@ -152,12 +154,19 @@ namespace SocketConnection {
 					break;
 				}
 
-				std::lock_guard<std::mutex> lock(m_commandMutex);
+				//std::lock_guard<std::mutex> lock(m_commandMutex);
 				for (auto& cmd : commands) {
-					m_commandQueue.push(std::move(cmd));
+					if (cmd.find("ping") != std::string::npos) {
+						sendData(cmd.data(), cmd.length(), m_tcp.clientFd);
+					} else if (cmd.find("cqCancel") != std::string::npos || cmd.find("cqReplaceOnNext") != std::string::npos) {
+                        m_commandQueue = std::queue<std::string>();
+						m_commandQueue.push(std::move(cmd));
+						m_commandCv.notify_one();
+					} else {
+						m_commandQueue.push(std::move(cmd));
+						m_commandCv.notify_one();
+					}
 				}
-
-				m_commandCv.notify_one();
 			}
 		} catch (const std::exception& e) {
 			Logger::logToFile(std::string("Socket reader thread exception: ") + e.what());
@@ -219,19 +228,19 @@ namespace SocketConnection {
 
 	std::vector<std::string> SocketConnection::receiveData(std::string& persistentBuffer, int sockfd) {
 		size_t received = 0;
-		char buf[256];
+		char buf[4096];
 		std::vector<std::string> commands;
 
 		while (true) {
-			memset(buf, 0, 256);
-			received = recv(sockfd, buf, 256, 0);
+			memset(buf, 0, 4096);
+			received = recv(sockfd, buf, 4096, 0);
 
 			if (received > 0) {
 				persistentBuffer.append(buf, received);
 				size_t pos;
 				while ((pos = persistentBuffer.find("\r\n")) != std::string::npos) {
 					commands.push_back(persistentBuffer.substr(0, pos));
-                    Logger::logToFile("Received command: " + commands.back());
+                    //Logger::logToFile("Received command: " + commands.back());
 					persistentBuffer.erase(0, pos + 2);
 				}
 
@@ -250,10 +259,10 @@ namespace SocketConnection {
 		}
 	}
 
-	int SocketConnection::sendData(std::vector<char>& buffer, size_t size, int sockfd) {
+	int SocketConnection::sendData(const char* buffer, size_t size, int sockfd) {
 		size_t total = 0;
 		do {
-			ssize_t sent = send(sockfd, (void*)(buffer.data() + total), size - total, 0);
+			ssize_t sent = send(sockfd, (void*)(buffer + total), size - total, 0);
 			if (sent == -1) {
 				Logger::logToFile("sendData(): Failed to send data. send() error: " + std::string(strerror(errno)));
 				return sent;
@@ -266,7 +275,6 @@ namespace SocketConnection {
 			total += sent;
 		} while (total < size);
 
-		buffer.clear();
 		return total;
 	}
 }

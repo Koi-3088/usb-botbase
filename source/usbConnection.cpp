@@ -38,7 +38,7 @@ namespace UsbConnection {
                                 buffer.push_back('\n');
                             }
 
-                            UsbConnection::sendData(buffer, buffer.size());
+                            UsbConnection::sendData(buffer.data(), buffer.size());
                         }
                     });
                 }
@@ -92,10 +92,10 @@ namespace UsbConnection {
         }
     }
 
-    int UsbConnection::sendData(std::vector<char>& buffer, size_t size, int sockfd) {
+    int UsbConnection::sendData(const char* buffer, size_t size, int sockfd) {
         size_t total = 0;
 		do {
-			ssize_t sent = usbCommsWrite((void*)(buffer.data() + total), size - total);
+			ssize_t sent = usbCommsWrite((void*)(buffer + total), size - total);
 			if (sent == -1) {
 				Logger::logToFile("sendData() usbCommsWrite() error.");
                 return sent;
@@ -108,7 +108,6 @@ namespace UsbConnection {
             total += sent;
 		} while (total < size);
 
-		buffer.clear();
         return total;
     }
 }

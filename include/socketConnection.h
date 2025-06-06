@@ -33,7 +33,7 @@ namespace SocketConnection {
 		bool run() override;
 		void disconnect() override;
 		std::vector<std::string> receiveData(std::string& persistentBuffer, int sockfd = 0) override;
-		int sendData(std::vector<char>& data, size_t data_size, int sockfd) override;
+		int sendData(const char* data, size_t data_size, int sockfd) override;
 
 	private:
 		struct TcpConnection {
