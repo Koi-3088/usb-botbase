@@ -43,6 +43,7 @@ namespace ControllerCommands {
 
 	public:
 		using WallClock = std::chrono::steady_clock::time_point;
+
 		struct ControllerState {
 			uint64_t buttons = 0;
 			int16_t left_joystick_x = 0;
@@ -101,10 +102,15 @@ namespace ControllerCommands {
 			}
 		};
 
+		ControllerCommand m_controllerCommand;
+
 	public:
 		static int parseStringToButton(const std::string& arg);
 		static int parseStringToStick(const std::string& arg);
         void startControllerThread(std::queue<std::vector<char>>& senderQueue, std::mutex& senderMutex, std::condition_variable& senderCv, std::atomic_bool& error);
+		void cqCancel();
+		void cqReplaceOnNext();
+		void cqEnqueueCommand(const ControllerCommand& cmd);
 
 	protected:
 		std::atomic_bool m_ccThreadRunning { false };
@@ -119,9 +125,6 @@ namespace ControllerCommands {
 		void touch(std::vector<HidTouchState>& state, u64 sequentialCount, u64 holdTime, bool hold);
 		void key(const std::vector<HiddbgKeyboardAutoPilotState>& states, u64 sequentialCount);
 		void setControllerType(const std::vector<std::string>& params);
-		void cqCancel();
-        void cqReplaceOnNext();
-        void cqEnqueueCommand(const ControllerCommand& cmd);
 
 	private:
 		void commandLoopPA(std::queue<std::vector<char>>& senderQueue, std::mutex& senderMutex, std::condition_variable& senderCv, std::atomic_bool& error);
@@ -236,7 +239,6 @@ namespace ControllerCommands {
 		std::mutex m_ccMutex;
 		std::condition_variable m_ccCv;
 
-		ControllerCommand m_controllerCommand;
 		std::atomic_bool m_replaceOnNext;
 		WallClock m_nextStateChange;
     };

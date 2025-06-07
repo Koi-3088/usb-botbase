@@ -55,6 +55,7 @@ namespace SocketConnection {
 
 	bool SocketConnection::run() {
 		m_error = false;
+		bool runningPA = false;
 		std::string persistentBuffer;
 
 		m_senderThread = std::thread([&]() {
@@ -67,7 +68,6 @@ namespace SocketConnection {
 					if (!m_senderQueue.empty()) {
 						auto buffer = std::move(m_senderQueue.front());
 						m_senderQueue.pop();
-						//lock.unlock();
 
                         //Logger::logToFile("Sending data to client: " + std::string(buffer.data(), buffer.size()));
 						int sent = SocketConnection::sendData(buffer.data(), buffer.size(), m_tcp.clientFd);
@@ -77,7 +77,6 @@ namespace SocketConnection {
 							notifyAll();
 							break;
 						}
-						//lock.lock();
 					}
 				}
 			} catch (const std::exception& e) {
@@ -100,7 +99,6 @@ namespace SocketConnection {
 
 					auto command = std::move(m_commandQueue.front());
 					m_commandQueue.pop();
-					//lock.unlock();
 
 					try {
 						Utils::parseArgs(command, [&](const std::string& x, const std::vector<std::string>& y) {
@@ -128,7 +126,6 @@ namespace SocketConnection {
 					}
 
 					persistentBuffer.clear();
-					//lock.lock();
 				}
 			} catch (const std::exception& e) {
 				Logger::logToFile(std::string("Main command thread exception: ") + e.what());
@@ -143,8 +140,9 @@ namespace SocketConnection {
 
 		try {
 			while (!m_error) {
-				if (!m_handler->getIsRunningPA() && m_handler->getIsEnabledPA()) {
+				if (!runningPA && !m_handler->getIsRunningPA() && m_handler->getIsEnabledPA()) {
                     m_handler->startControllerThread(m_senderQueue, m_senderMutex, m_senderCv, m_error);
+                    runningPA = true;
 				}
 
 				auto commands = receiveData(persistentBuffer, m_tcp.clientFd);
@@ -154,14 +152,34 @@ namespace SocketConnection {
 					break;
 				}
 
-				//std::lock_guard<std::mutex> lock(m_commandMutex);
 				for (auto& cmd : commands) {
 					if (cmd.find("ping") != std::string::npos) {
 						sendData(cmd.data(), cmd.length(), m_tcp.clientFd);
-					} else if (cmd.find("cqCancel") != std::string::npos || cmd.find("cqReplaceOnNext") != std::string::npos) {
-                        m_commandQueue = std::queue<std::string>();
-						m_commandQueue.push(std::move(cmd));
-						m_commandCv.notify_one();
+						continue;
+					}
+
+					if (runningPA) {
+						if (cmd.find("cqCancel") != std::string::npos) {
+							m_commandQueue = std::queue<std::string>();
+							m_handler->cqCancel();
+							continue;
+						} else if (cmd.find("cqReplaceOnNext") != std::string::npos) {
+							m_handler->cqReplaceOnNext();
+							continue;
+						} else if (cmd.find("cqControllerState") != std::string::npos) {
+							Utils::parseArgs(cmd, [&](const std::string& x, const std::vector<std::string>& y) {
+								if (y.size() == 1) {
+									Controller::ControllerCommand controllerCmd {};
+									controllerCmd.parseFromHex(y[0].data());
+									m_handler->cqEnqueueCommand(controllerCmd);
+								} else {
+									Logger::logToFile("Invalid cqControllerState command format.");
+								}
+							});
+						} else {
+							m_commandQueue.push(std::move(cmd));
+							m_commandCv.notify_one();
+						}
 					} else {
 						m_commandQueue.push(std::move(cmd));
 						m_commandCv.notify_one();

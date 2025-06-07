@@ -26,11 +26,11 @@ namespace CommandHandler {
 			return buffer;
 		}
 
-		Logger::logToFile("HandleCommand cmd: " + cmd);
+		/*Logger::logToFile("HandleCommand cmd: " + cmd);
 		Logger::logToFile("HandleCommand params#: " + std::to_string(params.size()));
 		for (int i = 0; i < (int)params.size(); i++) {
 			Logger::logToFile("HandleCommand param " + std::to_string(i) + ": " + params.at(i));
-		}
+		}*/
 
 		if (!getIsEnabledPA()) {
 			// Need to either remove this or add a dummy click again due to HOME button shenanigans.
