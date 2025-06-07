@@ -599,41 +599,6 @@ namespace CommandHandler {
 	}
 
 	/**
-	 * @brief Handle the "cqControllerState" command.
-	 * @param params Command parameters: [hexString].
-	 * @param buffer Output buffer for result.
-	 */
-	void Handler::cqControllerState_cmd(const std::vector<std::string>& params) {
-		if (params.size() != 1) {
-			return;
-		}
-
-		ControllerCommand cmd{};
-		try {
-			cmd.parseFromHex(params[0].data());
-		} catch (...) {
-			Logger::logToFile("Failed to parse CC command: " + params.front());
-			return;
-		}
-
-		cqEnqueueCommand(cmd);
-	}
-
-	/**
-	 * @brief Handle the "cqCancel" command.
-	 */
-	void Handler::cqCancel_cmd() {
-		cqCancel();
-	}
-
-	/**
-	 * @brief Handle the "cqReplaceOnNext" command.
-	 */
-	void Handler::cqReplaceOnNext_cmd() {
-		cqReplaceOnNext();
-	}
-
-	/**
 	 * @brief Returns whether the controller thread is running.
 	 * @return True if running, false otherwise.
 	 */

@@ -160,13 +160,16 @@ namespace SocketConnection {
 
 					if (runningPA) {
 						if (cmd.find("cqCancel") != std::string::npos) {
-							m_commandQueue = std::queue<std::string>();
 							m_handler->cqCancel();
 							continue;
-						} else if (cmd.find("cqReplaceOnNext") != std::string::npos) {
+						}
+						
+						if (cmd.find("cqReplaceOnNext") != std::string::npos) {
 							m_handler->cqReplaceOnNext();
 							continue;
-						} else if (cmd.find("cqControllerState") != std::string::npos) {
+						}
+						
+						if (cmd.find("cqControllerState") != std::string::npos) {
 							Utils::parseArgs(cmd, [&](const std::string& x, const std::vector<std::string>& y) {
 								if (y.size() == 1) {
 									Controller::ControllerCommand controllerCmd {};
@@ -176,14 +179,12 @@ namespace SocketConnection {
 									Logger::logToFile("Invalid cqControllerState command format.");
 								}
 							});
-						} else {
-							m_commandQueue.push(std::move(cmd));
-							m_commandCv.notify_one();
+                            continue;
 						}
-					} else {
-						m_commandQueue.push(std::move(cmd));
-						m_commandCv.notify_one();
 					}
+
+					m_commandQueue.push(std::move(cmd));
+					m_commandCv.notify_one();
 				}
 			}
 		} catch (const std::exception& e) {
