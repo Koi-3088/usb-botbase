@@ -29,16 +29,14 @@ namespace ControllerCommands {
 
 		~Controller() override {
             std::lock_guard<std::mutex> lock(m_ccMutex);
+			m_error = false;
+            m_isEnabledPA = false;
 			m_ccThreadRunning = false;
+			detachController();
 			m_ccCv.notify_all();
 			if (m_ccThread.joinable()) {
 				m_ccThread.join();
 			}
-
-			detachController();
-			aligned_free(m_workMem);
-			m_workMem = nullptr;
-			m_controllerIsInitialised = false;
 		};
 
 	public:
@@ -107,10 +105,11 @@ namespace ControllerCommands {
 	public:
 		static int parseStringToButton(const std::string& arg);
 		static int parseStringToStick(const std::string& arg);
-        void startControllerThread(std::queue<std::vector<char>>& senderQueue, std::mutex& senderMutex, std::condition_variable& senderCv, std::atomic_bool& error);
+        void startControllerThread(std::queue<std::vector<char>>& senderQueue, std::condition_variable& senderCv);
 		void cqCancel();
 		void cqReplaceOnNext();
 		void cqEnqueueCommand(const ControllerCommand& cmd);
+		void cqNotifyAll();
 
 	protected:
 		std::atomic_bool m_ccThreadRunning { false };
@@ -127,7 +126,7 @@ namespace ControllerCommands {
 		void setControllerType(const std::vector<std::string>& params);
 
 	private:
-		void commandLoopPA(std::queue<std::vector<char>>& senderQueue, std::mutex& senderMutex, std::condition_variable& senderCv, std::atomic_bool& error);
+		void commandLoopPA(std::queue<std::vector<char>>& senderQueue, std::condition_variable& senderCv);
 		void cqControllerState(const ControllerCommand& cmd, std::vector<char>& buffer);
 		inline void* aligned_alloc(size_t alignment, size_t size) {
 			if (alignment < sizeof(void*) || (alignment & (alignment - 1)) != 0) {
@@ -234,6 +233,7 @@ namespace ControllerCommands {
 		static std::unordered_map<std::string, int> m_button;
 		static std::unordered_map<std::string, int> m_stick;
 
+        std::atomic_bool m_error { false };
 		std::thread m_ccThread;
 		ControllerQueuePA m_ccQueue;
 		std::mutex m_ccMutex;

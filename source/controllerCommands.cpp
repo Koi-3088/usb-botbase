@@ -33,7 +33,7 @@ namespace ControllerCommands {
 
         // Set the controller type to Pro-Controller, and set the npadInterfaceType.
         m_controllerDevice.deviceType = HidDeviceType_FullKey3;
-        m_controllerDevice.npadInterfaceType = HidNpadInterfaceType_USB;
+        m_controllerDevice.npadInterfaceType = HidNpadInterfaceType_Bluetooth;
 
         // Set the controller colors. The grip colors are for Pro-Controller on [9.0.0+].
         m_controllerDevice.singleColorBody = RGBA8_MAXALPHA(0, 0, 0);
@@ -43,8 +43,6 @@ namespace ControllerCommands {
 
         // Setup example controller state.
         m_hiddbgHdlsState.battery_level = 4; // Set battery charge to full.
-        m_hiddbgHdlsState.flags = BIT(1);
-        m_hiddbgHdlsState.indicator = 1;
         m_hiddbgHdlsState.analog_stick_l.x = 0x0;
         m_hiddbgHdlsState.analog_stick_l.y = -0x0;
         m_hiddbgHdlsState.analog_stick_r.x = 0x0;
@@ -70,7 +68,9 @@ namespace ControllerCommands {
      * @brief Detach and clean up the virtual controller.
      */
     void Controller::detachController() {
-        initController();
+        if (!m_controllerIsInitialised) {
+            return;
+        }
 
         Result rc = hiddbgDetachHdlsVirtualDevice(m_controllerHandle);
         if (R_FAILED(rc)) {
@@ -83,12 +83,10 @@ namespace ControllerCommands {
         }
 
         hiddbgExit();
-        if (m_workMem != nullptr) {
-            aligned_free(m_workMem);
-            m_workMem = nullptr;
-        }
-
-        m_sessionId.id = 0;
+        m_sessionId = { 0 };
+        m_controllerHandle = { 0 };
+        aligned_free(m_workMem);
+        m_workMem = nullptr;
         m_controllerIsInitialised = false;
     }
 
@@ -97,7 +95,6 @@ namespace ControllerCommands {
      * @param btn The button to click.
      */
     void Controller::click(const HidNpadButton& btn) {
-        initController();
         press(btn);
         release(btn);
     }
@@ -219,11 +216,10 @@ namespace ControllerCommands {
     /**
      * @brief Start the PA controller thread for processing commands.
      * @param senderQueue Queue for sending data.
-     * @param senderMutex Mutex for the sender queue.
      * @param senderCv Condition variable for the sender queue.
      * @param error Atomic flag for error state.
      */
-    void Controller::startControllerThread(std::queue<std::vector<char>>& senderQueue, std::mutex& senderMutex, std::condition_variable& senderCv, std::atomic_bool& error) {
+    void Controller::startControllerThread(std::queue<std::vector<char>>& senderQueue, std::condition_variable& senderCv) {
         std::lock_guard<std::mutex> lock(m_ccMutex);
         if (m_ccThreadRunning) {
             Logger::logToFile("Controller thread already running.");
@@ -232,45 +228,38 @@ namespace ControllerCommands {
 
         Logger::logToFile("Starting commandLoopPA thread.");
         m_ccThreadRunning = true;
-        m_ccThread = std::thread(&Controller::commandLoopPA, this, std::ref(senderQueue), std::ref(senderMutex), std::ref(senderCv), std::ref(error));
+        m_ccThread = std::thread(&Controller::commandLoopPA, this, std::ref(senderQueue), std::ref(senderCv));
     }
 
     /**
      * @brief Main loop for processing PA controller commands in a thread.
      * @param senderQueue Queue for sending data.
-     * @param senderMutex Mutex for the sender queue.
      * @param senderCv Condition variable for the sender queue.
      * @param error Atomic flag for error state.
      */
-    void Controller::commandLoopPA(std::queue<std::vector<char>>& senderQueue, std::mutex& senderMutex, std::condition_variable& senderCv, std::atomic_bool& error) {
+    void Controller::commandLoopPA(std::queue<std::vector<char>>& senderQueue, std::condition_variable& senderCv) {
         const std::chrono::microseconds EARLY_WAKE(500);
-        ControllerState currentState{};
         std::vector<char> buffer;
 
         std::unique_lock<std::mutex> lock(m_ccMutex);
         Logger::logToFile("commandLoopPA() started.");
 
-        while (!error) {
+        while (!m_error) {
             WallClock now = std::chrono::steady_clock::now();
             if (now >= m_nextStateChange) {
                 if (m_ccQueue.empty()) {
-                    currentState.clear();
-                    m_controllerCommand.state = currentState;
-
+                    m_controllerCommand.state.clear();
                     cqControllerState(m_controllerCommand, buffer);
                     m_controllerCommand.seqnum = 0;
                     if (!buffer.empty()) {
                         //Logger::logToFile("commandLoopPA() sending empty state change.");
-                        //std::lock_guard<std::mutex> sendLock(senderMutex);
                         senderQueue.push(buffer);
                         senderCv.notify_all();
-                        buffer.clear();
                     }
 
-                    m_nextStateChange = WallClock::max();
+                    m_nextStateChange = WallClock::min();
                 } else {
                     m_controllerCommand = m_ccQueue.pop_front();
-                    currentState = m_controllerCommand.state;
                     if (m_nextStateChange == WallClock::min()) {
                         m_nextStateChange = now;
                     }
@@ -278,16 +267,15 @@ namespace ControllerCommands {
                     cqControllerState(m_controllerCommand, buffer);
                     if (!buffer.empty()) {
                         //Logger::logToFile("commandLoopPA() sending state change with seqnum: " + std::to_string(m_controllerCommand.seqnum));
-                        //std::lock_guard<std::mutex> sendLock(senderMutex);
                         senderQueue.push(buffer);
                         senderCv.notify_all();
-                        buffer.clear();
                     }
 
                     m_nextStateChange += std::chrono::milliseconds(m_controllerCommand.milliseconds);
                 }
 
                 m_ccCv.notify_all();
+                buffer.clear();
                 continue;
             }
 
@@ -295,14 +283,25 @@ namespace ControllerCommands {
                 continue;
             }
 
-            m_ccCv.wait_until(lock, m_nextStateChange - EARLY_WAKE);
+            m_ccCv.wait_until(lock, m_nextStateChange - EARLY_WAKE, [&]() { return (!m_ccQueue.full() || m_replaceOnNext); });
+            if (m_error) {
+                break;
+            }
+
+            if (m_replaceOnNext) {
+                //Logger::logToFile("cqEnqueueCommand() replacing current command with seqnum: " + std::to_string(cmd.seqnum));
+                m_replaceOnNext = false;
+                m_ccQueue.clear();
+                //m_controllerCommand.state.clear();
+                m_nextStateChange = WallClock::min();
+            }
         }
 
         Logger::logToFile("commandLoopPA() stopping thread.");
-        currentState.clear();
-        m_controllerCommand.state = currentState;
+        m_controllerCommand.state.clear();
         cqControllerState(m_controllerCommand, buffer);
-        error = true;
+        detachController();
+        m_ccThreadRunning = false;
     }
 
     /**
@@ -313,15 +312,17 @@ namespace ControllerCommands {
     void Controller::cqControllerState(const ControllerCommand& cmd, std::vector<char>& buffer) {
         //Logger::logToFile("cqControllerState() called with seqnum: " + std::to_string(cmd.seqnum));
         initController();
-        m_hiddbgHdlsState.buttons = cmd.state.buttons;
-        m_hiddbgHdlsState.analog_stick_l.x = cmd.state.left_joystick_x;
-        m_hiddbgHdlsState.analog_stick_l.y = cmd.state.left_joystick_y;
-        m_hiddbgHdlsState.analog_stick_r.x = cmd.state.right_joystick_x;
-        m_hiddbgHdlsState.analog_stick_r.y = cmd.state.right_joystick_y;
+        auto state = cmd.state;
+        m_hiddbgHdlsState.buttons = state.buttons;
+
+        m_hiddbgHdlsState.analog_stick_l.x = state.left_joystick_x;
+        m_hiddbgHdlsState.analog_stick_l.y = state.left_joystick_y;
+        m_hiddbgHdlsState.analog_stick_r.x = state.right_joystick_x;
+        m_hiddbgHdlsState.analog_stick_r.y = state.right_joystick_y;
 
         Result rc = hiddbgSetHdlsState(m_controllerHandle, &m_hiddbgHdlsState);
         if (R_FAILED(rc)) {
-            Logger::logToFile("cqControllerState() hiddbgSetHdlsState() press failed.", rc);
+            Logger::logToFile("cqControllerState() hiddbgSetHdlsState() failed.", rc);
         }
 
         if (cmd.seqnum != 0) {
@@ -336,21 +337,11 @@ namespace ControllerCommands {
      * @param cmd The controller command.
      */
     void Controller::cqEnqueueCommand(const ControllerCommand& cmd) {
-        std::unique_lock<std::mutex> lock(m_ccMutex);
-        //Logger::logToFile("cqEnqueueCommand() called with seqnum: " + std::to_string(cmd.seqnum));
-        m_ccCv.wait(lock, [&]() { return !m_ccQueue.full() || m_replaceOnNext; });
-        if (m_replaceOnNext) {
-            //Logger::logToFile("cqEnqueueCommand() replacing current command with seqnum: " + std::to_string(cmd.seqnum));
-            m_replaceOnNext = false;
-            m_ccQueue.clear();
-            m_controllerCommand.state.clear();
-            m_nextStateChange = WallClock::min();
-        } else if (m_nextStateChange == WallClock::max()) {
-            //Logger::logToFile("cqEnqueueCommand() setting next state change to min.");
-            m_nextStateChange = WallClock::min();
+        //Logger::logToFile("cqEnqueueCommand() pushing command with seqnum: " + std::to_string(cmd.seqnum));
+        if (m_ccQueue.full()) {
+            return;
         }
 
-        //Logger::logToFile("cqEnqueueCommand() pushing command with seqnum: " + std::to_string(cmd.seqnum));
         m_ccQueue.push(cmd);
         m_ccCv.notify_all();
     }
@@ -359,11 +350,11 @@ namespace ControllerCommands {
      * @brief Cancel all queued PA controller commands.
      */
     void Controller::cqCancel() {
-        std::lock_guard<std::mutex> lock(m_ccMutex);
+        //std::lock_guard<std::mutex> lock(m_ccMutex);
         m_replaceOnNext = false;
-        m_nextStateChange = WallClock::min();
         m_ccQueue.clear();
-        m_controllerCommand.state.clear();
+        m_nextStateChange = WallClock::min();
+        //m_controllerCommand.state.clear();
         m_ccCv.notify_all();
     }
 
@@ -371,9 +362,19 @@ namespace ControllerCommands {
      * @brief Replace the next PA controller command on the next enqueue.
      */
     void Controller::cqReplaceOnNext() {
-        std::lock_guard<std::mutex> lock(m_ccMutex);
+        //std::lock_guard<std::mutex> lock(m_ccMutex);
         m_replaceOnNext = true;
         m_ccCv.notify_all();
+    }
+
+    /**
+     * @brief Notify all PA threads.
+     */
+    void Controller::cqNotifyAll() {
+        std::lock_guard<std::mutex> lock(m_ccMutex);
+        m_error = true;
+        m_ccCv.notify_all();
+        //Logger::logToFile("cqNotifyAll() called.");
     }
 
     /**

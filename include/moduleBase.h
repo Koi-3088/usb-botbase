@@ -29,13 +29,16 @@ namespace ModuleBase {
 			REGISTER_GAME_CMD("name", getGameName);
 		};
 
-		virtual ~BaseCommands() {}
+		virtual ~BaseCommands() {
+            m_isEnabledPA = false;
+		};
 
 	protected:
 		Handle m_debugHandle = 0;
 		u64 keyPressSleepTime = 25;
 		u64 pollRate = 17;
 		u32 fingerDiameter = 50;
+		std::atomic_bool m_isEnabledPA { false };
 
 		struct MetaData {
 			u64 main_nso_base;
@@ -84,7 +87,6 @@ namespace ModuleBase {
 
 	private:
 		const std::string m_sbbVersion = "3.0.0";
-		std::atomic_bool m_isEnabledPA { false };
 
 		void setKeySleepTime(const std::vector<std::string>& params);
 		void setFingerDiameter(const std::vector<std::string>& params);

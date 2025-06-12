@@ -67,8 +67,6 @@ namespace ModuleBase {
         detach();
         if (metaHasZeroValue(m_metaData)) {
             Logger::logToFile("initMetaData() MetaData had one or more zero value.");
-        } else {
-            Logger::logToFile("initMetaData() Metadata initialized successfully.");
         }
     }
 

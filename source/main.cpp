@@ -14,6 +14,14 @@ using namespace SbbLog;
 
 ConnectionHandler* m_connection;
 
+void setUpConnection() {
+    if (Utils::isUSB()) {
+        m_connection = new UsbConnection::UsbConnection();
+    } else {
+        m_connection = new SocketConnection::SocketConnection();
+    }
+}
+
 extern "C" {
     u32 __nx_applet_type = AppletType_None;
     TimeServiceType __nx_time_service_type = TimeServiceType_System;
@@ -94,12 +102,7 @@ extern "C" {
             fatalThrow(rc);
         }
 
-        if (Utils::isUSB()) {
-            m_connection = new UsbConnection::UsbConnection();
-        } else {
-            m_connection = new SocketConnection::SocketConnection();
-        }
-
+        setUpConnection();
         if (R_FAILED(m_connection->initialize(rc))) {
             fatalThrow(rc);
         }
@@ -129,9 +132,13 @@ int main() {
         Logger::logToFile("Connecting...");
         if (m_connection->connect()) {
             m_connection->run();
+            m_connection->disconnect();
+            delete m_connection;
+            m_connection = nullptr;
         }
 
         Logger::logToFile("Resetting connection...");
+        setUpConnection();
     }
 
     Logger::logToFile("Exiting main()...");

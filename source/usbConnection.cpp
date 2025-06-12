@@ -31,7 +31,7 @@ namespace UsbConnection {
 
             if (!commands.empty()) {
                 for (const auto& command : commands) {
-                    Utils::parseArgs(command, [=](std::string x, const std::vector<std::string>& y) {
+                    Utils::parseArgs(command, [&](std::string x, const std::vector<std::string>& y) {
                         auto buffer = m_handler->HandleCommand(x, y);
                         if (!buffer.empty()) {
                             if (buffer.back() != '\n') {
@@ -53,8 +53,8 @@ namespace UsbConnection {
         return false;
 	}
 
-    bool UsbConnection::run() {
-        return true;
+    void UsbConnection::run() {
+        return;
     }
 
 	void UsbConnection::disconnect() {
@@ -81,7 +81,7 @@ namespace UsbConnection {
                     return commands;
                 }
             }
-            else if (received == -1) {
+            else if (received == (size_t)-1) {
                 Logger::logToFile("receiveData() recv() error.");
                 return {};
             }

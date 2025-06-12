@@ -22,14 +22,45 @@ namespace SocketConnection {
 		return res;
 	}
 
+	int SocketConnection::setupServerSocket() {
+		m_tcp.serverFd = socket(AF_INET, SOCK_STREAM, 0);
+		if (m_tcp.serverFd < 0) {
+			return -1;
+		}
+
+		int opt = 1;
+		if (setsockopt(m_tcp.serverFd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+			Logger::logToFile("setsockopt() error.");
+			close(m_tcp.serverFd);
+			return -1;
+		}
+
+		struct sockaddr_in serverAddr {};
+		serverAddr.sin_family = AF_INET;
+		serverAddr.sin_addr.s_addr = INADDR_ANY;
+		serverAddr.sin_port = htons(m_tcp.port);
+
+		while (bind(m_tcp.serverFd, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0) {
+			svcSleepThread(1e+6L);
+		}
+
+		if (listen(m_tcp.serverFd, 3) < 0) {
+			Logger::logToFile("listen() error.");
+			close(m_tcp.serverFd);
+			return -1;
+		}
+
+		return 0;
+	}
+
 	bool SocketConnection::connect() {
 		if (m_tcp.serverFd == -1) {
-			m_tcp.serverFd = setupServerSocket();
-			if (m_tcp.serverFd < 0) {
+			if (setupServerSocket() < 0) {
 				Logger::logToFile("Socket error.");
 				return false;
 			}
 
+			m_handler->HandleCommand("click", std::vector<std::string> { "UNUSED" });
 			Utils::flashLed();
 		}
 
@@ -40,11 +71,6 @@ namespace SocketConnection {
 		while (m_tcp.clientFd == -1) {
 			m_tcp.clientFd = accept(m_tcp.serverFd, (struct sockaddr*)&clientAddr, &clientSize);
 			if (m_tcp.clientFd == -1) {
-				m_tcp.serverFd = setupServerSocket();
-				if (m_tcp.serverFd < 0) {
-					Logger::logToFile("Socket error.");
-					return false;
-				}
 				svcSleepThread(1e+6L);
 			}
 		}
@@ -53,17 +79,26 @@ namespace SocketConnection {
 		return true;
 	}
 
-	bool SocketConnection::run() {
-		m_error = false;
-		bool runningPA = false;
-		std::string persistentBuffer;
+	void SocketConnection::disconnect() {
+		close(m_tcp.serverFd);
+        m_error = true;
+		notifyAll();
+		//close(m_tcp.clientFd);
+		Logger::logToFile("Disconnected.");
+	}
 
+	void SocketConnection::run() {
+		m_error = false;
+		std::string persistentBuffer;
 		m_senderThread = std::thread([&]() {
 			try {
 				std::unique_lock<std::mutex> lock(m_senderMutex);
 				while (!m_error) {
 					m_senderCv.wait(lock, [&]() { return !m_senderQueue.empty() || m_error; });
-					if (m_error) break;
+					if (m_error) {
+						notifyAll();
+                        break;
+					}
 
 					if (!m_senderQueue.empty()) {
 						auto buffer = std::move(m_senderQueue.front());
@@ -73,8 +108,7 @@ namespace SocketConnection {
 						int sent = SocketConnection::sendData(buffer.data(), buffer.size(), m_tcp.clientFd);
 						if (sent <= 0) {
 							Logger::logToFile("sendData() failed or client disconnected.");
-							m_error = true;
-							notifyAll();
+                            m_error = true;
 							break;
 						}
 					}
@@ -92,10 +126,13 @@ namespace SocketConnection {
 
 		m_commandThread = std::thread([&]() {
 			try {
+				std::unique_lock<std::mutex> lock(m_commandMutex);
 				while (!m_error) {
-					std::unique_lock<std::mutex> lock(m_commandMutex);
 					m_commandCv.wait(lock, [&]() { return !m_commandQueue.empty() || m_error; });
-					if (m_error) break;
+					if (m_error) {
+						notifyAll();
+                        break;
+					}
 
 					auto command = std::move(m_commandQueue.front());
 					m_commandQueue.pop();
@@ -130,7 +167,7 @@ namespace SocketConnection {
 			} catch (const std::exception& e) {
 				Logger::logToFile(std::string("Main command thread exception: ") + e.what());
 				m_error = true;
-                notifyAll();
+				notifyAll();
 			} catch (...) {
 				Logger::logToFile("Unknown main command thread exception.");
 				m_error = true;
@@ -140,9 +177,9 @@ namespace SocketConnection {
 
 		try {
 			while (!m_error) {
-				if (!runningPA && !m_handler->getIsRunningPA() && m_handler->getIsEnabledPA()) {
-                    m_handler->startControllerThread(m_senderQueue, m_senderMutex, m_senderCv, m_error);
-                    runningPA = true;
+				bool isRunningPA = m_handler->getIsRunningPA();
+				if (!isRunningPA && m_handler->getIsEnabledPA()) {
+                    m_handler->startControllerThread(m_senderQueue, m_senderCv);
 				}
 
 				auto commands = receiveData(persistentBuffer, m_tcp.clientFd);
@@ -158,7 +195,7 @@ namespace SocketConnection {
 						continue;
 					}
 
-					if (runningPA) {
+					if (isRunningPA) {
 						if (cmd.find("cqCancel") != std::string::npos) {
 							m_handler->cqCancel();
 							continue;
@@ -183,8 +220,9 @@ namespace SocketConnection {
 						}
 					}
 
+                    std::lock_guard<std::mutex> lock(m_commandMutex);
 					m_commandQueue.push(std::move(cmd));
-					m_commandCv.notify_one();
+					m_commandCv.notify_all();
 				}
 			}
 		} catch (const std::exception& e) {
@@ -196,53 +234,6 @@ namespace SocketConnection {
 			m_error = true;
 			notifyAll();
 		}
-
-		notifyAll();
-		if (m_senderThread.joinable()) m_senderThread.join();
-		if (m_commandThread.joinable()) m_commandThread.join();
-
-		close(m_tcp.clientFd);
-		m_tcp.clientFd = -1;
-		Logger::logToFile("Client disconnected.");
-		return m_error;
-	}
-
-	void SocketConnection::disconnect() {
-		close(m_tcp.clientFd);
-		close(m_tcp.serverFd);
-		m_tcp.serverFd = -1;
-		m_tcp.clientFd = -1;
-	}
-
-	int SocketConnection::setupServerSocket() {
-		int sockfd = socket(AF_INET, SOCK_STREAM, 0);
-		if (sockfd < 0) {
-			return sockfd;
-		}
-
-		int opt = 1;
-		if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
-			Logger::logToFile("setsockopt() error.");
-			close(sockfd);
-			return sockfd;
-		}
-
-		struct sockaddr_in serverAddr {};
-		serverAddr.sin_family = AF_INET;
-		serverAddr.sin_addr.s_addr = INADDR_ANY;
-		serverAddr.sin_port = htons(m_tcp.port);
-
-		while (bind(sockfd, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0) {
-			svcSleepThread(1e+6L);
-		}
-
-		if (listen(sockfd, 3) < 0) {
-			Logger::logToFile("listen() error.");
-			close(sockfd);
-			return sockfd;
-		}
-
-		return sockfd;
 	}
 
 	std::vector<std::string> SocketConnection::receiveData(std::string& persistentBuffer, int sockfd) {
@@ -259,7 +250,6 @@ namespace SocketConnection {
 				size_t pos;
 				while ((pos = persistentBuffer.find("\r\n")) != std::string::npos) {
 					commands.push_back(persistentBuffer.substr(0, pos));
-                    //Logger::logToFile("Received command: " + commands.back());
 					persistentBuffer.erase(0, pos + 2);
 				}
 
@@ -269,10 +259,14 @@ namespace SocketConnection {
 			}
 			else if (received == (size_t)-1) {
 				Logger::logToFile("receiveData() recv() error: " + std::string(strerror(errno)));
+                m_error = true;
+				notifyAll();
 				return {};
 			}
 			else {
 				Logger::logToFile("receiveData() client closed the connection.");
+				m_error = true;
+				notifyAll();
 				return {};
 			}
 		}
@@ -281,13 +275,17 @@ namespace SocketConnection {
 	int SocketConnection::sendData(const char* buffer, size_t size, int sockfd) {
 		size_t total = 0;
 		do {
-			ssize_t sent = send(sockfd, (void*)(buffer + total), size - total, 0);
-			if (sent == -1) {
+			size_t sent = send(sockfd, (void*)(buffer + total), size - total, 0);
+			if (sent == (size_t)-1) {
 				Logger::logToFile("sendData(): Failed to send data. send() error: " + std::string(strerror(errno)));
+				m_error = true;
+				notifyAll();
 				return sent;
 			}
 			else if (sent == 0) {
 				Logger::logToFile("sendData(): Failed to send data. Client closed the connection.");
+				m_error = true;
+				notifyAll();
 				return sent;
 			}
 

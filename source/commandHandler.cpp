@@ -26,20 +26,11 @@ namespace CommandHandler {
 			return buffer;
 		}
 
-		/*Logger::logToFile("HandleCommand cmd: " + cmd);
-		Logger::logToFile("HandleCommand params#: " + std::to_string(params.size()));
+		Logger::logToFile("HandleCommand cmd: " + cmd + ". Params#: " + std::to_string(params.size()));
+		/*Logger::logToFile("HandleCommand params#: " + std::to_string(params.size()));
 		for (int i = 0; i < (int)params.size(); i++) {
 			Logger::logToFile("HandleCommand param " + std::to_string(i) + ": " + params.at(i));
 		}*/
-
-		if (!getIsEnabledPA()) {
-			// Need to either remove this or add a dummy click again due to HOME button shenanigans.
-			bool controllerInit = params.size() >= 1 && cmd == "click" && params[0] == "UNUSED";
-			if (!controllerInit && m_metaData.pid == 0) {
-				Logger::logToFile("HandleCommand pid is 0, calling initMetaData().");
-				initMetaData();
-			}
-		}
 
 		auto it = Handler::m_cmd.find(cmd);
 		if (it != Handler::m_cmd.end()) {
