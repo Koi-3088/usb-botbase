@@ -64,16 +64,36 @@ namespace SocketConnection {
 			Utils::flashLed();
 		}
 
+		size_t retries = 0;
 		struct sockaddr_in clientAddr {};
 		socklen_t clientSize = sizeof(clientAddr);
 		Logger::logToFile("Waiting for client to connect...");
 
-		while (m_tcp.clientFd == -1) {
-			m_tcp.clientFd = accept(m_tcp.serverFd, (struct sockaddr*)&clientAddr, &clientSize);
-			if (m_tcp.clientFd == -1) {
-				svcSleepThread(1e+6L);
+		try {
+			while (m_tcp.clientFd == -1) {
+				m_tcp.clientFd = accept(m_tcp.serverFd, (struct sockaddr*)&clientAddr, &clientSize);
+				if (m_tcp.clientFd == -1) {
+					if (m_tcp.serverFd != -1) { // Needed if Switch goes to sleep?
+						close(m_tcp.serverFd);
+						m_tcp.serverFd = -1;
+					}
+
+					setupServerSocket();
+					svcSleepThread(1e+6L);
+                    retries++;
+					if (retries > 60) {
+						Logger::logToFile("Timeout while waiting for client to connect.");
+                        return false;
+					}
+				}
 			}
-		}
+		} catch (const std::exception& e) {
+            Logger::logToFile(std::string("Exception while waiting for client to connect: ") + e.what());
+			return false;
+		} catch (...) {
+            Logger::logToFile("Unknown exception while waiting for client to connect.");
+			return false;
+        }
 
 		Logger::logToFile("Client connected.");
 		return true;
@@ -83,7 +103,6 @@ namespace SocketConnection {
 		close(m_tcp.serverFd);
         m_error = true;
 		notifyAll();
-		//close(m_tcp.clientFd);
 		Logger::logToFile("Disconnected.");
 	}
 
@@ -184,6 +203,7 @@ namespace SocketConnection {
 
 				auto commands = receiveData(persistentBuffer, m_tcp.clientFd);
 				if (commands.empty()) {
+					Logger::logToFile("Socket reader thread exiting due to empty command list.");
 					m_error = true;
 					notifyAll();
 					break;
@@ -197,12 +217,12 @@ namespace SocketConnection {
 
 					if (isRunningPA) {
 						if (cmd.find("cqCancel") != std::string::npos) {
-							m_handler->cqCancel();
+							m_handler->cqEnqueueCommand(Controller::ControllerCommand{}, false, true);
 							continue;
 						}
 						
 						if (cmd.find("cqReplaceOnNext") != std::string::npos) {
-							m_handler->cqReplaceOnNext();
+                            m_handler->cqEnqueueCommand(Controller::ControllerCommand{}, true, false);
 							continue;
 						}
 						
@@ -211,7 +231,7 @@ namespace SocketConnection {
 								if (y.size() == 1) {
 									Controller::ControllerCommand controllerCmd {};
 									controllerCmd.parseFromHex(y[0].data());
-									m_handler->cqEnqueueCommand(controllerCmd);
+									m_handler->cqEnqueueCommand(controllerCmd, false, false);
 								} else {
 									Logger::logToFile("Invalid cqControllerState command format.");
 								}
