@@ -21,7 +21,7 @@ CFLAGS	:=	-g -Wall -O2 -ffunction-sections -fexceptions \
 
 CFLAGS	+=	$(INCLUDE) -D__SWITCH__
 
-CXXFLAGS	:= $(CFLAGS) -fno-rtti -fno-exceptions -fexceptions -std=gnu++20
+CXXFLAGS	:= $(CFLAGS) -fno-rtti -fno-exceptions -fexceptions -std=c++20
 
 ASFLAGS	:=	-g $(ARCH)
 LDFLAGS	=	-specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
@@ -78,6 +78,7 @@ else
 endif
 
 .PHONY: $(BUILD) clean all
+.PHONY: all postbuild postbuildclean
 
 all: $(BUILD)
 
@@ -98,7 +99,7 @@ DEPENDS	:=	$(OFILES:.o=.d)
 #---------------------------------------------------------------------------------
 # main targets
 #---------------------------------------------------------------------------------
-all	:	$(OUTPUT).nsp
+all	:	$(OUTPUT).nsp postbuild postbuildclean
 
 ifeq ($(strip $(APP_JSON)),)
 $(OUTPUT).nsp	:	$(OUTPUT).nso
@@ -117,5 +118,27 @@ $(OFILES_SRC)	: $(HFILES_BIN)
 	@$(bin2o)
 
 -include $(DEPENDS)
+
+postbuild: $(OUTPUT).nsp
+	@echo "Running post-build steps..."
+	@mkdir -p atmosphere/contents/430000000000000B/flags
+	@cp $(OUTPUT).nsp atmosphere/contents/430000000000000B/exefs.nsp
+	@echo wifi > atmosphere/contents/430000000000000B/config.cfg
+	@touch atmosphere/contents/430000000000000B/flags/boot2.flag
+	@powershell -Command "Compress-Archive -Path 'atmosphere' -DestinationPath 'atmosphere.zip' -Force"
+
+	@mkdir -p artifacts
+	@cp $(OUTPUT).nsp artifacts
+	@cp $(OUTPUT).elf artifacts
+	@cp $(OUTPUT).nso artifacts
+	@cp $(OUTPUT).npdm artifacts
+
+postbuildclean: postbuild
+	@echo "Running post-build clean steps..."
+	rm -fr $(OUTPUT).nsp
+	rm -fr $(OUTPUT).elf
+	rm -fr $(OUTPUT).nso
+	rm -fr $(OUTPUT).npdm
+	rm -fr atmosphere
 
 endif

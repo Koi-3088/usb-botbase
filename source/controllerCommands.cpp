@@ -217,7 +217,6 @@ namespace ControllerCommands {
      * @brief Start the PA controller thread for processing commands.
      * @param senderQueue Queue for sending data.
      * @param senderCv Condition variable for the sender queue.
-     * @param error Atomic flag for error state.
      */
     void Controller::startControllerThread(std::queue<std::vector<char>>& senderQueue, std::condition_variable& senderCv) {
         std::lock_guard<std::mutex> lock(m_ccMutex);
@@ -235,7 +234,6 @@ namespace ControllerCommands {
      * @brief Main loop for processing PA controller commands in a thread.
      * @param senderQueue Queue for sending data.
      * @param senderCv Condition variable for the sender queue.
-     * @param error Atomic flag for error state.
      */
     void Controller::commandLoopPA(std::queue<std::vector<char>>& senderQueue, std::condition_variable& senderCv) {
         auto cmd = ControllerCommand {};
@@ -318,6 +316,8 @@ namespace ControllerCommands {
     /**
      * @brief Enqueue a PA controller command for processing.
      * @param cmd The controller command.
+     * @param replace Whether to replace the current command queue.
+     * @param cancel Whether to cancel the current command queue.
      */
     void Controller::cqEnqueueCommand(const ControllerCommand& cmd, const bool& replace, const bool& cancel) {
         std::lock_guard<std::mutex> lock(m_ccMutex);

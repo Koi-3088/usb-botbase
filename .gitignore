@@ -6,3 +6,5 @@ build
 *.nso
 *.nsp
 *.npdm
+.git
+.vs

@@ -41,6 +41,12 @@ namespace SocketConnection {
 		serverAddr.sin_port = htons(m_tcp.port);
 
 		while (bind(m_tcp.serverFd, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0) {
+			if (m_error) {
+				Logger::logToFile("Socket error detected, exiting setupServerSocket.");
+				close(m_tcp.serverFd);
+				return -1;
+            }
+
 			svcSleepThread(1e+6L);
 		}
 
@@ -54,23 +60,28 @@ namespace SocketConnection {
 	}
 
 	bool SocketConnection::connect() {
-		if (m_tcp.serverFd == -1) {
-			if (setupServerSocket() < 0) {
-				Logger::logToFile("Socket error.");
-				return false;
+		try {
+			if (m_tcp.serverFd == -1) {
+				if (setupServerSocket() < 0) {
+					Logger::logToFile("Socket error.");
+					return false;
+				}
+
+				m_handler->HandleCommand("click", std::vector<std::string> { "UNUSED" });
+				Utils::flashLed();
 			}
 
-			m_handler->HandleCommand("click", std::vector<std::string> { "UNUSED" });
-			Utils::flashLed();
-		}
+			size_t retries = 0;
+			struct sockaddr_in clientAddr {};
+			socklen_t clientSize = sizeof(clientAddr);
+			Logger::logToFile("Waiting for client to connect...");
 
-		size_t retries = 0;
-		struct sockaddr_in clientAddr {};
-		socklen_t clientSize = sizeof(clientAddr);
-		Logger::logToFile("Waiting for client to connect...");
-
-		try {
 			while (m_tcp.clientFd == -1) {
+				if (m_error) {
+					Logger::logToFile("Socket connection error detected, exiting connect loop.");
+					return false;
+                }
+
 				m_tcp.clientFd = accept(m_tcp.serverFd, (struct sockaddr*)&clientAddr, &clientSize);
 				if (m_tcp.clientFd == -1) {
 					if (m_tcp.serverFd != -1) { // Needed if Switch goes to sleep?
@@ -101,6 +112,7 @@ namespace SocketConnection {
 
 	void SocketConnection::disconnect() {
 		close(m_tcp.serverFd);
+        close(m_tcp.clientFd);
         m_error = true;
 		notifyAll();
 		Logger::logToFile("Disconnected.");

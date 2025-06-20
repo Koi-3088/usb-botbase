@@ -127,20 +127,28 @@ extern "C" {
 }
 
 int main() {
-    Logger::logToFile("\n##########\r\n");
-    while (appletMainLoop()) {
-        Logger::logToFile("Connecting...");
-        if (m_connection->connect()) {
-            m_connection->run();
-            m_connection->disconnect();
-            delete m_connection;
-            m_connection = nullptr;
+    try {
+        Logger::logToFile("\n##########\r\n");
+        Logger::logToFile("Starting main()...");
+
+        while (appletMainLoop()) {
+            Logger::logToFile("Connecting...");
+            if (m_connection->connect()) {
+                m_connection->run();
+                m_connection->disconnect();
+                delete m_connection;
+                m_connection = nullptr;
+            }
+
+            Logger::logToFile("Resetting connection...");
+            setUpConnection();
         }
 
-        Logger::logToFile("Resetting connection...");
-        setUpConnection();
+        Logger::logToFile("Exiting main()...");
+    } catch (const std::exception& e) {
+        Logger::logToFile("Exception caught during initialization: " + std::string(e.what()));
+        return -1;
     }
 
-    Logger::logToFile("Exiting main()...");
     return 0;
 }

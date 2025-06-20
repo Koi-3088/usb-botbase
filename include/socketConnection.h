@@ -25,6 +25,9 @@ namespace SocketConnection {
 			if (m_handler) {
 				m_handler.reset();
 			}
+
+            m_tcp.serverFd = -1;
+            m_tcp.clientFd = -1;
 		};
 
 	public:

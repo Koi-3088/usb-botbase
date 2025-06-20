@@ -46,21 +46,29 @@
     <NMakePreprocessorDefinitions>_DEBUG;$(NMakePreprocessorDefinitions)</NMakePreprocessorDefinitions>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <NMakeBuildCommandLine>make -j42</NMakeBuildCommandLine>
+    <NMakeBuildCommandLine>make -j64</NMakeBuildCommandLine>
     <NMakeCleanCommandLine>make clean</NMakeCleanCommandLine>
-    <NMakeReBuildCommandLine>make clean all</NMakeReBuildCommandLine>
+    <NMakeReBuildCommandLine>make clean all -j64</NMakeReBuildCommandLine>
     <NMakePreprocessorDefinitions>$(NMakePreprocessorDefinitions)</NMakePreprocessorDefinitions>
     <ExternalIncludePath>C:\devkitPro\devkitA64\include;C:\devkitPro\libnx\include;C:\devkitPro\devkitA64\aarch64-none-elf\include;$(ExternalIncludePath)</ExternalIncludePath>
     <NMakeIncludeSearchPath>$(IncludePath);$(ProjectDir)\include</NMakeIncludeSearchPath>
     <IncludePath>$(ProjectDir)\include;$(IncludePath)</IncludePath>
-    <AdditionalOptions>-std=gnu++20</AdditionalOptions>
+    <AdditionalOptions>
+    </AdditionalOptions>
     <SourcePath>$(ProjectDir)\source;$(SourcePath)</SourcePath>
+    <NMakeOutput>
+    </NMakeOutput>
+    <OutDir>$(ProjectDir)\</OutDir>
+    <IntDir>$(ProjectDir)\</IntDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <NMakeCompile>
       <NMakeCompileFileCommandLine>
       </NMakeCompileFileCommandLine>
     </NMakeCompile>
+    <BuildLog>
+      <Path>$(ProjectDir)logs\$(ProjectName).log</Path>
+    </BuildLog>
   </ItemDefinitionGroup>
   <ItemGroup>
     <Text Include="Makefile">
