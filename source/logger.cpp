@@ -7,27 +7,16 @@
 #include <switch.h>
 #include <sys\stat.h>
 #include <chrono>
+#include <mutex>
 
 namespace SbbLog {
+    std::mutex m_logMutex;
     size_t Logger::m_maxLogSize = 1024 * 1024 * 8;
-
-    std::string Logger::getCurrentDate() {
-        time_t now = 0;
-        Result res = timeGetCurrentTime(TimeType_UserSystemClock, (u64*)&now);
-        if (R_FAILED(res)) {
-            now = std::time(nullptr);
-        }
-
-        std::tm* localTime = std::localtime(&now);
-        std::ostringstream oss;
-        oss << std::put_time(localTime, "%Y-%m-%d");
-        return oss.str();
-    }
+    std::atomic<bool> Logger::m_isLoggingEnabled { false };
 
     std::string Logger::getCurrentTimestamp() {
         using namespace std::chrono;
 
-        // Get seconds from system clock (required for correct time)
         u64 now_sec = 0;
         Result res = timeGetCurrentTime(TimeType_UserSystemClock, &now_sec);
         if (R_FAILED(res)) {
@@ -35,11 +24,9 @@ namespace SbbLog {
             now_sec = static_cast<u64>(std::time(nullptr));
         }
 
-        // Get microseconds from steady clock (relative, not absolute)
         auto now = system_clock::now();
         auto now_us = duration_cast<microseconds>(now.time_since_epoch()) % 1000000;
 
-        // Convert seconds to tm
         time_t now_time_t = static_cast<std::time_t>(now_sec);
         tm* localTime = std::localtime(&now_time_t);
 
@@ -57,9 +44,13 @@ namespace SbbLog {
     }
 
     void Logger::logToFile(const std::string& message, const Result res) {
+        std::lock_guard<std::mutex> lock(m_logMutex);
         try {
-            std::string date = getCurrentDate();
-            std::string filename = "sdmc:/atmosphere/contents/430000000000000B/log_" + date + ".txt";
+            if (!m_isLoggingEnabled.load(std::memory_order_acquire) && res == 0) {
+                return;
+            }
+
+            std::string filename = "sdmc:/atmosphere/contents/430000000000000B/log.txt";
             if (getFileSize(filename) >= m_maxLogSize) {
                 std::ofstream clear(filename, std::ios::trunc);
                 clear.close();
@@ -81,5 +72,18 @@ namespace SbbLog {
         } catch (...) {
             return;
         }
+    }
+
+    void Logger::enableLogs(bool enable) {
+        m_isLoggingEnabled.store(enable, std::memory_order_release);
+        if (enable) {
+            logToFile("Logging enabled");
+        } else {
+            logToFile("Logging disabled");
+        }
+    }
+
+    bool Logger::isLoggingEnabled() {
+        return m_isLoggingEnabled.load(std::memory_order_acquire);
     }
 }

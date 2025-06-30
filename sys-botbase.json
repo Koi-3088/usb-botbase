@@ -3,14 +3,14 @@
 	"program_id": "0x430000000000000B",
 	"program_id_range_min": "0x430000000000000B",
 	"program_id_range_max": "0x430000000000000B",
-	"version": "0",
+	"version": "3.0.0",
 	"optimize_memory_allocation": false,
 	"enable_alias_region_extra_size": false,
 	"prevent_code_reads": false,
 	"signature_key_generation": 0,
-	"main_thread_stack_size": "0x00024000",
+	"main_thread_stack_size": "0x24000",
 	"main_thread_priority": 42,
-	"default_cpu_id": 3,
+	"default_cpu_id": 0,
 	"process_category" : 0,
 	"is_retail": true,
 	"pool_partition": 2,
@@ -28,9 +28,9 @@
 			"type": "kernel_flags",
 			"value": {
 				"highest_thread_priority": 63,
-				"lowest_thread_priority": 24,
-				"lowest_cpu_id": 3,
-				"highest_cpu_id": 3
+				"lowest_thread_priority": 42,
+				"lowest_cpu_id": 0,
+				"highest_cpu_id": 2
 			}
 		},
 		{

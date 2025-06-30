@@ -1,19 +1,20 @@
 #pragma once
 
 #include "moduleBase.h"
+#include "lockFreeQueue.h"
 #include <chrono>
 #include <condition_variable>
 #include <malloc.h>
 #include <mutex>
-#include <queue>
 #include <switch.h>
-#include <thread>
 #include <unordered_map>
 
 namespace ControllerCommands {
+    using namespace LocklessQueue;
+
 	class Controller : protected virtual ModuleBase::BaseCommands {
 	public:
-        Controller() : BaseCommands(), m_ccQueue() {
+        Controller() : BaseCommands(), m_ccQueue(512) {
            m_workMem = (u8*)aligned_alloc(0x1000, m_workMem_size);
            m_controllerHandle = { 0 };
            m_controllerDevice = { 0 };
@@ -24,18 +25,17 @@ namespace ControllerCommands {
 		   m_controllerDevice.npadInterfaceType = HidNpadInterfaceType_Bluetooth;
            m_controllerInitializedType = HidDeviceType_FullKey3;
            m_ccThreadRunning = false;
+		   m_error = false;
         };
 
 		~Controller() override {
             std::lock_guard<std::mutex> lock(m_ccMutex);
-			m_error = false;
+			m_error = true;
             m_isEnabledPA = false;
 			m_ccThreadRunning = false;
 			detachController();
 			m_ccCv.notify_all();
-			if (m_ccThread.joinable()) {
-				m_ccThread.join();
-			}
+			if (m_ccThread.joinable()) m_ccThread.join();
 		};
 
 	public:
@@ -102,7 +102,7 @@ namespace ControllerCommands {
 	public:
 		static int parseStringToButton(const std::string& arg);
 		static int parseStringToStick(const std::string& arg);
-        void startControllerThread(std::queue<std::vector<char>>& senderQueue, std::condition_variable& senderCv);
+        void startControllerThread(LockFreeQueue<std::vector<char>>& senderQueue, std::condition_variable& senderCv);
 		void cqEnqueueCommand(const ControllerCommand& cmd, const bool& replace, const bool& cancel);
 		void cqNotifyAll();
 
@@ -121,9 +121,9 @@ namespace ControllerCommands {
 		void setControllerType(const std::vector<std::string>& params);
 
 	private:
-		void commandLoopPA(std::queue<std::vector<char>>& senderQueue, std::condition_variable& senderCv);
+		void commandLoopPA(LockFreeQueue<std::vector<char>>& senderQueue, std::condition_variable& senderCv);
 		void cqControllerState(const ControllerCommand& cmd);
-        void cqSendState(const ControllerCommand& cmd, std::queue<std::vector<char>>& senderQueue, std::condition_variable& senderCv);
+        void cqSendState(const ControllerCommand& cmd, LockFreeQueue<std::vector<char>>& senderQueue, std::condition_variable& senderCv);
 		inline void* aligned_alloc(size_t alignment, size_t size) {
 			if (alignment < sizeof(void*) || (alignment & (alignment - 1)) != 0) {
 				return nullptr;
@@ -173,77 +173,18 @@ namespace ControllerCommands {
 			u8 state;
 		};
 
-		template<typename T, size_t maxSize = 512>
-		struct ControllerQueuePA {
-			ControllerQueuePA(size_t initialSize = maxSize) : m_back(0), m_front(0) {
-				if (initialSize > maxSize) {
-					throw std::runtime_error("ControllerQueuePA size exceeds maximum");
-				}
-            }
-
-		public:
-			T pop_front() {
-				if (empty()) {
-					throw std::runtime_error("ControllerQueuePA is empty");
-				}
-
-				T item = buffer[m_back.load(std::memory_order_acquire)];
-				m_back.store((m_back.load(std::memory_order_acquire) + 1) % maxSize, std::memory_order_release);
-				return item;
-			}
-
-			size_t size() const {
-				return (m_front + maxSize - m_back.load(std::memory_order_acquire)) % maxSize;
-			}
-
-			bool full() const {
-				size_t next = (m_front + 1) % maxSize;
-				return next == m_back.load(std::memory_order_acquire);
-			}
-
-			bool empty() const {
-				return m_back.load(std::memory_order_acquire) == m_front;
-			}
-
-			bool enqueue(const T& item) {
-				size_t next = (m_front + 1) % maxSize;
-				if (next == m_back.load(std::memory_order_acquire)) return false; // full  
-				buffer[m_front] = item;
-				m_front = next;
-				return true;
-			}
-
-			void clear() {
-				m_back.store(0, std::memory_order_release);
-				m_front.store(0, std::memory_order_release);
-			}
-
-			void clearReplaceOnNext() {
-				if (empty()) return;
-				size_t lastIndex = (m_front + maxSize - 1) % maxSize;
-				T lastItem = buffer[lastIndex];
-
-				// Reset the queue to only contain the last item
-				m_back.store(0, std::memory_order_release);
-				m_front.store(1, std::memory_order_release);
-				buffer[0] = lastItem;
-			}
-
-		private:
-			T buffer[maxSize];
-			std::atomic<size_t> m_back;
-			std::atomic<size_t> m_front;
-		};
-
 		static std::unordered_map<std::string, int> m_button;
 		static std::unordered_map<std::string, int> m_stick;
 
         std::atomic_bool m_error { false };
+
 		std::thread m_ccThread;
-		ControllerQueuePA<ControllerCommand, 512> m_ccQueue;
+		LockFreeQueue<ControllerCommand> m_ccQueue;
 		std::mutex m_ccMutex;
 		std::condition_variable m_ccCv;
 
 		std::atomic<WallClock> m_nextStateChange;
+        std::mutex m_controllerMutex;
+        std::mutex m_enqueueMutex;
     };
 }

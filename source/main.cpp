@@ -5,6 +5,7 @@
 #include "connection.h"
 #include <switch.h>
 #include "logger.h"
+#include <memory>
 
 using namespace Connection;
 using namespace Util;
@@ -12,13 +13,19 @@ using namespace SbbLog;
 
 #define TITLE_ID 0x430000000000000B
 
-ConnectionHandler* m_connection;
+std::unique_ptr<ConnectionHandler> m_connection;
 
 void setUpConnection() {
-    if (Utils::isUSB()) {
-        m_connection = new UsbConnection::UsbConnection();
-    } else {
-        m_connection = new SocketConnection::SocketConnection();
+    try {
+        Logger::logToFile("Setting up connection...");
+        if (Utils::isUSB()) {
+            m_connection = std::make_unique<UsbConnection::UsbConnection>();
+            return;
+        }
+
+        m_connection = std::make_unique<SocketConnection::SocketConnection>();
+    } catch (const std::exception& e) {
+        Logger::logToFile("Exception caught while setting up connection: " + std::string(e.what()));
     }
 }
 
@@ -37,7 +44,7 @@ extern "C" {
     }
 
     void __appInit(void) {
-        svcSleepThread(20000000000L);
+        svcSleepThread(1e+10L);
 
         Result rc = smInitialize();
         if (R_FAILED(rc)) {
@@ -117,8 +124,7 @@ extern "C" {
 
         if (m_connection) {
             m_connection->disconnect();
-            delete m_connection;
-            m_connection = nullptr;
+            m_connection.reset();
         }
 
         capsscExit();
@@ -136,11 +142,10 @@ int main() {
             if (m_connection->connect()) {
                 m_connection->run();
                 m_connection->disconnect();
-                delete m_connection;
-                m_connection = nullptr;
             }
 
             Logger::logToFile("Resetting connection...");
+            m_connection.reset();
             setUpConnection();
         }
 

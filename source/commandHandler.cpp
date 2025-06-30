@@ -2,7 +2,6 @@
 #include "commandHandler.h"
 #include "logger.h"
 #include "util.h"
-#include "moduleBase.h"
 #include <algorithm>
 #include <cstring>
 #include <switch.h>
@@ -72,7 +71,7 @@ namespace CommandHandler {
 		u64 itemCount = (params.size()) / 2;
 		auto offsets = std::vector<u64>(itemCount);
 		auto sizes = std::vector<u64>(itemCount);
-		for (int i = 0; i < itemCount; ++i) {
+		for (u64 i = 0; i < itemCount; ++i) {
 			offsets[i] = m_metaData.heap_base + Utils::parseStringToInt(params[(i * 2)]);
 			sizes[i] = Utils::parseStringToInt(params[(i * 2) + 1]);
 		}
@@ -108,7 +107,7 @@ namespace CommandHandler {
 		u64 itemCount = (params.size()) / 2;
 		auto offsets = std::vector<u64>(itemCount);
 		auto sizes = std::vector<u64>(itemCount);
-		for (int i = 0; i < itemCount; ++i) {
+		for (u64 i = 0; i < itemCount; ++i) {
 			offsets[i] = Utils::parseStringToInt(params[(i * 2)]);
 			sizes[i] = Utils::parseStringToInt(params[(i * 2) + 1]);
 		}
@@ -144,7 +143,7 @@ namespace CommandHandler {
 		size_t itemCount = (params.size()) / 2;
 		auto offsets = std::vector<u64>(itemCount);
 		auto sizes = std::vector<u64>(itemCount);
-		for (int i = 0; i < itemCount; i++) {
+		for (size_t i = 0; i < itemCount; i++) {
 			offsets[i] = m_metaData.main_nso_base + Utils::parseStringToInt(params[(i * 2)]);
 			sizes[i] = Utils::parseStringToInt(params[(i * 2) + 1]);
 		}
@@ -469,7 +468,7 @@ namespace CommandHandler {
 		u32 count = params.size() / 2;
 		std::vector<HidTouchState> state(count);
 		u32 j = 0;
-		for (int i = 0; i < count; i++) {
+		for (u32 i = 0; i < count; i++) {
 			state[i].diameter_x = state[i].diameter_y = fingerDiameter;
 			state[i].x = (u32)Utils::parseStringToInt(params[j++]);
 			state[i].y = (u32)Utils::parseStringToInt(params[j++]);
@@ -507,7 +506,7 @@ namespace CommandHandler {
 		u32 count = params.size() / 2;
 		std::vector<HidTouchState> state(count);
 		u32 j = 0;
-		for (int i = 0; i < count; i++) {
+		for (u32 i = 0; i < count; i++) {
 			state[i].diameter_x = state[i].diameter_y = fingerDiameter;
 			state[i].x = (u32)Utils::parseStringToInt(params[j++]);
 			state[i].y = (u32)Utils::parseStringToInt(params[j++]);
@@ -527,7 +526,7 @@ namespace CommandHandler {
 
 		u64 count = params.size();
 		std::vector<HiddbgKeyboardAutoPilotState> keystates(count);
-		for (int i = 0; i < count; i++) {
+		for (u64 i = 0; i < count; i++) {
 			u8 key = (u8)Utils::parseStringToInt(params[i]);
 			if (key >= HidKeyboardKey_A && key <= HidKeyboardKey_RightGui) {
 				keystates[i].keys[key / 64] = 1UL << key;
@@ -550,7 +549,7 @@ namespace CommandHandler {
 		u64 count = params.size() / 2;
 		std::vector<HiddbgKeyboardAutoPilotState> keystates(count);
 		int j = 0;
-		for (int i = 0; i < count; i++) {
+		for (u64 i = 0; i < count; i++) {
 			u8 key = (u8)Utils::parseStringToInt(params[j++]);
 			if (key >= HidKeyboardKey_A && key <= HidKeyboardKey_RightGui) {
 				keystates[i].keys[key / 64] = 1UL << key;
@@ -572,7 +571,7 @@ namespace CommandHandler {
 
 		u64 count = params.size();
 		std::vector<HiddbgKeyboardAutoPilotState> keystates(count);
-		for (int i = 0; i < count; i++) {
+		for (u64 i = 0; i < count; i++) {
 			u8 key = (u8)Utils::parseStringToInt(params[i]);
 			if (key >= HidKeyboardKey_A && key <= HidKeyboardKey_RightGui) {
 				keystates[0].keys[key / 64] |= 1UL << key;

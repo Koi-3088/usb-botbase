@@ -80,6 +80,7 @@
     <ClInclude Include="include\connection.h" />
     <ClInclude Include="include\controllerCommands.h" />
     <ClInclude Include="include\defines.h" />
+    <ClInclude Include="include\lockFreeQueue.h" />
     <ClInclude Include="include\logger.h" />
     <ClInclude Include="include\memoryCommands.h" />
     <ClInclude Include="include\moduleBase.h" />

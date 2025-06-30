@@ -289,6 +289,19 @@ namespace ModuleBase {
     }
 
     /**
+     * @brief Set whether logs are enabled from parameters.
+     * @param params The parameters vector.
+     */
+    void BaseCommands::setEnabledLogs(const std::vector<std::string>& params) {
+        if (params.size() < 2) {
+            return;
+        }
+
+        bool enable = (bool)Utils::parseStringToInt(params[1]);
+        Logger::enableLogs(enable);
+    }
+
+    /**
      * @brief Get the game icon data.
      * @param[out] buffer Output buffer for icon data.
      */

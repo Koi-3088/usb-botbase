@@ -1,6 +1,7 @@
 .DS_Store
 ._*
 build
+logs
 *.kip
 *.elf
 *.nso
@@ -8,3 +9,4 @@ build
 *.npdm
 .git
 .vs
+.log

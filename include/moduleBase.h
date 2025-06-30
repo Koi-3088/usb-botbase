@@ -21,6 +21,7 @@ namespace ModuleBase {
 			REGISTER_CFG_CMD("fingerDiameter", setFingerDiameter);
 			REGISTER_CFG_CMD("pollRate", setPollRate);
 			REGISTER_CFG_CMD("enablePA", setEnabledPA);
+			REGISTER_CFG_CMD("enableLogs", setEnabledLogs);
 
 			REGISTER_GAME_CMD("icon", getGameIcon);
 			REGISTER_GAME_CMD("version", getGameVersion);
@@ -99,6 +100,7 @@ namespace ModuleBase {
 		void getGameName(std::vector<char>& buffer);
 
 		void setEnabledPA(const std::vector<std::string>& params);
+        void setEnabledLogs(const std::vector<std::string>& params);
 
 		bool isConnectedToInternet();
 		bool metaHasZeroValue(const MetaData& meta);

@@ -51,6 +51,9 @@
     <ClInclude Include="include\ntp.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="include\lockFreeQueue.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="source\commandHandler.cpp">

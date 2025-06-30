@@ -1,5 +1,6 @@
 #pragma once
 
+#include "lockFreeQueue.h"
 #include "connection.h"
 #include <string>
 #include <vector>
@@ -12,12 +13,16 @@ namespace CommandHandler {
 namespace SocketConnection {
 	class SocketConnection : public Connection::ConnectionHandler {
 	public:
-		SocketConnection() : ConnectionHandler(), m_tcp() {
+		SocketConnection() : ConnectionHandler(), m_tcp(), m_senderQueue(512), m_commandQueue(512) {
+			m_error = false;
 			m_handler = std::make_unique<CommandHandler::Handler>();
 		};
 
 		~SocketConnection() override {
-            std::lock_guard<std::mutex> lock(m_senderMutex);
+            m_error = true;
+            notifyAll();
+
+            std::lock_guard<std::mutex> sendLock(m_senderMutex);
 			if (m_senderThread.joinable()) m_senderThread.join();
 
             std::lock_guard<std::mutex> commandLock(m_commandMutex);
@@ -25,9 +30,6 @@ namespace SocketConnection {
 			if (m_handler) {
 				m_handler.reset();
 			}
-
-            m_tcp.serverFd = -1;
-            m_tcp.clientFd = -1;
 		};
 
 	public:
@@ -56,5 +58,18 @@ namespace SocketConnection {
                 m_handler->cqNotifyAll();
 			}
 		}
+
+		std::thread m_senderThread;
+		LocklessQueue::LockFreeQueue<std::vector<char>> m_senderQueue;
+		std::mutex m_senderMutex;
+		std::condition_variable m_senderCv;
+
+		std::thread m_commandThread;
+		LocklessQueue::LockFreeQueue<std::string> m_commandQueue;
+		std::mutex m_commandMutex;
+		std::condition_variable m_commandCv;
+
+		std::atomic_bool m_error { false };
+		std::unique_ptr<CommandHandler::Handler> m_handler;
 	};
 }
