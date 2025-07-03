@@ -696,12 +696,12 @@ namespace CommandHandler {
 
 			Result rc = capsscCaptureJpegScreenShot(&outSize, (void*)buffer.data(), buffer.size(), ViLayerStack_Screenshot, 1e+9L);
 			if (R_FAILED(rc)) {
-				Logger::logToFile("Failed to capture screenshot.", rc);
+				Logger::logToFile("Failed to capture screenshot.", std::to_string(R_DESCRIPTION(rc)));
 			}
 
 			buffer.resize(outSize);
 		} catch (const std::bad_alloc& e) {
-			Logger::logToFile("std::bad_alloc caught in pixelPeek_cmd(): " + std::string(e.what()));
+			Logger::logToFile("std::bad_alloc caught in pixelPeek_cmd().", std::string(e.what()));
 			throw;
 		}
 	}
@@ -749,7 +749,7 @@ namespace CommandHandler {
 	void Handler::charge_cmd(std::vector<char>& buffer) {
 		Result rc = psmInitialize();
 		if (R_FAILED(rc)) {
-			Logger::logToFile("charge_cmd() psmInitialize() failed.");
+			Logger::logToFile("charge_cmd() psmInitialize() failed.", std::to_string(R_DESCRIPTION(rc)));
 			return;
 		}
 
@@ -757,7 +757,7 @@ namespace CommandHandler {
 		rc = psmGetBatteryChargePercentage(&charge);
 		psmExit();
 		if (R_FAILED(rc)) {
-			Logger::logToFile("charge_cmd() psmGetBatteryChargePercentage() failed.", rc);
+			Logger::logToFile("charge_cmd() psmGetBatteryChargePercentage() failed.", std::to_string(R_DESCRIPTION(rc)));
 			return;
 		}
 

@@ -26,20 +26,20 @@ namespace SocketConnection {
 	int SocketConnection::setupServerSocket() {
 		m_tcp.serverFd = socket(AF_INET, SOCK_STREAM, 0);
 		if (m_tcp.serverFd < 0) {
-            Logger::logToFile("socket() error: " + std::to_string(errno));
+            Logger::logToFile("socket() error.", std::to_string(errno));
 			return -1;
 		}
 
-		/*int flags = 1;
+		int flags = 1;
 		if (ioctl(m_tcp.serverFd, FIONBIO, &flags) < 0) {
-			Logger::logToFile("ioctl(FIONBIO) error: " + std::to_string(errno));
+			Logger::logToFile("ioctl(FIONBIO) error.", std::to_string(errno));
 			close(m_tcp.serverFd);
 			return -1;
-		}*/
+		}
 
 		int opt = 1;
 		if (setsockopt(m_tcp.serverFd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
-			Logger::logToFile("setsockopt() error: " + std::to_string(errno));
+			Logger::logToFile("setsockopt() error.", std::to_string(errno));
 			close(m_tcp.serverFd);
 			return -1;
 		}
@@ -49,19 +49,29 @@ namespace SocketConnection {
 		serverAddr.sin_addr.s_addr = INADDR_ANY;
 		serverAddr.sin_port = htons(m_tcp.port);
 
+		int retries = 0;
 		while (bind(m_tcp.serverFd, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0) {
 			if (m_error) {
-				Logger::logToFile("Socket error detected, exiting setupServerSocket: " + std::to_string(errno));
+				Logger::logToFile("Socket error detected, exiting setupServerSocket().", std::to_string(errno));
 				close(m_tcp.serverFd);
 				return -1;
             }
 
-            Logger::logToFile("bind() error: " + std::to_string(errno) + ", retrying in 1 second...");
-			svcSleepThread(1e+6L);
+            Logger::logToFile("bind() error, retrying in 1 second...", std::to_string(errno));
+			svcSleepThread(1e+9L);
+
+			if (++retries > 10) {
+				Logger::logToFile("Failed to bind socket after multiple attempts, giving up.", std::to_string(errno));
+				close(m_tcp.serverFd);
+				socketExit();
+				Result rc;
+                initialize(rc);
+				return -1;
+            }
 		}
 
 		if (listen(m_tcp.serverFd, 3) < 0) {
-			Logger::logToFile("listen() error: " + std::to_string(errno));
+			Logger::logToFile("listen() error.", std::to_string(errno));
 			close(m_tcp.serverFd);
 			return -1;
 		}
@@ -95,27 +105,20 @@ namespace SocketConnection {
 
 				m_tcp.clientFd = accept(m_tcp.serverFd, (struct sockaddr*)&clientAddr, &clientSize);
 				if (m_tcp.clientFd == -1) {
-					/*if (errno == EWOULDBLOCK || errno == EAGAIN) {
-						svcSleepThread(1e+6L);
-						if (++retries > 600000) {
-							Logger::logToFile("Timeout while waiting for client to connect.");
-                            disconnect();
-							return false;
-						}
-
-						continue;
-					}*/
-
-					if (m_tcp.serverFd != -1) {
+					svcSleepThread(1e+9L);
+					if (++retries > 600) {
+						Logger::logToFile("Timeout while waiting for client to connect.", "accept() timeout.");
 						disconnect();
-						setupServerSocket();
+						return false;
 					}
 
-					svcSleepThread(1e+6L);
-					if (++retries > 600000) {
-						Logger::logToFile("Timeout while waiting for client to connect.");
-                        disconnect();
-						return false;
+					if (errno == EWOULDBLOCK || errno == EAGAIN) {
+						continue;
+					} else {
+						if (m_tcp.serverFd != -1) {
+							disconnect();
+							setupServerSocket();
+						}
 					}
 				}
 			}
@@ -124,7 +127,7 @@ namespace SocketConnection {
             m_error = true;
 			return false;
 		} catch (...) {
-            Logger::logToFile("Unknown exception while waiting for client to connect.");
+            Logger::logToFile("Unknown exception while waiting for client to connect.", "Unknown error.");
             m_error = true;
 			return false;
         }
@@ -145,29 +148,25 @@ namespace SocketConnection {
 		m_senderThread = std::thread([&]() {
 			try {
 				while (!m_error) {
-					std::unique_lock<std::mutex> lock(m_senderMutex);
-					m_senderCv.wait(lock, [&]() { return !m_senderQueue.empty() || m_error; });
-                    lock.unlock();
-					if (m_error) {
-						break;
-					}
-
 					std::vector<char> buffer;
 					while (m_senderQueue.pop(buffer) && !m_error) {
-						Logger::logToFile("Sending data to client: " + std::string(buffer.data(), buffer.size()));
+						Logger::logToFile("Sending data to client: " + std::string(buffer.data(), buffer.size() - 2));
 						int sent = sendData(buffer.data(), buffer.size(), m_tcp.clientFd);
 						if (sent <= 0) {
 							Logger::logToFile("sendData() failed or client disconnected.");
 							break;
 						}
 					}
+
+					std::unique_lock<std::mutex> lock(m_senderMutex);
+					m_senderCv.wait(lock, [&]() { return !m_senderQueue.empty() || m_error; });
 				}
 			} catch (const std::exception& e) {
-				Logger::logToFile(std::string("Socket sender thread exception: ") + e.what());
+				Logger::logToFile("Socket sender thread exception.", e.what());
 				m_error = true;
 				notifyAll();
 			} catch (...) {
-				Logger::logToFile("Unknown socket sender thread exception.");
+				Logger::logToFile("Unknown socket sender thread exception.", "Unknown error.");
 				m_error = true;
 				notifyAll();
 			}
@@ -176,13 +175,6 @@ namespace SocketConnection {
 		m_commandThread = std::thread([&]() {
 			try {
 				while (!m_error) {
-					std::unique_lock<std::mutex> lock(m_commandMutex);
-					m_commandCv.wait(lock, [&]() { return !m_commandQueue.empty() || m_error; });
-					lock.unlock();
-					if (m_error) {
-						break;
-					}
-
 					try {
 						std::string command;
 						while (m_commandQueue.pop(command) && !m_error) {
@@ -198,24 +190,27 @@ namespace SocketConnection {
 								}
 							});
 						}
+
+						std::unique_lock<std::mutex> lock(m_commandMutex);
+						m_commandCv.wait(lock, [&]() { return !m_commandQueue.empty() || m_error; });
 					} catch (const std::exception& e) {
-						Logger::logToFile(std::string("Command handler exception: ") + e.what());
+						Logger::logToFile("Command handler exception.", e.what());
 						m_error = true;
 						notifyAll();
 						break;
 					} catch (...) {
-						Logger::logToFile("Unknown command handler exception.");
+						Logger::logToFile("Unknown command handler exception.", "Unknown error.");
 						m_error = true;
 						notifyAll();
 						break;
 					}
 				}
 			} catch (const std::exception& e) {
-				Logger::logToFile(std::string("Main command thread exception: ") + e.what());
+				Logger::logToFile("Main command thread exception.", e.what());
 				m_error = true;
 				notifyAll();
 			} catch (...) {
-				Logger::logToFile("Unknown main command thread exception.");
+				Logger::logToFile("Unknown main command thread exception.", "Unknown error.");
 				m_error = true;
 				notifyAll();
 			}
@@ -225,7 +220,7 @@ namespace SocketConnection {
 			std::string persistentBuffer;
 			while (!m_error) {
 				auto commands = receiveData(persistentBuffer, m_tcp.clientFd);
-				if (m_error || commands.empty()) {
+				if (m_error) {
 					break;
                 }
 
@@ -239,11 +234,11 @@ namespace SocketConnection {
 				}
 			}
 		} catch (const std::exception& e) {
-			Logger::logToFile(std::string("Socket reader thread exception: ") + e.what());
+			Logger::logToFile("Socket reader thread exception.", e.what());
 			m_error = true;
 			notifyAll();
 		} catch (...) {
-			Logger::logToFile("Unknown socket reader thread exception.");
+			Logger::logToFile("Unknown socket reader thread exception.", "Unknown error.");
 			m_error = true;
 			notifyAll();
 		}
@@ -255,33 +250,6 @@ namespace SocketConnection {
 		char buf[bufSize];
 
 		while (!m_error) {
-			/*int bytesAvailable = 0;
-			if (ioctl(sockfd, FIONREAD, &bytesAvailable) < 0) {
-				Logger::logToFile("receiveData() ioctl(FIONREAD) error: " + std::string(strerror(errno)));
-				m_error = true;
-				notifyAll();
-				return {};
-			}
-
-			if (bytesAvailable == 0) {
-				ssize_t peekResult = recv(sockfd, buf, 1, MSG_PEEK);
-				if (peekResult == 0) {
-					Logger::logToFile("receiveData() client closed the connection (detected by MSG_PEEK).");
-					m_error = true;
-					notifyAll();
-					break;
-				} else if (peekResult < 0 && errno != EWOULDBLOCK && errno != EAGAIN) {
-					Logger::logToFile("receiveData() recv(MSG_PEEK) error: " + std::string(strerror(errno)));
-					m_error = true;
-					notifyAll();
-					break;
-				}
-
-				continue;
-			}
-
-			ssize_t toRead = (bufSize < (size_t)bytesAvailable) ? bufSize : bytesAvailable;
-			ssize_t received = recv(sockfd, buf, toRead, 0);*/
 			ssize_t received = recv(sockfd, buf, bufSize, 0);
 			if (received > 0) {
 				persistentBuffer.append(buf, received);
@@ -290,25 +258,21 @@ namespace SocketConnection {
 				while ((pos = persistentBuffer.find("\r\n")) != std::string::npos) {
 					auto cmd = persistentBuffer.substr(0, pos);
 					persistentBuffer.erase(0, pos + 2);
-					if (cmd.find("ping") != std::string::npos) {
-                        if (sendData(cmd.data(), cmd.size(), sockfd) <= 0) {
-							Logger::logToFile("Failed to send ping response, client may have disconnected.");
-							m_error = true;
-							notifyAll();
-							return {};
-                        }
 
+					if (cmd.find("ping") != std::string::npos) {
+                        m_senderQueue.push_front(std::vector<char>(cmd.begin(), cmd.end()));
+                        m_senderCv.notify_one();
 						continue;
 					}
 
 					if (m_handler->getIsRunningPA()) {
 						if (cmd.find("cqCancel") != std::string::npos) {
-							m_handler->cqEnqueueCommand(Controller::ControllerCommand {}, false, true);
+							m_handler->cqCancel();
 							continue;
 						}
 
 						if (cmd.find("cqReplaceOnNext") != std::string::npos) {
-							m_handler->cqEnqueueCommand(Controller::ControllerCommand {}, true, false);
+							m_handler->cqReplaceOnNext();
 							continue;
 						}
 
@@ -317,7 +281,7 @@ namespace SocketConnection {
 								if (params.size() == 1) {
 									Controller::ControllerCommand controllerCmd {};
 									controllerCmd.parseFromHex(params.front().data());
-									m_handler->cqEnqueueCommand(controllerCmd, false, false);
+									m_handler->cqEnqueueCommand(controllerCmd);
 								} else {
 									Logger::logToFile("Invalid cqControllerState command format.");
 								}
@@ -334,16 +298,29 @@ namespace SocketConnection {
 					break;
 				}
 			} else if (received == 0) {
-				Logger::logToFile("receiveData() client closed the connection.");
+				Logger::logToFile("receiveData() client closed the connection.", std::string(strerror(errno)));
 				m_error = true;
 				notifyAll();
 				return {};
 			} else {
-				/*if (errno == EWOULDBLOCK || errno == EAGAIN) {
-					continue;
-				}*/
+				if (errno == EWOULDBLOCK || errno == EAGAIN) {
+					ssize_t peekResult = recv(sockfd, buf, 1, MSG_PEEK);
+					if (peekResult == 0) {
+						Logger::logToFile("receiveData() client closed the connection (detected by MSG_PEEK).", std::string(strerror(errno)));
+						m_error = true;
+						notifyAll();
+						break;
+					} else if (peekResult < 0 && errno != EWOULDBLOCK && errno != EAGAIN) {
+						Logger::logToFile("receiveData() recv(MSG_PEEK) error.", std::string(strerror(errno)));
+						m_error = true;
+						notifyAll();
+						break;
+					}
 
-				Logger::logToFile("receiveData() recv() error: " + std::string(strerror(errno)));
+					continue;
+				}
+
+				Logger::logToFile("receiveData() recv() error.", std::string(strerror(errno)));
 				m_error = true;
 				notifyAll();
 				return {};
@@ -363,18 +340,16 @@ namespace SocketConnection {
 			}
 
 			if (sent == 0) {
-				Logger::logToFile("sendData(): Failed to send data. Client closed the connection.");
+				Logger::logToFile("sendData(): Failed to send data. Client closed the connection.", std::string(strerror(errno)));
+				m_error = true;
+				notifyAll();
+				return -1;
+			} else if (sent == -1 && errno != EWOULDBLOCK && errno != EAGAIN) {
+				Logger::logToFile("sendData(): Failed to send data. send() error.", std::string(strerror(errno)));
 				m_error = true;
 				notifyAll();
 				return -1;
 			} else {
-				Logger::logToFile("sendData(): Failed to send data. send() error: " + std::string(strerror(errno)));
-				m_error = true;
-				notifyAll();
-				return -1;
-			}
-
-			/*if (errno == EWOULDBLOCK || errno == EAGAIN) {
 				char tmp;
 				ssize_t peekResult = recv(sockfd, &tmp, 1, MSG_PEEK);
 				if (peekResult == 0) {
@@ -391,11 +366,6 @@ namespace SocketConnection {
 
 				continue;
 			}
-
-			Logger::logToFile("sendData(): Failed to send data. send() error: " + std::string(strerror(errno)));
-			m_error = true;
-			notifyAll();
-			return -1;*/
 		}
 
 		return total;

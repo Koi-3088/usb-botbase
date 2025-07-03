@@ -56,7 +56,7 @@ namespace Util {
     bool Utils::flashLed() {
         Result rc = hidsysInitialize();
         if (R_FAILED(rc)) {
-            Logger::logToFile("flashLed() hidsysInitialize() failed.", rc);
+            Logger::logToFile("flashLed() hidsysInitialize() failed.", std::to_string(R_DESCRIPTION(rc)));
             return false;
         }
 
@@ -72,7 +72,7 @@ namespace Util {
 
         Result rc = hidsysGetUniquePadsFromNpad(idType, unique_pad_ids, 2, &total_entries);
         if (R_FAILED(rc)) {
-            Logger::logToFile("sendPatternStatic() hidsysGetUniquePadsFromNpad() failed.", rc);
+            Logger::logToFile("sendPatternStatic() hidsysGetUniquePadsFromNpad() failed.", std::to_string(R_DESCRIPTION(rc)));
             return;
         }
 

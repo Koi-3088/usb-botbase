@@ -29,6 +29,18 @@ namespace LocklessQueue {
             return true;
         }
 
+        bool push_front(const T& item) {
+            size_t head = m_head.load(std::memory_order_relaxed);
+            size_t prev_head = decrement(head);
+            if (m_tail.load(std::memory_order_acquire) == prev_head) {
+                return false;
+            }
+
+            m_buffer[prev_head] = item;
+            m_head.store(prev_head, std::memory_order_release);
+            return true;
+        }
+
         bool pop(T& item) {
             size_t head = m_head.load(std::memory_order_relaxed);
             if (head == m_tail.load(std::memory_order_acquire)) {
@@ -55,6 +67,7 @@ namespace LocklessQueue {
 
     private:
         size_t increment(size_t idx) const { return (idx + 1) % m_capacity; }
+        size_t decrement(size_t idx) const { return (idx + m_capacity - 1) % m_capacity; }
 
         const size_t m_capacity;
         std::unique_ptr<T[]> m_buffer;

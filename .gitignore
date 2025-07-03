@@ -2,6 +2,7 @@
 ._*
 build
 logs
+*.log
 *.kip
 *.elf
 *.nso
@@ -9,4 +10,3 @@ logs
 *.npdm
 .git
 .vs
-.log

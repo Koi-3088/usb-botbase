@@ -20,14 +20,14 @@ namespace ControllerCommands {
         //taken from switchexamples github
         Result rc = hiddbgInitialize();
         if (R_FAILED(rc)) {
-            Logger::logToFile("initController() hiddbgInitialize() failed.", rc);
+            Logger::logToFile("initController() hiddbgInitialize() failed.", std::to_string(R_DESCRIPTION(rc)));
             return;
         }
 
         if (!m_workMem) {
             m_workMem = (u8*)aligned_alloc(0x1000, m_workMem_size);
             if (!m_workMem) {
-                Logger::logToFile("initController() aligned_alloc() failed.");
+                Logger::logToFile("Failed to initialize virtual controller.", "initController() aligned_alloc() failed.");
                 return;
             }
         }
@@ -51,12 +51,12 @@ namespace ControllerCommands {
 
         rc = hiddbgAttachHdlsWorkBuffer(&m_sessionId, m_workMem, m_workMem_size);
         if (R_FAILED(rc)) {
-            Logger::logToFile("initController() hiddbgAttachHdlsWorkBuffer() failed.", rc);
+            Logger::logToFile("initController() hiddbgAttachHdlsWorkBuffer() failed.", std::to_string(R_DESCRIPTION(rc)));
         }
 
         rc = hiddbgAttachHdlsVirtualDevice(&m_controllerHandle, &m_controllerDevice);
         if (R_FAILED(rc)) {
-            Logger::logToFile("initController() hiddbgAttachHdlsVirtualDevice() failed.", rc);
+            Logger::logToFile("initController() hiddbgAttachHdlsVirtualDevice() failed.", std::to_string(R_DESCRIPTION(rc)));
         }
 
         //init a dummy keyboard state for assignment between keypresses
@@ -75,12 +75,12 @@ namespace ControllerCommands {
 
         Result rc = hiddbgDetachHdlsVirtualDevice(m_controllerHandle);
         if (R_FAILED(rc)) {
-            Logger::logToFile("detachController() hiddbgDetachHdlsVirtualDevice() failed.", rc);
+            Logger::logToFile("detachController() hiddbgDetachHdlsVirtualDevice() failed.", std::to_string(R_DESCRIPTION(rc)));
         }
 
         rc = hiddbgReleaseHdlsWorkBuffer(m_sessionId);
         if (R_FAILED(rc)) {
-            Logger::logToFile("detachController() hiddbgReleaseHdlsWorkBuffer() failed.", rc);
+            Logger::logToFile("detachController() hiddbgReleaseHdlsWorkBuffer() failed.", std::to_string(R_DESCRIPTION(rc)));
         }
 
         hiddbgExit();
@@ -109,7 +109,7 @@ namespace ControllerCommands {
         m_hiddbgHdlsState.buttons |= btn;
         Result rc = hiddbgSetHdlsState(m_controllerHandle, &m_hiddbgHdlsState);
         if (R_FAILED(rc)) {
-            Logger::logToFile("press() hiddbgSetHdlsState() failed.", rc);
+            Logger::logToFile("press() hiddbgSetHdlsState() failed.", std::to_string(R_DESCRIPTION(rc)));
         }
     }
 
@@ -122,7 +122,7 @@ namespace ControllerCommands {
         m_hiddbgHdlsState.buttons &= ~btn;
         Result rc = hiddbgSetHdlsState(m_controllerHandle, &m_hiddbgHdlsState);
         if (R_FAILED(rc)) {
-            Logger::logToFile("release() hiddbgSetHdlsState() failed.", rc);
+            Logger::logToFile("release() hiddbgSetHdlsState() failed.", std::to_string(R_DESCRIPTION(rc)));
         }
     }
 
@@ -144,7 +144,7 @@ namespace ControllerCommands {
 
         Result rc = hiddbgSetHdlsState(m_controllerHandle, &m_hiddbgHdlsState);
         if (R_FAILED(rc)) {
-            Logger::logToFile("setStickState() hiddbgSetHdlsState() failed.", rc);
+            Logger::logToFile("setStickState() hiddbgSetHdlsState() failed.", std::to_string(R_DESCRIPTION(rc)));
         }
     }
 
@@ -261,7 +261,7 @@ namespace ControllerCommands {
             }
 
             std::unique_lock<std::mutex> lock(m_ccMutex);
-            m_ccCv.wait_until(lock, WallClock(m_nextStateChange.load(std::memory_order_acquire) - WallClock(std::chrono::steady_clock::now() - EARLY_WAKE)), [&] {
+            m_ccCv.wait_until(lock, WallClock(m_nextStateChange.load(std::memory_order_acquire) - std::chrono::steady_clock::now() - EARLY_WAKE), [&] {
                 return !m_ccQueue.empty() ||
                     m_error.load(std::memory_order_acquire) ||
                     std::chrono::steady_clock::now() + EARLY_WAKE >= m_nextStateChange.load(std::memory_order_acquire);
@@ -309,7 +309,7 @@ namespace ControllerCommands {
 
         Result rc = hiddbgSetHdlsState(m_controllerHandle, &m_hiddbgHdlsState);
         if (R_FAILED(rc)) {
-            Logger::logToFile("cqControllerState() hiddbgSetHdlsState() failed.", rc);
+            Logger::logToFile("cqControllerState() hiddbgSetHdlsState() failed.", std::to_string(R_DESCRIPTION(rc)));
         }
     }
 
@@ -319,45 +319,55 @@ namespace ControllerCommands {
      * @param replace Whether to replace the current command queue.
      * @param cancel Whether to cancel the current command queue.
      */
-    void Controller::cqEnqueueCommand(const ControllerCommand& cmd, const bool& replace, const bool& cancel) {
+    void Controller::cqEnqueueCommand(const ControllerCommand& cmd) {
         std::lock_guard<std::mutex> lock(m_enqueueMutex);
         if (m_ccQueue.full()) {
             return;
         }
 
-        if (replace) {
-            std::lock_guard<std::mutex> lock(m_ccMutex);
-            Logger::logToFile("cqEnqueueCommand() replace.");
-            m_nextStateChange.store(WallClock::max(), std::memory_order_release);
-            m_ccQueue.clear();
-            m_ccCv.notify_one();
-            return;
-        }
-
-        if (cancel) {
-            std::lock_guard<std::mutex> lock(m_ccMutex);
-            Logger::logToFile("cqEnqueueCommand() cancel.");
-            m_ccQueue.clear();
-            cqControllerState(cmd);
-            m_nextStateChange.store(WallClock::max(), std::memory_order_release);
-            m_ccCv.notify_one();
-            return;
-        }
-
         Logger::logToFile("cqEnqueueCommand() pushing command with seqnum: " + std::to_string(cmd.seqnum));
-        m_ccQueue.push(cmd);
+        if (m_replaceOnNext.load(std::memory_order_acquire)) {
+            m_replaceOnNext.store(false, std::memory_order_release);
+        }
+
+        std::lock_guard<std::mutex> cclock(m_ccMutex);
         if (m_nextStateChange.load(std::memory_order_acquire) == WallClock::max()) {
             m_nextStateChange.store(WallClock::min(), std::memory_order_release);
         }
 
+        m_ccQueue.push(cmd);
         m_ccCv.notify_one();
+    }
+
+    /**
+     * @brief Cancel all queued PA controller commands.
+     */
+    void Controller::cqCancel() {
+        std::lock_guard<std::mutex> lock(m_enqueueMutex);
+        std::lock_guard<std::mutex> cclock(m_ccMutex);
+        Logger::logToFile("cqCancel().");
+        m_ccQueue.clear();
+        cqControllerState(ControllerCommand{});
+        m_nextStateChange.store(WallClock::max(), std::memory_order_release);
+        m_ccCv.notify_one();
+    }
+
+    /**
+     * @brief Replace the next PA controller command on the next enqueue.
+     */
+    void Controller::cqReplaceOnNext() {
+        std::lock_guard<std::mutex> lock(m_enqueueMutex);
+        std::lock_guard<std::mutex> cclock(m_ccMutex);
+        Logger::logToFile("cqReplaceOnNext().");
+        m_nextStateChange.store(WallClock::max(), std::memory_order_release);
+        m_ccQueue.clear();
+        m_replaceOnNext.store(true, std::memory_order_release);
     }
 
     /**
      * @brief Notify all PA threads.
      */
     void Controller::cqNotifyAll() {
-        std::lock_guard<std::mutex> lock(m_ccMutex);
         m_error.store(true, std::memory_order_release);
         m_ccCv.notify_one();
     }

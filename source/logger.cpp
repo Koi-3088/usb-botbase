@@ -20,7 +20,7 @@ namespace SbbLog {
         u64 now_sec = 0;
         Result res = timeGetCurrentTime(TimeType_UserSystemClock, &now_sec);
         if (R_FAILED(res)) {
-            Logger::logToFile("Failed to get current time", res);
+            Logger::logToFile("Failed to get current time", std::to_string(R_DESCRIPTION(res)));
             now_sec = static_cast<u64>(std::time(nullptr));
         }
 
@@ -43,10 +43,10 @@ namespace SbbLog {
         return rc == 0 ? stat_buf.st_size : 0;
     }
 
-    void Logger::logToFile(const std::string& message, const Result res) {
+    void Logger::logToFile(const std::string& message, const std::string& error) {
         std::lock_guard<std::mutex> lock(m_logMutex);
         try {
-            if (!m_isLoggingEnabled.load(std::memory_order_acquire) && res == 0) {
+            if (!m_isLoggingEnabled.load(std::memory_order_acquire) && error.empty()) {
                 return;
             }
 
@@ -56,12 +56,12 @@ namespace SbbLog {
                 clear.close();
             }
 
-            std::string errorMessage = "Error: " + std::to_string(R_DESCRIPTION(res));
+            std::string errorMessage = "Error: " + error;
             std::ofstream logFile(filename, std::ios::app);
             if (logFile.is_open()) {
                 if (message == "\n##########\r\n") {
                     logFile << message << std::endl;
-                } else if (res != 0) {
+                } else if (!error.empty()) {
                     logFile << "[" << getCurrentTimestamp() << "] " << message << " " << errorMessage << std::endl;
                 } else {
                     logFile << "[" << getCurrentTimestamp() << "] " << message << std::endl;
@@ -77,9 +77,9 @@ namespace SbbLog {
     void Logger::enableLogs(bool enable) {
         m_isLoggingEnabled.store(enable, std::memory_order_release);
         if (enable) {
-            logToFile("Logging enabled");
+            logToFile("Logging enabled.");
         } else {
-            logToFile("Logging disabled");
+            logToFile("Logging disabled.");
         }
     }
 

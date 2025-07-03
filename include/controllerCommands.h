@@ -14,7 +14,7 @@ namespace ControllerCommands {
 
 	class Controller : protected virtual ModuleBase::BaseCommands {
 	public:
-        Controller() : BaseCommands(), m_ccQueue(512) {
+        Controller() : BaseCommands(), m_ccQueue(1024) {
            m_workMem = (u8*)aligned_alloc(0x1000, m_workMem_size);
            m_controllerHandle = { 0 };
            m_controllerDevice = { 0 };
@@ -103,7 +103,9 @@ namespace ControllerCommands {
 		static int parseStringToButton(const std::string& arg);
 		static int parseStringToStick(const std::string& arg);
         void startControllerThread(LockFreeQueue<std::vector<char>>& senderQueue, std::condition_variable& senderCv);
-		void cqEnqueueCommand(const ControllerCommand& cmd, const bool& replace, const bool& cancel);
+		void cqEnqueueCommand(const ControllerCommand& cmd);
+		void cqReplaceOnNext();
+		void cqCancel();
 		void cqNotifyAll();
 
 	protected:
@@ -177,6 +179,7 @@ namespace ControllerCommands {
 		static std::unordered_map<std::string, int> m_stick;
 
         std::atomic_bool m_error { false };
+        std::atomic_bool m_replaceOnNext { false };
 
 		std::thread m_ccThread;
 		LockFreeQueue<ControllerCommand> m_ccQueue;

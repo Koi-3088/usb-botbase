@@ -25,7 +25,7 @@ void setUpConnection() {
 
         m_connection = std::make_unique<SocketConnection::SocketConnection>();
     } catch (const std::exception& e) {
-        Logger::logToFile("Exception caught while setting up connection: " + std::string(e.what()));
+        Logger::logToFile("Exception caught while setting up connection", e.what());
     }
 }
 
@@ -44,7 +44,7 @@ extern "C" {
     }
 
     void __appInit(void) {
-        svcSleepThread(1e+10L);
+        svcSleepThread(2e+10L);
 
         Result rc = smInitialize();
         if (R_FAILED(rc)) {
@@ -125,6 +125,7 @@ extern "C" {
         if (m_connection) {
             m_connection->disconnect();
             m_connection.reset();
+            socketExit();
         }
 
         capsscExit();
@@ -137,7 +138,7 @@ int main() {
         Logger::logToFile("\n##########\r\n");
         Logger::logToFile("Starting main()...");
 
-        while (appletMainLoop()) {
+        while (true) {
             Logger::logToFile("Connecting...");
             if (m_connection->connect()) {
                 m_connection->run();
@@ -151,7 +152,7 @@ int main() {
 
         Logger::logToFile("Exiting main()...");
     } catch (const std::exception& e) {
-        Logger::logToFile("Exception caught during initialization: " + std::string(e.what()));
+        Logger::logToFile("Exception caught in main().", e.what());
         return -1;
     }
 
