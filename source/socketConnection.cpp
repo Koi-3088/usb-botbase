@@ -19,7 +19,19 @@ namespace SocketConnection {
 	using namespace ControllerCommands;
 
 	Result SocketConnection::initialize(Result& res) {
-		res = socketInitializeDefault();
+		const SocketInitConfig cfg = {
+		    0x800, //tcp_tx_buf_size
+		    0x800, //tcp_rx_buf_size
+		    0x25000, //tcp_tx_buf_max_size
+		    0x25000, //tcp_rx_buf_max_size
+
+		    0, //udp_tx_buf_size
+		    0, //udp_rx_buf_size
+
+		    1, //sb_efficiency
+		};
+
+		res = socketInitialize(&cfg);
 		return res;
 	}
 
@@ -76,7 +88,6 @@ namespace SocketConnection {
 			return -1;
 		}
 
-        Logger::logToFile("Server socket setup complete on port " + std::to_string(m_tcp.port) + ".");
 		return 0;
 	}
 
@@ -92,38 +103,23 @@ namespace SocketConnection {
 				Utils::flashLed();
 			}
 
-            int retries = 0;
 			struct sockaddr_in clientAddr {};
 			socklen_t clientSize = sizeof(clientAddr);
-			Logger::logToFile("Waiting for client to connect...");
+			Logger::logToFile("Waiting for client to connect...", "", true);
 
 			while (m_tcp.clientFd == -1) {
-				if (m_error) {
-					Logger::logToFile("Socket connection error detected, exiting connect loop.");
-					return false;
-				}
-
 				m_tcp.clientFd = accept(m_tcp.serverFd, (struct sockaddr*)&clientAddr, &clientSize);
 				if (m_tcp.clientFd == -1) {
-					svcSleepThread(1e+9L);
-					if (++retries > 600) {
-						Logger::logToFile("Timeout while waiting for client to connect.", "accept() timeout.");
-						disconnect();
+					close(m_tcp.serverFd);
+					if (setupServerSocket() < 0) {
 						return false;
 					}
 
-					if (errno == EWOULDBLOCK || errno == EAGAIN) {
-						continue;
-					} else {
-						if (m_tcp.serverFd != -1) {
-							disconnect();
-							setupServerSocket();
-						}
-					}
+					svcSleepThread(1e+9L);
 				}
 			}
 		} catch (const std::exception& e) {
-            Logger::logToFile(std::string("Exception while waiting for client to connect: ") + e.what());
+            Logger::logToFile("Exception while waiting for client to connect: ", e.what());
             m_error = true;
 			return false;
 		} catch (...) {
@@ -255,43 +251,29 @@ namespace SocketConnection {
 				persistentBuffer.append(buf, received);
 
 				size_t pos;
-				while ((pos = persistentBuffer.find("\r\n")) != std::string::npos) {
-					auto cmd = persistentBuffer.substr(0, pos);
+				while ((pos = persistentBuffer.find("\r\n")) != std::string::npos && !m_error) {
+					auto cmd = persistentBuffer.substr(0, pos + 2);
 					persistentBuffer.erase(0, pos + 2);
 
-					if (cmd.find("ping") != std::string::npos) {
-                        m_senderQueue.push_front(std::vector<char>(cmd.begin(), cmd.end()));
-                        m_senderCv.notify_one();
-						continue;
+					if (!m_handler->getIsRunningPA()) {
+						commands.push_back(cmd);
+					} else {
+						Utils::parseArgs(cmd, [&](const std::string& command, const std::vector<std::string>& params) {
+							if (command == "cqCancel") {
+								m_handler->cqCancel();
+							} else if (command == "cqReplaceOnNext") {
+								m_handler->cqReplaceOnNext();
+                            } else if (command == "cqControllerState") {
+								Controller::ControllerCommand controllerCmd {};
+								controllerCmd.parseFromHex(params.front().data());
+								m_handler->cqEnqueueCommand(controllerCmd);
+							} else if (command == "ping" && params.size() == 1) {
+                                const std::string response = command + " " + params.front() + "\r\n";
+								m_senderQueue.push_front(std::vector<char>(response.begin(), response.end()));
+								m_senderCv.notify_one();
+							}
+						});
 					}
-
-					if (m_handler->getIsRunningPA()) {
-						if (cmd.find("cqCancel") != std::string::npos) {
-							m_handler->cqCancel();
-							continue;
-						}
-
-						if (cmd.find("cqReplaceOnNext") != std::string::npos) {
-							m_handler->cqReplaceOnNext();
-							continue;
-						}
-
-						if (cmd.find("cqControllerState") != std::string::npos) {
-							Utils::parseArgs(cmd, [&](const std::string& command, const std::vector<std::string>& params) {
-								if (params.size() == 1) {
-									Controller::ControllerCommand controllerCmd {};
-									controllerCmd.parseFromHex(params.front().data());
-									m_handler->cqEnqueueCommand(controllerCmd);
-								} else {
-									Logger::logToFile("Invalid cqControllerState command format.");
-								}
-							});
-
-							continue;
-						}
-					}
-
-					commands.push_back(cmd);
 				}
 
 				if (!commands.empty()) {

@@ -12,26 +12,26 @@ using namespace Util;
 using namespace SbbLog;
 
 #define TITLE_ID 0x430000000000000B
-
 std::unique_ptr<ConnectionHandler> m_connection;
-
-void setUpConnection() {
-    try {
-        Logger::logToFile("Setting up connection...");
-        if (Utils::isUSB()) {
-            m_connection = std::make_unique<UsbConnection::UsbConnection>();
-            return;
-        }
-
-        m_connection = std::make_unique<SocketConnection::SocketConnection>();
-    } catch (const std::exception& e) {
-        Logger::logToFile("Exception caught while setting up connection", e.what());
-    }
-}
 
 extern "C" {
     u32 __nx_applet_type = AppletType_None;
     TimeServiceType __nx_time_service_type = TimeServiceType_System;
+
+    void setUpConnection() {
+        try {
+            Logger::logToFile("Setting up connection...", "", true);
+            m_connection.reset();
+            if (Utils::isUSB()) {
+                m_connection = std::make_unique<UsbConnection::UsbConnection>();
+                return;
+            }
+
+            m_connection = std::make_unique<SocketConnection::SocketConnection>();
+        } catch (const std::exception& e) {
+            Logger::logToFile("Exception caught while setting up connection", e.what());
+        }
+    }
 
     void __libnx_initheap(void) {
         static u8 inner_heap[0x300000];
@@ -44,7 +44,7 @@ extern "C" {
     }
 
     void __appInit(void) {
-        svcSleepThread(2e+10L);
+        svcSleepThread(5e+9L);
 
         Result rc = smInitialize();
         if (R_FAILED(rc)) {
@@ -131,30 +131,28 @@ extern "C" {
         capsscExit();
         viExit();
     }
-}
 
-int main() {
-    try {
-        Logger::logToFile("\n##########\r\n");
-        Logger::logToFile("Starting main()...");
+    int main(int argc, char** argv) {
+        Logger::logToFile("\n##########\r\n", "", true);
+        Logger::logToFile("Starting main()...", "", true);
 
-        while (true) {
-            Logger::logToFile("Connecting...");
-            if (m_connection->connect()) {
-                m_connection->run();
-                m_connection->disconnect();
+        while (appletMainLoop()) {
+            try {
+                Logger::logToFile("Connecting...", "", true);
+                if (m_connection->connect()) {
+                    m_connection->run();
+                    m_connection->disconnect();
+                }
+
+                Logger::logToFile("Resetting connection...", "", true);
+                setUpConnection();
+            } catch (const std::exception& e) {
+                Logger::logToFile("Exception caught in main().", e.what());
+                return -1;
             }
-
-            Logger::logToFile("Resetting connection...");
-            m_connection.reset();
-            setUpConnection();
         }
 
-        Logger::logToFile("Exiting main()...");
-    } catch (const std::exception& e) {
-        Logger::logToFile("Exception caught in main().", e.what());
-        return -1;
+        Logger::logToFile("Exiting main()...", "", true);
+        return 0;
     }
-
-    return 0;
 }

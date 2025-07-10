@@ -238,7 +238,7 @@ namespace ModuleBase {
 
     /**
      * @brief Set the key press sleep time from parameters.
-     * @param params The parameters vector.
+     * @param The parameters vector.
      */
     void BaseCommands::setKeySleepTime(const std::vector<std::string>& params) {
         if (params.size() < 2) {
@@ -251,7 +251,7 @@ namespace ModuleBase {
 
     /**
      * @brief Set the finger diameter from parameters.
-     * @param params The parameters vector.
+     * @param The parameters vector.
      */
     void BaseCommands::setFingerDiameter(const std::vector<std::string>& params) {
         if (params.size() < 2) {
@@ -264,7 +264,7 @@ namespace ModuleBase {
 
     /**
      * @brief Set the poll rate from parameters.
-     * @param params The parameters vector.
+     * @param The parameters vector.
      */
     void BaseCommands::setPollRate(const std::vector<std::string>& params) {
         if (params.size() < 2) {
@@ -277,7 +277,7 @@ namespace ModuleBase {
 
     /**
      * @brief Set whether PA is enabled from parameters.
-     * @param params The parameters vector.
+     * @param The parameters vector.
      */
     void BaseCommands::setEnabledPA(const std::vector<std::string>& params) {
         if (params.size() < 2) {
@@ -290,10 +290,11 @@ namespace ModuleBase {
 
     /**
      * @brief Set whether logs are enabled from parameters.
-     * @param params The parameters vector.
+     * @param The parameters vector.
      */
     void BaseCommands::setEnabledLogs(const std::vector<std::string>& params) {
         if (params.size() < 2) {
+            Logger::logToFile("setEnabledLogs() params size is less than 2.");
             return;
         }
 
@@ -445,8 +446,8 @@ namespace ModuleBase {
 
     /**
      * @brief Set the Switch time.
-     * @param params Parameters containing the time value.
-     * @param[out] buffer Output buffer indicating success.
+     * @param Parameters containing the time value.
+     * @param[out] Output buffer indicating success.
      */
     void BaseCommands::setSwitchTime(const std::vector<std::string>& params, std::vector<char>& buffer) {
         bool success = false;

@@ -88,11 +88,11 @@ namespace ControllerCommands {
 					char hi = str[c + 0];
 					char lo = str[c + 1];
 					hi = (hi >= '0' && hi <= '9') ? hi - '0' :
-						(hi >= 'a' && hi <= 'f') ? hi - 'a' + 10 :
-						(hi >= 'A' && hi <= 'F') ? hi - 'A' + 10 : 0;
+						 (hi >= 'a' && hi <= 'f') ? hi - 'a' + 10 :
+						 (hi >= 'A' && hi <= 'F') ? hi - 'A' + 10 : 0;
 					lo = (lo >= '0' && lo <= '9') ? lo - '0' :
-						(lo >= 'a' && lo <= 'f') ? lo - 'a' + 10 :
-						(lo >= 'A' && lo <= 'F') ? lo - 'A' + 10 : 0;
+						 (lo >= 'a' && lo <= 'f') ? lo - 'a' + 10 :
+						 (lo >= 'A' && lo <= 'F') ? lo - 'A' + 10 : 0;
 					ptr[0] = hi << 4 | lo;
 					ptr++;
 				}
@@ -102,6 +102,7 @@ namespace ControllerCommands {
 	public:
 		static int parseStringToButton(const std::string& arg);
 		static int parseStringToStick(const std::string& arg);
+
         void startControllerThread(LockFreeQueue<std::vector<char>>& senderQueue, std::condition_variable& senderCv);
 		void cqEnqueueCommand(const ControllerCommand& cmd);
 		void cqReplaceOnNext();
@@ -179,14 +180,14 @@ namespace ControllerCommands {
 		static std::unordered_map<std::string, int> m_stick;
 
         std::atomic_bool m_error { false };
-        std::atomic_bool m_replaceOnNext { false };
+		bool m_replaceOnNext = false;
 
 		std::thread m_ccThread;
 		LockFreeQueue<ControllerCommand> m_ccQueue;
 		std::mutex m_ccMutex;
 		std::condition_variable m_ccCv;
 
-		std::atomic<WallClock> m_nextStateChange;
+		WallClock m_nextStateChange;
         std::mutex m_controllerMutex;
         std::mutex m_enqueueMutex;
     };

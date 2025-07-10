@@ -17,7 +17,7 @@ namespace SbbLog {
 		static std::atomic<bool> m_isLoggingEnabled;
 
 	public:
-		static void logToFile(const std::string& message, const std::string& error = "");
+		static void logToFile(const std::string& message, const std::string& error = "", bool override = false);
 		static void enableLogs(bool enable);
 		static bool isLoggingEnabled();
 	};

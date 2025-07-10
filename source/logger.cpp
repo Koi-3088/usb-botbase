@@ -10,7 +10,6 @@
 #include <mutex>
 
 namespace SbbLog {
-    std::mutex m_logMutex;
     size_t Logger::m_maxLogSize = 1024 * 1024 * 8;
     std::atomic<bool> Logger::m_isLoggingEnabled { false };
 
@@ -43,10 +42,9 @@ namespace SbbLog {
         return rc == 0 ? stat_buf.st_size : 0;
     }
 
-    void Logger::logToFile(const std::string& message, const std::string& error) {
-        std::lock_guard<std::mutex> lock(m_logMutex);
+    void Logger::logToFile(const std::string& message, const std::string& error, bool override) {
         try {
-            if (!m_isLoggingEnabled.load(std::memory_order_acquire) && error.empty()) {
+            if (!m_isLoggingEnabled.load(std::memory_order_acquire) && error.empty() && !override) {
                 return;
             }
 
@@ -59,9 +57,7 @@ namespace SbbLog {
             std::string errorMessage = "Error: " + error;
             std::ofstream logFile(filename, std::ios::app);
             if (logFile.is_open()) {
-                if (message == "\n##########\r\n") {
-                    logFile << message << std::endl;
-                } else if (!error.empty()) {
+                if (!error.empty()) {
                     logFile << "[" << getCurrentTimestamp() << "] " << message << " " << errorMessage << std::endl;
                 } else {
                     logFile << "[" << getCurrentTimestamp() << "] " << message << std::endl;

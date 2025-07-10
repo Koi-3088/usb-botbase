@@ -8,9 +8,9 @@ namespace MemoryCommands {
 
     /**
      * @brief Read memory from the specified offset and size into the buffer.
-     * @param offset The memory offset.
-     * @param size The number of bytes to read.
-     * @param[out] buffer Output buffer for the read data.
+     * @param The memory offset.
+     * @param The number of bytes to read.
+     * @param[out] Output buffer for the read data.
      */
     void Vision::peek(u64 offset, u64 size, std::vector<char>& buffer) {
         u64 total = 0;
@@ -27,9 +27,9 @@ namespace MemoryCommands {
 
     /**
      * @brief Read multiple memory regions into the buffer.
-     * @param offsets Vector of memory offsets.
-     * @param sizes Vector of sizes for each region.
-     * @param[out] buffer Output buffer for the read data.
+     * @param Vector of memory offsets.
+     * @param Vector of sizes for each region.
+     * @param[out] Output buffer for the read data.
      */
     void Vision::peekMulti(const std::vector<u64>& offsets, const std::vector<u64>& sizes, std::vector<char>& buffer) {
         u64 ofs = 0;
@@ -49,9 +49,9 @@ namespace MemoryCommands {
 
     /**
      * @brief Write memory to the specified offset.
-     * @param offset The memory offset.
-     * @param size The number of bytes to write.
-     * @param buffer Input buffer containing data to write.
+     * @param The memory offset.
+     * @param The number of bytes to write.
+     * @param Input buffer containing data to write.
      */
     void Vision::poke(u64 offset, u64 size, const std::vector<char>& buffer) {
         writeMem(offset, size, buffer);
@@ -59,9 +59,9 @@ namespace MemoryCommands {
 
     /**
      * @brief Follow a pointer chain starting from main, applying jumps, and return the final address.
-     * @param main The base pointer offset.
-     * @param jumps Vector of jumps to follow.
-     * @param[out] buffer Buffer used for intermediate reads.
+     * @param The base pointer offset.
+     * @param Vector of jumps to follow.
+     * @param[out] Buffer used for intermediate reads.
      * @return The final address after following the pointer chain.
      */
     u64 Vision::followMainPointer(const s64& main, const std::vector<s64>& jumps, std::vector<char>& buffer) {
@@ -86,10 +86,10 @@ namespace MemoryCommands {
 
     /**
      * @brief Read memory from the debugged process.
-     * @param buffer Buffer to store the read data.
-     * @param offset The memory offset.
-     * @param size The number of bytes to read.
-     * @param multi Offset into the buffer for multi-read (default 0).
+     * @param Buffer to store the read data.
+     * @param The memory offset.
+     * @param The number of bytes to read.
+     * @param Offset into the buffer for multi-read (default 0).
      */
     void Vision::readMem(const std::vector<char>& buffer, u64 offset, u64 size, u64 multi) {
         attach();
@@ -102,9 +102,9 @@ namespace MemoryCommands {
 
     /**
      * @brief Write memory to the debugged process.
-     * @param offset The memory offset.
-     * @param size The number of bytes to write.
-     * @param buffer Buffer containing data to write.
+     * @param The memory offset.
+     * @param The number of bytes to write.
+     * @param Buffer containing data to write.
      */
     void Vision::writeMem(u64 offset, u64 size, const std::vector<char>& buffer) {
         attach();
