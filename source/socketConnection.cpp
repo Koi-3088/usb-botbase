@@ -63,12 +63,6 @@ namespace SocketConnection {
 
 		int retries = 0;
 		while (bind(m_tcp.serverFd, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0) {
-			if (m_error) {
-				Logger::logToFile("Socket error detected, exiting setupServerSocket().", std::to_string(errno));
-				close(m_tcp.serverFd);
-				return -1;
-            }
-
             Logger::logToFile("bind() error, retrying in 1 second...", std::to_string(errno));
 			svcSleepThread(1e+9L);
 
@@ -142,8 +136,8 @@ namespace SocketConnection {
 	void SocketConnection::run() {
 		m_error = false;
 		m_senderThread = std::thread([&]() {
-			try {
-				while (!m_error) {
+			while (!m_error) {
+				try {
 					std::vector<char> buffer;
 					while (m_senderQueue.pop(buffer) && !m_error) {
 						Logger::logToFile("Sending data to client: " + std::string(buffer.data(), buffer.size() - 2));
@@ -156,88 +150,90 @@ namespace SocketConnection {
 
 					std::unique_lock<std::mutex> lock(m_senderMutex);
 					m_senderCv.wait(lock, [&]() { return !m_senderQueue.empty() || m_error; });
+				} catch (const std::exception& e) {
+					Logger::logToFile("Sender thread exception.", e.what());
+					m_error = true;
+					notifyAll();
+				} catch (...) {
+					Logger::logToFile("Unknown sender thread exception.", "Unknown error.");
+					m_error = true;
+					notifyAll();
 				}
-			} catch (const std::exception& e) {
-				Logger::logToFile("Socket sender thread exception.", e.what());
-				m_error = true;
-				notifyAll();
-			} catch (...) {
-				Logger::logToFile("Unknown socket sender thread exception.", "Unknown error.");
-				m_error = true;
-				notifyAll();
 			}
+
+            Logger::logToFile("Socket sender thread exiting.");
+			m_error = true;
+            notifyAll();
 		});
 
 		m_commandThread = std::thread([&]() {
-			try {
-				while (!m_error) {
-					try {
-						std::string command;
-						while (m_commandQueue.pop(command) && !m_error) {
-							Utils::parseArgs(command, [&](const std::string& x, const std::vector<std::string>& y) {
-								auto buffer = m_handler->HandleCommand(x, y);
-								if (!buffer.empty()) {
-									if (buffer.back() != '\n') {
-										buffer.push_back('\n');
-									}
-
-									m_senderQueue.push(buffer);
-									m_senderCv.notify_one();
+			while (!m_error) {
+				try {
+					std::string command;
+					while (m_commandQueue.pop(command) && !m_error) {
+						Utils::parseArgs(command, [&](const std::string& x, const std::vector<std::string>& y) {
+							auto buffer = m_handler->HandleCommand(x, y);
+							if (!buffer.empty()) {
+								if (buffer.back() != '\n') {
+									buffer.push_back('\n');
 								}
-							});
-						}
 
-						std::unique_lock<std::mutex> lock(m_commandMutex);
-						m_commandCv.wait(lock, [&]() { return !m_commandQueue.empty() || m_error; });
-					} catch (const std::exception& e) {
-						Logger::logToFile("Command handler exception.", e.what());
-						m_error = true;
-						notifyAll();
-						break;
-					} catch (...) {
-						Logger::logToFile("Unknown command handler exception.", "Unknown error.");
-						m_error = true;
-						notifyAll();
-						break;
+								m_senderQueue.push(buffer);
+								m_senderCv.notify_one();
+							}
+					    });
 					}
+
+					std::unique_lock<std::mutex> lock(m_commandMutex);
+					m_commandCv.wait(lock, [&]() { return !m_commandQueue.empty() || m_error; });
+				} catch (const std::exception& e) {
+					Logger::logToFile("Command thread exception: ", e.what());
+					m_error = true;
+					notifyAll();
+					break;
+				} catch (...) {
+					Logger::logToFile("Unknown command thread exception.", "Unknown error.");
+					m_error = true;
+					notifyAll();
+					break;
 				}
-			} catch (const std::exception& e) {
-				Logger::logToFile("Main command thread exception.", e.what());
-				m_error = true;
-				notifyAll();
-			} catch (...) {
-				Logger::logToFile("Unknown main command thread exception.", "Unknown error.");
-				m_error = true;
-				notifyAll();
 			}
+
+            Logger::logToFile("Command thread exiting.");
+            m_error = true;
+            notifyAll();
         });
 
-		try {
-			std::string persistentBuffer;
-			while (!m_error) {
+		std::string persistentBuffer;
+		while (!m_error) {
+			try {
 				auto commands = receiveData(persistentBuffer, m_tcp.clientFd);
 				if (m_error) {
 					break;
-                }
-
-				if (!m_handler->getIsRunningPA() && m_handler->getIsEnabledPA()) {
-					m_handler->startControllerThread(m_senderQueue, m_senderCv);
 				}
 
 				for (auto& cmd : commands) {
 					m_commandQueue.push(cmd);
 					m_commandCv.notify_one();
 				}
+
+				if (!m_handler->getIsRunningPA() && m_handler->getIsEnabledPA()) {
+					m_handler->startControllerThread(m_senderQueue, m_senderCv, m_senderMutex, m_error);
+				}
+			} catch (const std::exception& e) {
+				Logger::logToFile("Socket reader thread exception.", e.what());
+				m_error = true;
+				notifyAll();
+			} catch (...) {
+				Logger::logToFile("Unknown socket reader thread exception.", "Unknown error.");
+				m_error = true;
+				notifyAll();
 			}
-		} catch (const std::exception& e) {
-			Logger::logToFile("Socket reader thread exception.", e.what());
-			m_error = true;
-			notifyAll();
-		} catch (...) {
-			Logger::logToFile("Unknown socket reader thread exception.", "Unknown error.");
-			m_error = true;
-			notifyAll();
 		}
+
+        Logger::logToFile("Main socket thread exiting.");
+        m_error = true;
+        notifyAll();
 	}
 
 	std::vector<std::string> SocketConnection::receiveData(std::string& persistentBuffer, int sockfd) {
@@ -255,28 +251,31 @@ namespace SocketConnection {
 					auto cmd = persistentBuffer.substr(0, pos + 2);
 					persistentBuffer.erase(0, pos + 2);
 
-					if (!m_handler->getIsRunningPA()) {
-						commands.push_back(cmd);
-					} else {
+					if (m_handler->getIsRunningPA()) {
 						Utils::parseArgs(cmd, [&](const std::string& command, const std::vector<std::string>& params) {
 							if (command == "cqCancel") {
 								m_handler->cqCancel();
 							} else if (command == "cqReplaceOnNext") {
 								m_handler->cqReplaceOnNext();
-                            } else if (command == "cqControllerState") {
+							} else if (command == "cqControllerState") {
 								Controller::ControllerCommand controllerCmd {};
 								controllerCmd.parseFromHex(params.front().data());
 								m_handler->cqEnqueueCommand(controllerCmd);
 							} else if (command == "ping" && params.size() == 1) {
-                                const std::string response = command + " " + params.front() + "\r\n";
-								m_senderQueue.push_front(std::vector<char>(response.begin(), response.end()));
-								m_senderCv.notify_one();
+								const std::string response = command + " " + params.front() + "\r\n";
+								m_commandQueue.push_front(response);
+								m_commandCv.notify_one();
+							} else {
+								commands.push_back(cmd);
 							}
 						});
+					} else {
+						commands.push_back(cmd);
 					}
 				}
 
 				if (!commands.empty()) {
+                    Logger::logToFile("receiveData() received " + std::to_string(commands.size()) + " commands.");
 					break;
 				}
 			} else if (received == 0) {

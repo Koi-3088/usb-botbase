@@ -219,14 +219,14 @@ namespace ControllerCommands {
      * @param Queue for sending data.
      * @param Condition variable for the sender queue.
      */
-    void Controller::startControllerThread(LockFreeQueue<std::vector<char>>& senderQueue, std::condition_variable& senderCv) {
+    void Controller::startControllerThread(LockFreeQueue<std::vector<char>>& senderQueue, std::condition_variable& senderCv, std::mutex& senderMutex, std::atomic_bool& error) {
         if (m_ccThreadRunning) {
             Logger::logToFile("Controller thread already running.");
             return;
         }
 
         Logger::logToFile("Starting commandLoopPA thread.");
-        m_ccThread = std::thread(&Controller::commandLoopPA, this, std::ref(senderQueue), std::ref(senderCv));
+        m_ccThread = std::thread(&Controller::commandLoopPA, this, std::ref(senderQueue), std::ref(senderCv), std::ref(senderMutex), std::ref(error));
     }
 
     /**
@@ -234,62 +234,57 @@ namespace ControllerCommands {
      * @param Queue for sending data.
      * @param Condition variable for the sender queue.
      */
-    void Controller::commandLoopPA(LockFreeQueue<std::vector<char>>& senderQueue, std::condition_variable& senderCv) {
+    void Controller::commandLoopPA(LockFreeQueue<std::vector<char>>& senderQueue, std::condition_variable& senderCv, std::mutex& senderMutex, std::atomic_bool& error) {
         const std::chrono::microseconds earlyWake(1000);
+        m_nextStateChange = WallClock::max();
         auto cmd = ControllerCommand {};
         m_ccThreadRunning = true;
         Logger::logToFile("commandLoopPA() started.");
 
         std::unique_lock<std::mutex> lock(m_ccMutex);
-        while (!m_error) {
+        while (!error) {
             WallClock now = std::chrono::steady_clock::now();
-            {
-                if (now >= m_nextStateChange) {
-                    if (!m_ccQueue.empty()) {
-                        Logger::logToFile("commandLoopPA() processing command.");
-                        m_ccQueue.pop(cmd);
-                        cqSendState(cmd, senderQueue, senderCv);
-                        m_nextStateChange = now + std::chrono::milliseconds(cmd.milliseconds);
-                    } else {
-                        Logger::logToFile("commandLoopPA() clearing state due to empty queue.");
-                        cmd.state.clear();
-                        cqSendState(cmd, senderQueue, senderCv);
-                        cmd.seqnum = 0;
-                        m_nextStateChange = WallClock::max();
-                    }
+            if (now >= m_nextStateChange) {
+                if (!m_ccQueue.empty()) {
+                    Logger::logToFile("commandLoopPA() processing command.");
+                    m_ccQueue.pop(cmd);
+                    cqSendState(cmd, senderQueue, senderCv, senderMutex);
+                    m_nextStateChange = now + std::chrono::milliseconds(cmd.milliseconds);
+                } else {
+                    Logger::logToFile("commandLoopPA() clearing state.");
+                    cmd.state.clear();
+                    cqSendState(cmd, senderQueue, senderCv, senderMutex);
+                    cmd.seqnum = 0;
+                    m_nextStateChange = WallClock::max();
                 }
             }
 
-            if (now + earlyWake >= m_nextStateChange) {
-                continue;
-            }
-
-            m_ccCv.wait_until(lock, m_nextStateChange - earlyWake, [&] {
-                return m_error.load(std::memory_order_acquire) ||
-                       now + earlyWake >= m_nextStateChange;
-            });
+            m_ccCv.wait_until(lock, m_nextStateChange - earlyWake, [&] { return error || (now + earlyWake >= m_nextStateChange && !m_replaceOnNext); });
         }
 
-        cqSendState(ControllerCommand {}, senderQueue, senderCv);
+        m_ccQueue.clear();
+        cqSendState(ControllerCommand {}, senderQueue, senderCv, senderMutex);
         detachController();
         m_ccThreadRunning = false;
-        m_error = true;
+        error.store(true);
         Logger::logToFile("commandLoopPA() stopped thread.");
     }
 
     /**
      * @brief Sends the current controller state to the client.
-     * @param The controller command (not used directly; m_controllerCommand is used).
+     * @param The controller command.
      * @param The queue to which the serialized state will be pushed.
      * @param The condition variable to notify after pushing to the queue.
+     * @param The mutex to lock the sender queue.
      */
-    void Controller::cqSendState(const ControllerCommand& cmd, LockFreeQueue<std::vector<char>>& senderQueue, std::condition_variable& senderCv) {
+    void Controller::cqSendState(const ControllerCommand& cmd, LockFreeQueue<std::vector<char>>& senderQueue, std::condition_variable& senderCv, std::mutex& senderMutex) {
         cqControllerState(cmd);
         if (cmd.seqnum != 0) {
+            std::lock_guard<std::mutex> lock(senderMutex);
             Logger::logToFile("cqSendState() command finished with seqnum: " + std::to_string(cmd.seqnum));
             std::string res = "cqCommandFinished " + std::to_string(cmd.seqnum) + "\r\n";
             senderQueue.push(std::vector<char>(res.begin(), res.end()));
-            senderCv.notify_one();
+            senderCv.notify_all();
         }
     }
 
@@ -298,7 +293,6 @@ namespace ControllerCommands {
      * @param The PA controller command.
      */
     void Controller::cqControllerState(const ControllerCommand& cmd) {
-        std::lock_guard<std::mutex> lock(m_controllerMutex);
         Logger::logToFile("cqControllerState() called with seqnum: " + std::to_string(cmd.seqnum));
         initController();
 
@@ -320,14 +314,17 @@ namespace ControllerCommands {
      */
     void Controller::cqEnqueueCommand(const ControllerCommand& cmd) {
         std::lock_guard<std::mutex> lock(m_ccMutex);
+        Logger::logToFile("cqEnqueueCommand() pushing command with seqnum: " + std::to_string(cmd.seqnum));
+
         if (m_replaceOnNext) {
             m_replaceOnNext = false;
-            m_nextStateChange = WallClock::min();
             m_ccQueue.clear();
+            m_nextStateChange = WallClock::min();
+            m_ccQueue.push(cmd);
             m_ccCv.notify_all();
+            return;
         }
 
-        Logger::logToFile("cqEnqueueCommand() pushing command with seqnum: " + std::to_string(cmd.seqnum));
         if (m_nextStateChange == WallClock::max()) {
             m_nextStateChange = WallClock::min();
             m_ccCv.notify_all();
@@ -343,8 +340,8 @@ namespace ControllerCommands {
     void Controller::cqCancel() {
         std::lock_guard<std::mutex> lock(m_ccMutex);
         Logger::logToFile("cqCancel().");
-        m_nextStateChange = WallClock::min();
         m_ccQueue.clear();
+        m_nextStateChange = WallClock::min();
         m_ccCv.notify_all();
     }
 
@@ -355,14 +352,13 @@ namespace ControllerCommands {
         std::lock_guard<std::mutex> lock(m_ccMutex);
         Logger::logToFile("cqReplaceOnNext().");
         m_replaceOnNext = true;
-        m_ccCv.notify_all();
+        //m_ccCv.notify_all();
     }
 
     /**
      * @brief Notify all PA threads.
      */
     void Controller::cqNotifyAll() {
-        m_error.store(true, std::memory_order_release);
         m_ccCv.notify_all();
     }
 

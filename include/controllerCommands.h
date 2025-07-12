@@ -25,12 +25,10 @@ namespace ControllerCommands {
 		   m_controllerDevice.npadInterfaceType = HidNpadInterfaceType_Bluetooth;
            m_controllerInitializedType = HidDeviceType_FullKey3;
            m_ccThreadRunning = false;
-		   m_error = false;
         };
 
 		~Controller() override {
             std::lock_guard<std::mutex> lock(m_ccMutex);
-			m_error = true;
             m_isEnabledPA = false;
 			m_ccThreadRunning = false;
 			detachController();
@@ -103,7 +101,7 @@ namespace ControllerCommands {
 		static int parseStringToButton(const std::string& arg);
 		static int parseStringToStick(const std::string& arg);
 
-        void startControllerThread(LockFreeQueue<std::vector<char>>& senderQueue, std::condition_variable& senderCv);
+        void startControllerThread(LockFreeQueue<std::vector<char>>& senderQueue, std::condition_variable& senderCv, std::mutex& senderMutex, std::atomic_bool& error);
 		void cqEnqueueCommand(const ControllerCommand& cmd);
 		void cqReplaceOnNext();
 		void cqCancel();
@@ -124,9 +122,9 @@ namespace ControllerCommands {
 		void setControllerType(const std::vector<std::string>& params);
 
 	private:
-		void commandLoopPA(LockFreeQueue<std::vector<char>>& senderQueue, std::condition_variable& senderCv);
+		void commandLoopPA(LockFreeQueue<std::vector<char>>& senderQueue, std::condition_variable& senderCv, std::mutex& senderMutex, std::atomic_bool& error);
 		void cqControllerState(const ControllerCommand& cmd);
-        void cqSendState(const ControllerCommand& cmd, LockFreeQueue<std::vector<char>>& senderQueue, std::condition_variable& senderCv);
+        void cqSendState(const ControllerCommand& cmd, LockFreeQueue<std::vector<char>>& senderQueue, std::condition_variable& senderCv, std::mutex& senderMutex);
 		inline void* aligned_alloc(size_t alignment, size_t size) {
 			if (alignment < sizeof(void*) || (alignment & (alignment - 1)) != 0) {
 				return nullptr;
@@ -179,7 +177,6 @@ namespace ControllerCommands {
 		static std::unordered_map<std::string, int> m_button;
 		static std::unordered_map<std::string, int> m_stick;
 
-        std::atomic_bool m_error { false };
 		bool m_replaceOnNext = false;
 
 		std::thread m_ccThread;
@@ -189,6 +186,5 @@ namespace ControllerCommands {
 
 		WallClock m_nextStateChange;
         std::mutex m_controllerMutex;
-        std::mutex m_enqueueMutex;
     };
 }

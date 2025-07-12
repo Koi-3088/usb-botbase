@@ -146,9 +146,10 @@ extern "C" {
 
                 Logger::logToFile("Resetting connection...", "", true);
                 setUpConnection();
-            } catch (const std::exception& e) {
-                Logger::logToFile("Exception caught in main().", e.what());
-                return -1;
+            } catch (...) {
+                Result rc = Result { 0x1001 };
+                Logger::logToFile("Exception caught in main().", std::to_string(R_DESCRIPTION(rc)));
+                fatalThrow(rc);
             }
         }
 

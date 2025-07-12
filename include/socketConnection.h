@@ -53,7 +53,6 @@ namespace SocketConnection {
 		void notifyAll() {
 			m_commandCv.notify_all();
             m_senderCv.notify_all();
-            m_handler->cqNotifyAll();
 			if (m_handler) {
                 m_handler->cqNotifyAll();
 			}
