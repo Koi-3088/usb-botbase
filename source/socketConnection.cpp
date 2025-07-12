@@ -263,8 +263,8 @@ namespace SocketConnection {
 								m_handler->cqEnqueueCommand(controllerCmd);
 							} else if (command == "ping" && params.size() == 1) {
 								const std::string response = command + " " + params.front() + "\r\n";
-								m_commandQueue.push_front(response);
-								m_commandCv.notify_one();
+								m_senderQueue.push_front(std::vector<char>(response.begin(), response.end()));
+								m_senderCv.notify_one();
 							} else {
 								commands.push_back(cmd);
 							}

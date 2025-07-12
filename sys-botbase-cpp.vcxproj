@@ -53,8 +53,7 @@
     <ExternalIncludePath>C:\devkitPro\devkitA64\include;C:\devkitPro\libnx\include;C:\devkitPro\devkitA64\aarch64-none-elf\include;$(ExternalIncludePath)</ExternalIncludePath>
     <NMakeIncludeSearchPath>$(IncludePath);$(ProjectDir)\include</NMakeIncludeSearchPath>
     <IncludePath>$(ProjectDir)\include;$(IncludePath)</IncludePath>
-    <AdditionalOptions>
-    </AdditionalOptions>
+    <AdditionalOptions>/external:anglebrackets /external:W0</AdditionalOptions>
     <SourcePath>$(ProjectDir)\source;$(SourcePath)</SourcePath>
     <NMakeOutput>
     </NMakeOutput>
@@ -96,7 +95,6 @@
     <ClCompile Include="source\main.cpp" />
     <ClCompile Include="source\memoryCommands.cpp" />
     <ClCompile Include="source\moduleBase.cpp" />
-    <ClCompile Include="source\ntp.cpp" />
     <ClCompile Include="source\socketConnection.cpp" />
     <ClCompile Include="source\usbConnection.cpp" />
     <ClCompile Include="source\util.cpp" />

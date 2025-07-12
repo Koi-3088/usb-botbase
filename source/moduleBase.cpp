@@ -418,14 +418,14 @@ namespace ModuleBase {
         if (R_SUCCEEDED(rc)) {
             std::tm* time = localtime(&posix);
             if (time->tm_year >= 160 || time->tm_year < 100) { // >= 2060 || < 2000
-                Logger::Logger::logToFile("getSwitchTime() invalid time range, setting time to 2000-01-01.");
+                Logger::logToFile("getSwitchTime() invalid time range, setting time to 2000-01-01.");
                 time->tm_year = 100;
                 time->tm_mon = 0;
                 time->tm_mday = 1;
 
                 rc = timeSetCurrentTime(TimeType_NetworkSystemClock, mktime(time));
                 if (R_SUCCEEDED(rc)) {
-                    Logger::Logger::logToFile("getSwitchTime() timeSetCurrentTime() succeeded, set time to 2000-01-01.");
+                    Logger::logToFile("getSwitchTime() timeSetCurrentTime() succeeded, set time to 2000-01-01.");
                     posix = mktime(time);
                 } else {
                     Logger::logToFile("getSwitchTime() timeSetCurrentTime() failed.", std::to_string(R_DESCRIPTION(rc)));
