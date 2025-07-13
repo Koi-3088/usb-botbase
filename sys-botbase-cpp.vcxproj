@@ -91,7 +91,6 @@
   <ItemGroup>
     <ClCompile Include="source\commandHandler.cpp" />
     <ClCompile Include="source\controllerCommands.cpp" />
-    <ClCompile Include="source\logger.cpp" />
     <ClCompile Include="source\main.cpp" />
     <ClCompile Include="source\memoryCommands.cpp" />
     <ClCompile Include="source\moduleBase.cpp" />

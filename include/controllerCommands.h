@@ -46,14 +46,6 @@ namespace ControllerCommands {
 			int16_t right_joystick_x = 0;
 			int16_t right_joystick_y = 0;
 
-			bool isNeutral() const {
-				return buttons == 0
-					&& left_joystick_x == 0
-					&& left_joystick_y == 0
-					&& right_joystick_x == 0
-					&& right_joystick_y == 0;
-			}
-
 			void clear() {
 				buttons = 0;
 				left_joystick_x = 0;
@@ -67,18 +59,6 @@ namespace ControllerCommands {
 			uint64_t seqnum;
 			uint64_t milliseconds;
 			ControllerState state {};
-
-			void writeToHex(char str[64]) const {
-				const char HEX_DIGITS[] = "0123456789abcdef";
-				const char* ptr = (const char*)this;
-				for (size_t c = 0; c < 64; c += 2) {
-					uint8_t hi = (uint8_t)ptr[0] >> 4;
-					uint8_t lo = (uint8_t)ptr[0] & 0x0f;
-					str[c + 0] = HEX_DIGITS[hi];
-					str[c + 1] = HEX_DIGITS[lo];
-					ptr++;
-				}
-			}
 
 			void parseFromHex(const char str[64]) {
 				char* ptr = (char*)this;

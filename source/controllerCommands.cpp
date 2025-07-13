@@ -249,6 +249,7 @@ namespace ControllerCommands {
                     Logger::logToFile("commandLoopPA() processing command.");
                     m_ccQueue.pop(cmd);
                     cqSendState(cmd, senderQueue, senderCv, senderMutex);
+                    cmd.seqnum = 0;
                     m_nextStateChange = now + std::chrono::milliseconds(cmd.milliseconds);
                 } else {
                     Logger::logToFile("commandLoopPA() clearing state.");
@@ -352,7 +353,6 @@ namespace ControllerCommands {
         std::lock_guard<std::mutex> lock(m_ccMutex);
         Logger::logToFile("cqReplaceOnNext().");
         m_replaceOnNext = true;
-        //m_ccCv.notify_all();
     }
 
     /**

@@ -173,6 +173,10 @@ namespace SocketConnection {
 					while (m_commandQueue.pop(command) && !m_error) {
 						Utils::parseArgs(command, [&](const std::string& x, const std::vector<std::string>& y) {
 							auto buffer = m_handler->HandleCommand(x, y);
+							if (!m_handler->getIsRunningPA() && m_handler->getIsEnabledPA()) {
+								m_handler->startControllerThread(m_senderQueue, m_senderCv, m_senderMutex, m_error);
+							}
+
 							if (!buffer.empty()) {
 								if (buffer.back() != '\n') {
 									buffer.push_back('\n');
@@ -216,10 +220,6 @@ namespace SocketConnection {
 					m_commandQueue.push(cmd);
 					m_commandCv.notify_one();
 				}
-
-				if (!m_handler->getIsRunningPA() && m_handler->getIsEnabledPA()) {
-					m_handler->startControllerThread(m_senderQueue, m_senderCv, m_senderMutex, m_error);
-				}
 			} catch (const std::exception& e) {
 				Logger::logToFile("Socket reader thread exception.", e.what());
 				m_error = true;
@@ -248,7 +248,7 @@ namespace SocketConnection {
 
 				size_t pos;
 				while ((pos = persistentBuffer.find("\r\n")) != std::string::npos && !m_error) {
-					auto cmd = persistentBuffer.substr(0, pos + 2);
+					auto cmd = persistentBuffer.substr(0, pos);
 					persistentBuffer.erase(0, pos + 2);
 
 					if (m_handler->getIsRunningPA()) {
@@ -263,8 +263,8 @@ namespace SocketConnection {
 								m_handler->cqEnqueueCommand(controllerCmd);
 							} else if (command == "ping" && params.size() == 1) {
 								const std::string response = command + " " + params.front() + "\r\n";
-								m_senderQueue.push_front(std::vector<char>(response.begin(), response.end()));
-								m_senderCv.notify_one();
+                                std::lock_guard<std::mutex> lock(m_senderMutex);
+                                sendData(response.data(), response.size(), sockfd);
 							} else {
 								commands.push_back(cmd);
 							}

@@ -7,71 +7,93 @@
 namespace LocklessQueue {
     template<typename T>
     class LockFreeQueue {
+    private:
+        struct Node {
+            std::unique_ptr<T> data;
+            std::atomic<Node*> next;
+
+            Node() : next(nullptr) {}
+            explicit Node(const T& value) : data(new T(value)), next(nullptr) {}
+            explicit Node(T&& value) : data(new T(std::move(value))), next(nullptr) {}
+        };
+
+        std::atomic<Node*> m_head;
+        std::atomic<Node*> m_tail;
+        std::atomic<size_t> m_size;
+        const size_t m_capacity;
+
     public:
-        explicit LockFreeQueue(size_t capacity)
-            : m_capacity(capacity + 1),
-              m_buffer(new T[m_capacity]),
-              m_head(0),
-              m_tail(0) {}
+        explicit LockFreeQueue(size_t capacity) : m_size(0), m_capacity(capacity) {
+              Node* dummy = new Node();
+              m_head.store(dummy, std::memory_order_relaxed);
+              m_tail.store(dummy, std::memory_order_relaxed);
+        }
 
         LockFreeQueue(const LockFreeQueue&) = delete;
         LockFreeQueue& operator=(const LockFreeQueue&) = delete;
 
-        bool push(const T& item) {
-            size_t tail = m_tail.load(std::memory_order_relaxed);
-            size_t next_tail = increment(tail);
-            if (next_tail == m_head.load(std::memory_order_acquire)) {
-                return false;
+        ~LockFreeQueue() {
+            Node* node = m_head.load(std::memory_order_relaxed);
+            while (node) {
+                Node* next = node->next.load(std::memory_order_relaxed);
+                delete node;
+                node = next;
             }
-
-            m_buffer[tail] = item;
-            m_tail.store(next_tail, std::memory_order_release);
-            return true;
         }
 
-        bool push_front(const T& item) {
-            size_t head = m_head.load(std::memory_order_relaxed);
-            size_t prev_head = decrement(head);
-            if (m_tail.load(std::memory_order_acquire) == prev_head) {
+        bool push(const T& item) {
+            if (m_size.load(std::memory_order_acquire) >= m_capacity) {
                 return false;
             }
 
-            m_buffer[prev_head] = item;
-            m_head.store(prev_head, std::memory_order_release);
+            Node* new_node = new Node(item);
+            Node* tail;
+            while (true) {
+                tail = m_tail.load(std::memory_order_acquire);
+                Node* next = tail->next.load(std::memory_order_acquire);
+                if (next == nullptr) {
+                    if (tail->next.compare_exchange_weak(next, new_node)) {
+                        break;
+                    }
+                } else {
+                    m_tail.compare_exchange_weak(tail, next);
+                }
+            }
+
+            m_tail.compare_exchange_weak(tail, new_node);
+            m_size.fetch_add(1, std::memory_order_release);
             return true;
         }
 
         bool pop(T& item) {
-            size_t head = m_head.load(std::memory_order_relaxed);
-            if (head == m_tail.load(std::memory_order_acquire)) {
-                return false;
-            }
+            Node* head;
+            while (true) {
+                head = m_head.load(std::memory_order_acquire);
+                Node* next = head->next.load(std::memory_order_acquire);
+                if (next == nullptr) {
+                    return false;
+                }
 
-            item = std::move(m_buffer[head]);
-            m_head.store(increment(head), std::memory_order_release);
-            return true;
+                if (m_head.compare_exchange_weak(head, next)) {
+                    item = std::move(*next->data);
+                    delete head;
+                    m_size.fetch_sub(1, std::memory_order_release);
+                    return true;
+                }
+            }
         }
 
         void clear() {
-            m_head.store(0, std::memory_order_release);
-            m_tail.store(0, std::memory_order_release);
+            T temp;
+            while (pop(temp)) {}
         }
 
         bool empty() const {
-            return m_head.load(std::memory_order_acquire) == m_tail.load(std::memory_order_acquire);
+            return m_size.load(std::memory_order_acquire) == 0;
         }
 
         bool full() const {
-            return increment(m_tail.load(std::memory_order_acquire)) == m_head.load(std::memory_order_acquire);
+            return m_size.load(std::memory_order_acquire) >= m_capacity;
         }
-
-    private:
-        size_t increment(size_t idx) const { return (idx + 1) % m_capacity; }
-        size_t decrement(size_t idx) const { return (idx + m_capacity - 1) % m_capacity; }
-
-        const size_t m_capacity;
-        std::unique_ptr<T[]> m_buffer;
-        std::atomic<size_t> m_head;
-        std::atomic<size_t> m_tail;
     };
 }
