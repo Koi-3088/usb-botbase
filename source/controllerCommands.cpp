@@ -20,14 +20,14 @@ namespace ControllerCommands {
         //taken from switchexamples github
         Result rc = hiddbgInitialize();
         if (R_FAILED(rc)) {
-            Logger::logToFile("initController() hiddbgInitialize() failed.", std::to_string(R_DESCRIPTION(rc)));
+            Logger::instance().log("initController() hiddbgInitialize() failed.", std::to_string(R_DESCRIPTION(rc)));
             return;
         }
 
         if (!m_workMem) {
             m_workMem = (u8*)aligned_alloc(0x1000, m_workMem_size);
             if (!m_workMem) {
-                Logger::logToFile("Failed to initialize virtual controller.", "initController() aligned_alloc() failed.");
+                Logger::instance().log("Failed to initialize virtual controller.", "initController() aligned_alloc() failed.");
                 return;
             }
         }
@@ -51,12 +51,12 @@ namespace ControllerCommands {
 
         rc = hiddbgAttachHdlsWorkBuffer(&m_sessionId, m_workMem, m_workMem_size);
         if (R_FAILED(rc)) {
-            Logger::logToFile("initController() hiddbgAttachHdlsWorkBuffer() failed.", std::to_string(R_DESCRIPTION(rc)));
+            Logger::instance().log("initController() hiddbgAttachHdlsWorkBuffer() failed.", std::to_string(R_DESCRIPTION(rc)));
         }
 
         rc = hiddbgAttachHdlsVirtualDevice(&m_controllerHandle, &m_controllerDevice);
         if (R_FAILED(rc)) {
-            Logger::logToFile("initController() hiddbgAttachHdlsVirtualDevice() failed.", std::to_string(R_DESCRIPTION(rc)));
+            Logger::instance().log("initController() hiddbgAttachHdlsVirtualDevice() failed.", std::to_string(R_DESCRIPTION(rc)));
         }
 
         //init a dummy keyboard state for assignment between keypresses
@@ -75,12 +75,12 @@ namespace ControllerCommands {
 
         Result rc = hiddbgDetachHdlsVirtualDevice(m_controllerHandle);
         if (R_FAILED(rc)) {
-            Logger::logToFile("detachController() hiddbgDetachHdlsVirtualDevice() failed.", std::to_string(R_DESCRIPTION(rc)));
+            Logger::instance().log("detachController() hiddbgDetachHdlsVirtualDevice() failed.", std::to_string(R_DESCRIPTION(rc)));
         }
 
         rc = hiddbgReleaseHdlsWorkBuffer(m_sessionId);
         if (R_FAILED(rc)) {
-            Logger::logToFile("detachController() hiddbgReleaseHdlsWorkBuffer() failed.", std::to_string(R_DESCRIPTION(rc)));
+            Logger::instance().log("detachController() hiddbgReleaseHdlsWorkBuffer() failed.", std::to_string(R_DESCRIPTION(rc)));
         }
 
         hiddbgExit();
@@ -109,7 +109,7 @@ namespace ControllerCommands {
         m_hiddbgHdlsState.buttons |= btn;
         Result rc = hiddbgSetHdlsState(m_controllerHandle, &m_hiddbgHdlsState);
         if (R_FAILED(rc)) {
-            Logger::logToFile("press() hiddbgSetHdlsState() failed.", std::to_string(R_DESCRIPTION(rc)));
+            Logger::instance().log("press() hiddbgSetHdlsState() failed.", std::to_string(R_DESCRIPTION(rc)));
         }
     }
 
@@ -122,7 +122,7 @@ namespace ControllerCommands {
         m_hiddbgHdlsState.buttons &= ~btn;
         Result rc = hiddbgSetHdlsState(m_controllerHandle, &m_hiddbgHdlsState);
         if (R_FAILED(rc)) {
-            Logger::logToFile("release() hiddbgSetHdlsState() failed.", std::to_string(R_DESCRIPTION(rc)));
+            Logger::instance().log("release() hiddbgSetHdlsState() failed.", std::to_string(R_DESCRIPTION(rc)));
         }
     }
 
@@ -144,7 +144,7 @@ namespace ControllerCommands {
 
         Result rc = hiddbgSetHdlsState(m_controllerHandle, &m_hiddbgHdlsState);
         if (R_FAILED(rc)) {
-            Logger::logToFile("setStickState() hiddbgSetHdlsState() failed.", std::to_string(R_DESCRIPTION(rc)));
+            Logger::instance().log("setStickState() hiddbgSetHdlsState() failed.", std::to_string(R_DESCRIPTION(rc)));
         }
     }
 
@@ -221,11 +221,11 @@ namespace ControllerCommands {
      */
     void Controller::startControllerThread(LockFreeQueue<std::vector<char>>& senderQueue, std::condition_variable& senderCv, std::mutex& senderMutex, std::atomic_bool& error) {
         if (m_ccThreadRunning) {
-            Logger::logToFile("Controller thread already running.");
+            Logger::instance().log("Controller thread already running.");
             return;
         }
 
-        Logger::logToFile("Starting commandLoopPA thread.");
+        Logger::instance().log("Starting commandLoopPA thread.");
         m_ccThread = std::thread(&Controller::commandLoopPA, this, std::ref(senderQueue), std::ref(senderCv), std::ref(senderMutex), std::ref(error));
     }
 
@@ -239,20 +239,20 @@ namespace ControllerCommands {
         m_nextStateChange = WallClock::max();
         auto cmd = ControllerCommand {};
         m_ccThreadRunning = true;
-        Logger::logToFile("commandLoopPA() started.");
+        Logger::instance().log("commandLoopPA() started.");
 
         std::unique_lock<std::mutex> lock(m_ccMutex);
         while (!error) {
             WallClock now = std::chrono::steady_clock::now();
             if (now >= m_nextStateChange) {
                 if (!m_ccQueue.empty()) {
-                    Logger::logToFile("commandLoopPA() processing command.");
                     m_ccQueue.pop(cmd);
+                    Logger::instance().log("commandLoopPA() processing command (seqnum " + std::to_string(cmd.seqnum) + ").");
                     cqSendState(cmd, senderQueue, senderCv, senderMutex);
                     cmd.seqnum = 0;
                     m_nextStateChange = now + std::chrono::milliseconds(cmd.milliseconds);
                 } else {
-                    Logger::logToFile("commandLoopPA() clearing state.");
+                    Logger::instance().log("commandLoopPA() clearing state (seqnum " + std::to_string(cmd.seqnum) + ").");
                     cmd.state.clear();
                     cqSendState(cmd, senderQueue, senderCv, senderMutex);
                     cmd.seqnum = 0;
@@ -268,7 +268,7 @@ namespace ControllerCommands {
         detachController();
         m_ccThreadRunning = false;
         error.store(true);
-        Logger::logToFile("commandLoopPA() stopped thread.");
+        Logger::instance().log("commandLoopPA() stopped thread.");
     }
 
     /**
@@ -281,9 +281,8 @@ namespace ControllerCommands {
     void Controller::cqSendState(const ControllerCommand& cmd, LockFreeQueue<std::vector<char>>& senderQueue, std::condition_variable& senderCv, std::mutex& senderMutex) {
         cqControllerState(cmd);
         if (cmd.seqnum != 0) {
-            std::lock_guard<std::mutex> lock(senderMutex);
-            Logger::logToFile("cqSendState() command finished with seqnum: " + std::to_string(cmd.seqnum));
-            std::string res = "cqCommandFinished " + std::to_string(cmd.seqnum) + "\r\n";
+            Logger::instance().log("cqSendState() command finished with seqnum: " + std::to_string(cmd.seqnum));
+            const std::string res = "cqCommandFinished " + std::to_string(cmd.seqnum) + "\r\n";
             senderQueue.push(std::vector<char>(res.begin(), res.end()));
             senderCv.notify_all();
         }
@@ -294,7 +293,7 @@ namespace ControllerCommands {
      * @param The PA controller command.
      */
     void Controller::cqControllerState(const ControllerCommand& cmd) {
-        Logger::logToFile("cqControllerState() called with seqnum: " + std::to_string(cmd.seqnum));
+        Logger::instance().log("cqControllerState() called with seqnum: " + std::to_string(cmd.seqnum));
         initController();
 
         m_hiddbgHdlsState.buttons = cmd.state.buttons;
@@ -305,7 +304,7 @@ namespace ControllerCommands {
 
         Result rc = hiddbgSetHdlsState(m_controllerHandle, &m_hiddbgHdlsState);
         if (R_FAILED(rc)) {
-            Logger::logToFile("cqControllerState() hiddbgSetHdlsState() failed.", std::to_string(R_DESCRIPTION(rc)));
+            Logger::instance().log("cqControllerState() hiddbgSetHdlsState() failed.", std::to_string(R_DESCRIPTION(rc)));
         }
     }
 
@@ -315,7 +314,7 @@ namespace ControllerCommands {
      */
     void Controller::cqEnqueueCommand(const ControllerCommand& cmd) {
         std::lock_guard<std::mutex> lock(m_ccMutex);
-        Logger::logToFile("cqEnqueueCommand() pushing command with seqnum: " + std::to_string(cmd.seqnum));
+        Logger::instance().log("cqEnqueueCommand() pushing command with seqnum: " + std::to_string(cmd.seqnum));
 
         if (m_replaceOnNext) {
             m_replaceOnNext = false;
@@ -340,7 +339,7 @@ namespace ControllerCommands {
      */
     void Controller::cqCancel() {
         std::lock_guard<std::mutex> lock(m_ccMutex);
-        Logger::logToFile("cqCancel().");
+        Logger::instance().log("cqCancel().");
         m_ccQueue.clear();
         m_nextStateChange = WallClock::min();
         m_ccCv.notify_all();
@@ -351,7 +350,7 @@ namespace ControllerCommands {
      */
     void Controller::cqReplaceOnNext() {
         std::lock_guard<std::mutex> lock(m_ccMutex);
-        Logger::logToFile("cqReplaceOnNext().");
+        Logger::instance().log("cqReplaceOnNext().");
         m_replaceOnNext = true;
     }
 
@@ -372,7 +371,7 @@ namespace ControllerCommands {
         if (it != Controller::m_button.end()) {
             return it->second;
         } else {
-            Logger::logToFile("parseStringToButton() button not found (" + arg + ").");
+            Logger::instance().log("parseStringToButton() button not found (" + arg + ").");
             return -1;
         }
     }
@@ -387,7 +386,7 @@ namespace ControllerCommands {
         if (it != Controller::m_stick.end()) {
             return it->second;
         } else {
-            Logger::logToFile("parseStringToStick() stick not found (" + arg + ").");
+            Logger::instance().log("parseStringToStick() stick not found (" + arg + ").");
             return -1;
         }
     }

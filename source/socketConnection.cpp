@@ -38,20 +38,20 @@ namespace SocketConnection {
 	int SocketConnection::setupServerSocket() {
 		m_tcp.serverFd = socket(AF_INET, SOCK_STREAM, 0);
 		if (m_tcp.serverFd < 0) {
-            Logger::logToFile("socket() error.", std::to_string(errno));
+            Logger::instance().log("socket() error.", std::to_string(errno));
 			return -1;
 		}
 
 		int flags = 1;
 		if (ioctl(m_tcp.serverFd, FIONBIO, &flags) < 0) {
-			Logger::logToFile("ioctl(FIONBIO) error.", std::to_string(errno));
+			Logger::instance().log("ioctl(FIONBIO) error.", std::to_string(errno));
 			close(m_tcp.serverFd);
 			return -1;
 		}
 
 		int opt = 1;
 		if (setsockopt(m_tcp.serverFd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
-			Logger::logToFile("setsockopt() error.", std::to_string(errno));
+			Logger::instance().log("setsockopt() error.", std::to_string(errno));
 			close(m_tcp.serverFd);
 			return -1;
 		}
@@ -63,11 +63,11 @@ namespace SocketConnection {
 
 		int retries = 0;
 		while (bind(m_tcp.serverFd, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0) {
-            Logger::logToFile("bind() error, retrying in 1 second...", std::to_string(errno));
+            Logger::instance().log("bind() error, retrying in 1 second...", std::to_string(errno));
 			svcSleepThread(1e+9L);
 
 			if (++retries > 10) {
-				Logger::logToFile("Failed to bind socket after multiple attempts, giving up.", std::to_string(errno));
+				Logger::instance().log("Failed to bind socket after multiple attempts, giving up.", std::to_string(errno));
 				close(m_tcp.serverFd);
 				socketExit();
 				Result rc;
@@ -77,7 +77,7 @@ namespace SocketConnection {
 		}
 
 		if (listen(m_tcp.serverFd, 3) < 0) {
-			Logger::logToFile("listen() error.", std::to_string(errno));
+			Logger::instance().log("listen() error.", std::to_string(errno));
 			close(m_tcp.serverFd);
 			return -1;
 		}
@@ -99,7 +99,7 @@ namespace SocketConnection {
 
 			struct sockaddr_in clientAddr {};
 			socklen_t clientSize = sizeof(clientAddr);
-			Logger::logToFile("Waiting for client to connect...", "", true);
+			Logger::instance().log("Waiting for client to connect...", "", true);
 
 			while (m_tcp.clientFd == -1) {
 				m_tcp.clientFd = accept(m_tcp.serverFd, (struct sockaddr*)&clientAddr, &clientSize);
@@ -113,16 +113,16 @@ namespace SocketConnection {
 				}
 			}
 		} catch (const std::exception& e) {
-            Logger::logToFile("Exception while waiting for client to connect: ", e.what());
+            Logger::instance().log("Exception while waiting for client to connect: ", e.what());
             m_error = true;
 			return false;
 		} catch (...) {
-            Logger::logToFile("Unknown exception while waiting for client to connect.", "Unknown error.");
+            Logger::instance().log("Unknown exception while waiting for client to connect.", "Unknown error.");
             m_error = true;
 			return false;
         }
 
-		Logger::logToFile("Client connected.");
+		Logger::instance().log("Client connected.");
 		return true;
 	}
 
@@ -130,7 +130,7 @@ namespace SocketConnection {
         m_error = true;
 		close(m_tcp.serverFd);
         close(m_tcp.clientFd);
-		Logger::logToFile("Disconnected.");
+		Logger::instance().log("Disconnected.");
 	}
 
 	void SocketConnection::run() {
@@ -140,10 +140,10 @@ namespace SocketConnection {
 				try {
 					std::vector<char> buffer;
 					while (m_senderQueue.pop(buffer) && !m_error) {
-						Logger::logToFile("Sending data to client: " + std::string(buffer.data(), buffer.size() - 2));
+						Logger::instance().log("Sending data to client: " + std::string(buffer.data(), buffer.size() - 1));
 						int sent = sendData(buffer.data(), buffer.size(), m_tcp.clientFd);
 						if (sent <= 0) {
-							Logger::logToFile("sendData() failed or client disconnected.");
+							Logger::instance().log("sendData() failed or client disconnected.");
 							break;
 						}
 					}
@@ -151,17 +151,17 @@ namespace SocketConnection {
 					std::unique_lock<std::mutex> lock(m_senderMutex);
 					m_senderCv.wait(lock, [&]() { return !m_senderQueue.empty() || m_error; });
 				} catch (const std::exception& e) {
-					Logger::logToFile("Sender thread exception.", e.what());
+					Logger::instance().log("Sender thread exception.", e.what());
 					m_error = true;
 					notifyAll();
 				} catch (...) {
-					Logger::logToFile("Unknown sender thread exception.", "Unknown error.");
+					Logger::instance().log("Unknown sender thread exception.", "Unknown error.");
 					m_error = true;
 					notifyAll();
 				}
 			}
 
-            Logger::logToFile("Socket sender thread exiting.");
+            Logger::instance().log("Socket sender thread exiting.");
 			m_error = true;
             notifyAll();
 		});
@@ -191,19 +191,19 @@ namespace SocketConnection {
 					std::unique_lock<std::mutex> lock(m_commandMutex);
 					m_commandCv.wait(lock, [&]() { return !m_commandQueue.empty() || m_error; });
 				} catch (const std::exception& e) {
-					Logger::logToFile("Command thread exception: ", e.what());
+					Logger::instance().log("Command thread exception: ", e.what());
 					m_error = true;
 					notifyAll();
 					break;
 				} catch (...) {
-					Logger::logToFile("Unknown command thread exception.", "Unknown error.");
+					Logger::instance().log("Unknown command thread exception.", "Unknown error.");
 					m_error = true;
 					notifyAll();
 					break;
 				}
 			}
 
-            Logger::logToFile("Command thread exiting.");
+            Logger::instance().log("Command thread exiting.");
             m_error = true;
             notifyAll();
         });
@@ -221,17 +221,17 @@ namespace SocketConnection {
 					m_commandCv.notify_one();
 				}
 			} catch (const std::exception& e) {
-				Logger::logToFile("Socket reader thread exception.", e.what());
+				Logger::instance().log("Socket reader thread exception.", e.what());
 				m_error = true;
 				notifyAll();
 			} catch (...) {
-				Logger::logToFile("Unknown socket reader thread exception.", "Unknown error.");
+				Logger::instance().log("Unknown socket reader thread exception.", "Unknown error.");
 				m_error = true;
 				notifyAll();
 			}
 		}
 
-        Logger::logToFile("Main socket thread exiting.");
+        Logger::instance().log("Main socket thread exiting.");
         m_error = true;
         notifyAll();
 	}
@@ -248,7 +248,7 @@ namespace SocketConnection {
 
 				size_t pos;
 				while ((pos = persistentBuffer.find("\r\n")) != std::string::npos && !m_error) {
-					auto cmd = persistentBuffer.substr(0, pos);
+					auto cmd = persistentBuffer.substr(0, pos + 2);
 					persistentBuffer.erase(0, pos + 2);
 
 					if (m_handler->getIsRunningPA()) {
@@ -262,8 +262,8 @@ namespace SocketConnection {
 								controllerCmd.parseFromHex(params.front().data());
 								m_handler->cqEnqueueCommand(controllerCmd);
 							} else if (command == "ping" && params.size() == 1) {
+								std::lock_guard<std::mutex> lock(m_senderMutex);
 								const std::string response = command + " " + params.front() + "\r\n";
-                                std::lock_guard<std::mutex> lock(m_senderMutex);
                                 sendData(response.data(), response.size(), sockfd);
 							} else {
 								commands.push_back(cmd);
@@ -275,11 +275,11 @@ namespace SocketConnection {
 				}
 
 				if (!commands.empty()) {
-                    Logger::logToFile("receiveData() received " + std::to_string(commands.size()) + " commands.");
+                    Logger::instance().log("receiveData() received " + std::to_string(commands.size()) + " commands.");
 					break;
 				}
 			} else if (received == 0) {
-				Logger::logToFile("receiveData() client closed the connection.", std::string(strerror(errno)));
+				Logger::instance().log("receiveData() client closed the connection.", std::string(strerror(errno)));
 				m_error = true;
 				notifyAll();
 				return {};
@@ -287,12 +287,12 @@ namespace SocketConnection {
 				if (errno == EWOULDBLOCK || errno == EAGAIN) {
 					ssize_t peekResult = recv(sockfd, buf, 1, MSG_PEEK);
 					if (peekResult == 0) {
-						Logger::logToFile("receiveData() client closed the connection (detected by MSG_PEEK).", std::string(strerror(errno)));
+						Logger::instance().log("receiveData() client closed the connection (detected by MSG_PEEK).", std::string(strerror(errno)));
 						m_error = true;
 						notifyAll();
 						break;
 					} else if (peekResult < 0 && errno != EWOULDBLOCK && errno != EAGAIN) {
-						Logger::logToFile("receiveData() recv(MSG_PEEK) error.", std::string(strerror(errno)));
+						Logger::instance().log("receiveData() recv(MSG_PEEK) error.", std::string(strerror(errno)));
 						m_error = true;
 						notifyAll();
 						break;
@@ -301,7 +301,7 @@ namespace SocketConnection {
 					continue;
 				}
 
-				Logger::logToFile("receiveData() recv() error.", std::string(strerror(errno)));
+				Logger::instance().log("receiveData() recv() error.", std::string(strerror(errno)));
 				m_error = true;
 				notifyAll();
 				return {};
@@ -321,12 +321,12 @@ namespace SocketConnection {
 			}
 
 			if (sent == 0) {
-				Logger::logToFile("sendData(): Failed to send data. Client closed the connection.", std::string(strerror(errno)));
+				Logger::instance().log("sendData(): Failed to send data. Client closed the connection.", std::string(strerror(errno)));
 				m_error = true;
 				notifyAll();
 				return -1;
 			} else if (sent == -1 && errno != EWOULDBLOCK && errno != EAGAIN) {
-				Logger::logToFile("sendData(): Failed to send data. send() error.", std::string(strerror(errno)));
+				Logger::instance().log("sendData(): Failed to send data. send() error.", std::string(strerror(errno)));
 				m_error = true;
 				notifyAll();
 				return -1;
@@ -334,12 +334,12 @@ namespace SocketConnection {
 				char tmp;
 				ssize_t peekResult = recv(sockfd, &tmp, 1, MSG_PEEK);
 				if (peekResult == 0) {
-					Logger::logToFile("sendData(): Client closed the connection (detected by MSG_PEEK).");
+					Logger::instance().log("sendData(): Client closed the connection (detected by MSG_PEEK).");
 					m_error = true;
 					notifyAll();
 					return -1;
 				} else if (peekResult < 0 && errno != EWOULDBLOCK && errno != EAGAIN) {
-					Logger::logToFile("sendData(): recv(MSG_PEEK) error: " + std::string(strerror(errno)));
+					Logger::instance().log("sendData(): recv(MSG_PEEK) error: " + std::string(strerror(errno)));
 					m_error = true;
 					notifyAll();
 					return -1;

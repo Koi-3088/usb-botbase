@@ -21,21 +21,21 @@ namespace CommandHandler {
 	std::vector<char> Handler::HandleCommand(const std::string& cmd, const std::vector<std::string>& params) {
 		std::vector<char> buffer;
 		if (cmd.empty()) {
-			Logger::logToFile("HandleCommand cmd empty.");
+			Logger::instance().log("HandleCommand cmd empty.");
 			return buffer;
 		}
 
-		Logger::logToFile("HandleCommand cmd: " + cmd + ". Params#: " + std::to_string(params.size()));
-		/*Logger::logToFile("HandleCommand params#: " + std::to_string(params.size()));
+		Logger::instance().log("HandleCommand cmd: " + cmd + ". Params#: " + std::to_string(params.size()));
+		/*Logger::instance().log("HandleCommand params#: " + std::to_string(params.size()));
 		for (int i = 0; i < (int)params.size(); i++) {
-			Logger::logToFile("HandleCommand param " + std::to_string(i) + ": " + params.at(i));
+			Logger::instance().log("HandleCommand param " + std::to_string(i) + ": " + params.at(i));
 		}*/
 
 		auto it = Handler::m_cmd.find(cmd);
 		if (it != Handler::m_cmd.end()) {
 			it->second(params, buffer);
 		} else {
-			Logger::logToFile("HandleCommand cmd not found (" + cmd + ").");
+			Logger::instance().log("HandleCommand cmd not found (" + cmd + ").");
 		}
 
 		return buffer;
@@ -221,7 +221,7 @@ namespace CommandHandler {
 			val += finalJump;
 			std::memcpy(buffer.data(), &val, sizeof(val));
 		} else {
-			Logger::logToFile("pointerAll_cmd() val is 0, not adding final jump.");
+			Logger::instance().log("pointerAll_cmd() val is 0, not adding final jump.");
 		}
 	}
 
@@ -255,7 +255,7 @@ namespace CommandHandler {
 			val -= m_metaData.heap_base;
 			std::memcpy(buffer.data(), &val, sizeof(val));
 		} else {
-			Logger::logToFile("pointerRelative_cmd() val is 0, not adding final jump.");
+			Logger::instance().log("pointerRelative_cmd() val is 0, not adding final jump.");
 		}
 	}
 
@@ -611,7 +611,7 @@ namespace CommandHandler {
 		if (it != BaseCommands::m_game.end()) {
 			it->second(buffer);
 		} else {
-			Logger::logToFile("game_cmd() subcommand not found.");
+			Logger::instance().log("game_cmd() subcommand not found.");
 		}
 	}
 
@@ -696,12 +696,12 @@ namespace CommandHandler {
 
 			Result rc = capsscCaptureJpegScreenShot(&outSize, (void*)buffer.data(), buffer.size(), ViLayerStack_Screenshot, 1e+9L);
 			if (R_FAILED(rc)) {
-				Logger::logToFile("Failed to capture screenshot.", std::to_string(R_DESCRIPTION(rc)));
+				Logger::instance().log("Failed to capture screenshot.", std::to_string(R_DESCRIPTION(rc)));
 			}
 
 			buffer.resize(outSize);
 		} catch (const std::bad_alloc& e) {
-			Logger::logToFile("std::bad_alloc caught in pixelPeek_cmd().", std::string(e.what()));
+			Logger::instance().log("std::bad_alloc caught in pixelPeek_cmd().", std::string(e.what()));
 			throw;
 		}
 	}
@@ -749,7 +749,7 @@ namespace CommandHandler {
 	void Handler::charge_cmd(std::vector<char>& buffer) {
 		Result rc = psmInitialize();
 		if (R_FAILED(rc)) {
-			Logger::logToFile("charge_cmd() psmInitialize() failed.", std::to_string(R_DESCRIPTION(rc)));
+			Logger::instance().log("charge_cmd() psmInitialize() failed.", std::to_string(R_DESCRIPTION(rc)));
 			return;
 		}
 
@@ -757,7 +757,7 @@ namespace CommandHandler {
 		rc = psmGetBatteryChargePercentage(&charge);
 		psmExit();
 		if (R_FAILED(rc)) {
-			Logger::logToFile("charge_cmd() psmGetBatteryChargePercentage() failed.", std::to_string(R_DESCRIPTION(rc)));
+			Logger::instance().log("charge_cmd() psmGetBatteryChargePercentage() failed.", std::to_string(R_DESCRIPTION(rc)));
 			return;
 		}
 
@@ -795,7 +795,7 @@ namespace CommandHandler {
 		if (it != BaseCommands::m_configure.end()) {
 			it->second(params);
 		} else {
-			Logger::logToFile("configure_cmd() subfunction not found.");
+			Logger::instance().log("configure_cmd() subfunction not found.");
 		}
 	}
 
@@ -821,7 +821,7 @@ namespace CommandHandler {
 		try {
 			value = std::to_string(Utils::parseStringToInt(params[0]));
 		} catch (...) {
-			Logger::logToFile("ping_cmd() failed to parse value.");
+			Logger::instance().log("ping_cmd() failed to parse value.");
 			value = std::to_string(0);
 		}
 

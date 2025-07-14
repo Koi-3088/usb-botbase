@@ -18,12 +18,12 @@ namespace ModuleBase {
         u64 pid = 0;
         Result rc = pmdmntGetApplicationProcessId(&pid);
         if (R_FAILED(rc)) {
-            Logger::logToFile("attach() pmdmntGetApplicationProcessId() failed.", std::to_string(R_DESCRIPTION(rc)));
+            Logger::instance().log("attach() pmdmntGetApplicationProcessId() failed.", std::to_string(R_DESCRIPTION(rc)));
             return false;
         }
 
         if (m_metaData.pid != pid) {
-            Logger::logToFile("attach() m_metaData.pid != pid, calling initMetaData().");
+            Logger::instance().log("attach() m_metaData.pid != pid, calling initMetaData().");
             m_metaData.pid = pid;
             initMetaData();
         } else {
@@ -32,7 +32,7 @@ namespace ModuleBase {
 
         rc = svcDebugActiveProcess(&m_debugHandle, pid);
         if (R_FAILED(rc)) {
-            Logger::logToFile("attach() svcDebugActiveProcess() failed.", std::to_string(R_DESCRIPTION(rc)));
+            Logger::instance().log("attach() svcDebugActiveProcess() failed.", std::to_string(R_DESCRIPTION(rc)));
             return false;
         }
 
@@ -53,7 +53,7 @@ namespace ModuleBase {
      */
     void BaseCommands::initMetaData() {
         if (!attach()) {
-            Logger::logToFile("initMetaData() attach() failed.");
+            Logger::instance().log("initMetaData() attach() failed.");
             detach();
             return;
         }
@@ -66,7 +66,7 @@ namespace ModuleBase {
 
         detach();
         if (metaHasZeroValue(m_metaData)) {
-            Logger::logToFile("initMetaData() MetaData had one or more zero value.");
+            Logger::instance().log("initMetaData() MetaData had one or more zero value.");
         }
     }
 
@@ -79,7 +79,7 @@ namespace ModuleBase {
         s32 numModules = 0;
         Result rc = ldrDmntGetProcessModuleInfo(m_metaData.pid, proc_modules, 2, &numModules);
         if (R_FAILED(rc)) {
-            Logger::logToFile("getBuildID() ldrDmntGetProcessModuleInfo() failed.", std::to_string(R_DESCRIPTION(rc)));
+            Logger::instance().log("getBuildID() ldrDmntGetProcessModuleInfo() failed.", std::to_string(R_DESCRIPTION(rc)));
             return 0;
         }
 
@@ -99,7 +99,7 @@ namespace ModuleBase {
         s32 numModules = 0;
         Result rc = ldrDmntGetProcessModuleInfo(m_metaData.pid, proc_modules, 2, &numModules);
         if (R_FAILED(rc)) {
-            Logger::logToFile("getMainNsoBase() ldrDmntGetProcessModuleInfo() failed.", std::to_string(R_DESCRIPTION(rc)));
+            Logger::instance().log("getMainNsoBase() ldrDmntGetProcessModuleInfo() failed.", std::to_string(R_DESCRIPTION(rc)));
             return 0;
         }
 
@@ -118,7 +118,7 @@ namespace ModuleBase {
         u64 heap_base = 0;
         Result rc = svcGetInfo(&heap_base, InfoType_HeapRegionAddress, m_debugHandle, 0);
         if (R_FAILED(rc)) {
-            Logger::logToFile("getHeapBase() svcGetInfo() failed.", std::to_string(R_DESCRIPTION(rc)));
+            Logger::instance().log("getHeapBase() svcGetInfo() failed.", std::to_string(R_DESCRIPTION(rc)));
             return 0;
         }
 
@@ -133,7 +133,7 @@ namespace ModuleBase {
         u64 titleId = 0;
         Result rc = pminfoGetProgramId(&titleId, m_metaData.pid);
         if (R_FAILED(rc)) {
-            Logger::logToFile("getTitleId() pminfoGetProgramId() failed.", std::to_string(R_DESCRIPTION(rc)));
+            Logger::instance().log("getTitleId() pminfoGetProgramId() failed.", std::to_string(R_DESCRIPTION(rc)));
             return 0;
         }
 
@@ -147,7 +147,7 @@ namespace ModuleBase {
     u64 BaseCommands::GetTitleVersion() {
         Result rc = nsInitialize();
         if (R_FAILED(rc)) {
-            Logger::logToFile("GetTitleVersion() nsInitialize() failed.", std::to_string(R_DESCRIPTION(rc)));
+            Logger::instance().log("GetTitleVersion() nsInitialize() failed.", std::to_string(R_DESCRIPTION(rc)));
             return 0;
         }
 
@@ -157,7 +157,7 @@ namespace ModuleBase {
         rc = nsListApplicationContentMetaStatus(m_metaData.titleID, 0, metaStatus.data(), sizeof(NsApplicationContentMetaStatus), &out);
         nsExit();
         if (R_FAILED(rc)) {
-            Logger::logToFile("GetTitleVersion() nsListApplicationContentMetaStatus() failed.", std::to_string(R_DESCRIPTION(rc)));
+            Logger::instance().log("GetTitleVersion() nsListApplicationContentMetaStatus() failed.", std::to_string(R_DESCRIPTION(rc)));
             return 0;
         }
 
@@ -178,7 +178,7 @@ namespace ModuleBase {
     std::vector<NsApplicationControlData> BaseCommands::getNsApplicationControlData(u64& out) {
         Result rc = nsInitialize();
         if (R_FAILED(rc)) {
-            Logger::logToFile("getNsApplicationControlData() nsInitialize() failed.", std::to_string(R_DESCRIPTION(rc)));
+            Logger::instance().log("getNsApplicationControlData() nsInitialize() failed.", std::to_string(R_DESCRIPTION(rc)));
             return {};
         }
 
@@ -186,7 +186,7 @@ namespace ModuleBase {
         rc = nsGetApplicationControlData(NsApplicationControlSource_Storage, m_metaData.titleID, buf.data(), sizeof(NsApplicationControlData), &out);
         nsExit();
         if (R_FAILED(rc)) {
-            Logger::logToFile("getNsApplicationControlData() nsGetApplicationControlData() failed.", std::to_string(R_DESCRIPTION(rc)));
+            Logger::instance().log("getNsApplicationControlData() nsGetApplicationControlData() failed.", std::to_string(R_DESCRIPTION(rc)));
             return {};
         }
 
@@ -201,7 +201,7 @@ namespace ModuleBase {
         ViDisplay temp_display;
         Result rc = viOpenDisplay("Internal", &temp_display);
         if (R_FAILED(rc)) {
-            Logger::logToFile("setScreen() viOpenDisplay() failed.", std::to_string(R_DESCRIPTION(rc)));
+            Logger::instance().log("setScreen() viOpenDisplay() failed.", std::to_string(R_DESCRIPTION(rc)));
             rc = viOpenDefaultDisplay(&temp_display);
         }
 
@@ -212,7 +212,7 @@ namespace ModuleBase {
 
             rc = lblInitialize();
             if (R_FAILED(rc)) {
-                Logger::logToFile("setScreen() lblInitialize() failed.", std::to_string(R_DESCRIPTION(rc)));
+                Logger::instance().log("setScreen() lblInitialize() failed.", std::to_string(R_DESCRIPTION(rc)));
             }
 
             if (state == ViPowerState_On) {
@@ -242,7 +242,7 @@ namespace ModuleBase {
      */
     void BaseCommands::setKeySleepTime(const std::vector<std::string>& params) {
         if (params.size() < 2) {
-            Logger::logToFile("setKeySleepTime() params size is less than 2.");
+            Logger::instance().log("setKeySleepTime() params size is less than 2.");
             return;
         }
 
@@ -255,7 +255,7 @@ namespace ModuleBase {
      */
     void BaseCommands::setFingerDiameter(const std::vector<std::string>& params) {
         if (params.size() < 2) {
-            Logger::logToFile("setFingerDiameter() params size is less than 2.");
+            Logger::instance().log("setFingerDiameter() params size is less than 2.");
             return;
         }
 
@@ -268,7 +268,7 @@ namespace ModuleBase {
      */
     void BaseCommands::setPollRate(const std::vector<std::string>& params) {
         if (params.size() < 2) {
-            Logger::logToFile("setPollRate() params size is less than 2.");
+            Logger::instance().log("setPollRate() params size is less than 2.");
             return;
         }
 
@@ -281,7 +281,7 @@ namespace ModuleBase {
      */
     void BaseCommands::setEnabledPA(const std::vector<std::string>& params) {
         if (params.size() < 2) {
-            Logger::logToFile("setEnabledPA() params size is less than 2.");
+            Logger::instance().log("setEnabledPA() params size is less than 2.");
             return;
         }
 
@@ -294,12 +294,12 @@ namespace ModuleBase {
      */
     void BaseCommands::setEnabledLogs(const std::vector<std::string>& params) {
         if (params.size() < 2) {
-            Logger::logToFile("setEnabledLogs() params size is less than 2.");
+            Logger::instance().log("setEnabledLogs() params size is less than 2.");
             return;
         }
 
         bool enable = (bool)Utils::parseStringToInt(params[1]);
-        Logger::enableLogs(enable);
+        Logger::instance().enableLogs(enable);
     }
 
     /**
@@ -368,7 +368,7 @@ namespace ModuleBase {
         NacpLanguageEntry* lang = nullptr;
         Result rc = nacpGetLanguageEntry(&data[0].nacp, &lang);
         if (R_FAILED(rc)) {
-            Logger::logToFile("getGameAuthor() nacpGetLanguageEntry() failed.", std::to_string(R_DESCRIPTION(rc)));
+            Logger::instance().log("getGameAuthor() nacpGetLanguageEntry() failed.", std::to_string(R_DESCRIPTION(rc)));
             delete lang;
             return;
         }
@@ -394,7 +394,7 @@ namespace ModuleBase {
         NacpLanguageEntry* lang = nullptr;
         Result rc = nacpGetLanguageEntry(&data[0].nacp, &lang);
         if (R_FAILED(rc)) {
-            Logger::logToFile("getGameName() nacpGetLanguageEntry() failed.", std::to_string(R_DESCRIPTION(rc)));
+            Logger::instance().log("getGameName() nacpGetLanguageEntry() failed.", std::to_string(R_DESCRIPTION(rc)));
             delete lang;
             return;
         }
@@ -418,24 +418,24 @@ namespace ModuleBase {
         if (R_SUCCEEDED(rc)) {
             std::tm* time = localtime(&posix);
             if (time->tm_year >= 160 || time->tm_year < 100) { // >= 2060 || < 2000
-                Logger::logToFile("getSwitchTime() invalid time range, setting time to 2000-01-01.");
+                Logger::instance().log("getSwitchTime() invalid time range, setting time to 2000-01-01.");
                 time->tm_year = 100;
                 time->tm_mon = 0;
                 time->tm_mday = 1;
 
                 rc = timeSetCurrentTime(TimeType_NetworkSystemClock, mktime(time));
                 if (R_SUCCEEDED(rc)) {
-                    Logger::logToFile("getSwitchTime() timeSetCurrentTime() succeeded, set time to 2000-01-01.");
+                    Logger::instance().log("getSwitchTime() timeSetCurrentTime() succeeded, set time to 2000-01-01.");
                     posix = mktime(time);
                 } else {
-                    Logger::logToFile("getSwitchTime() timeSetCurrentTime() failed.", std::to_string(R_DESCRIPTION(rc)));
+                    Logger::instance().log("getSwitchTime() timeSetCurrentTime() failed.", std::to_string(R_DESCRIPTION(rc)));
                     posix = 0;
                 }
             } else {
                 posix = mktime(time);
             }
         } else {
-            Logger::logToFile("getSwitchTime() timeGetCurrentTime(TimeType_UserSystemClock) failed.", std::to_string(R_DESCRIPTION(rc)));
+            Logger::instance().log("getSwitchTime() timeGetCurrentTime(TimeType_UserSystemClock) failed.", std::to_string(R_DESCRIPTION(rc)));
             posix = 0;
         }
 
@@ -460,10 +460,10 @@ namespace ModuleBase {
             if (R_SUCCEEDED(rc)) {
                 success = true;
             } else {
-                Logger::logToFile("setSwitchTime() timeSetCurrentTime() failed.", std::to_string(R_DESCRIPTION(rc)));
+                Logger::instance().log("setSwitchTime() timeSetCurrentTime() failed.", std::to_string(R_DESCRIPTION(rc)));
             }
         } else {
-            Logger::logToFile("setSwitchTime() invalid time range.");
+            Logger::instance().log("setSwitchTime() invalid time range.");
         }
 
         std::copy(reinterpret_cast<const char*>(&success),
@@ -493,14 +493,14 @@ namespace ModuleBase {
                     if (R_SUCCEEDED(rc)) {
                         success = true;
                     } else {
-                        Logger::logToFile("resetSwitchTime() failed to set the network clock.", std::to_string(R_DESCRIPTION(rc)));
+                        Logger::instance().log("resetSwitchTime() failed to set the network clock.", std::to_string(R_DESCRIPTION(rc)));
                     }
                 }
             } else {
-                Logger::logToFile("resetSwitchTime() failed to check if internet time sync is enabled.", std::to_string(R_DESCRIPTION(rc)));
+                Logger::instance().log("resetSwitchTime() failed to check if internet time sync is enabled.", std::to_string(R_DESCRIPTION(rc)));
             }
         } else {
-            Logger::logToFile("resetSwitchTime() setsysInitialize() failed.", std::to_string(R_DESCRIPTION(rc)));
+            Logger::instance().log("resetSwitchTime() setsysInitialize() failed.", std::to_string(R_DESCRIPTION(rc)));
         }
 
         std::copy(reinterpret_cast<const char*>(&success),
@@ -515,7 +515,7 @@ namespace ModuleBase {
     bool BaseCommands::isConnectedToInternet() {
         Result rc = nifmInitialize(NifmServiceType_User);
         if (R_FAILED(rc)) {
-            Logger::logToFile("isConnectedToInternet() nifmInitialize() failed.", std::to_string(R_DESCRIPTION(rc)));
+            Logger::instance().log("isConnectedToInternet() nifmInitialize() failed.", std::to_string(R_DESCRIPTION(rc)));
             return false;
         }
 
@@ -523,7 +523,7 @@ namespace ModuleBase {
         rc = nifmGetInternetConnectionStatus(NULL, NULL, &status);
         nifmExit();
         if (R_FAILED(rc) || status != NifmInternetConnectionStatus_Connected) {
-            Logger::logToFile("isConnectedToInternet() nifmGetInternetConnectionStatus() failed or not connected.", std::to_string(R_DESCRIPTION(rc)));
+            Logger::instance().log("isConnectedToInternet() nifmGetInternetConnectionStatus() failed or not connected.", std::to_string(R_DESCRIPTION(rc)));
             return false;
         }
 

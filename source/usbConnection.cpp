@@ -69,12 +69,12 @@ namespace UsbConnection {
                     break;
                 }
             } else if (received == 0) {
-                Logger::logToFile("receiveData() client closed the connection.", std::string(strerror(errno)));
+                Logger::instance().log("receiveData() client closed the connection.", std::string(strerror(errno)));
                 //m_error = true;
                 //notifyAll();
                 return {};
             } else {
-                Logger::logToFile("receiveData() recv() error.", std::string(strerror(errno)));
+                Logger::instance().log("receiveData() recv() error.", std::string(strerror(errno)));
                 //m_error = true;
                 //notifyAll();
                 return {};
@@ -89,11 +89,11 @@ namespace UsbConnection {
 		do {
 			ssize_t sent = usbCommsWrite((void*)(buffer + total), size - total);
 			if (sent == -1) {
-				Logger::logToFile("sendData() usbCommsWrite() error.", std::string(strerror(errno)));
+				Logger::instance().log("sendData() usbCommsWrite() error.", std::string(strerror(errno)));
                 return sent;
 			}
             else if (sent == 0) {
-                Logger::logToFile("sendData() usbCommsWrite() connection closed.", std::string(strerror(errno)));
+                Logger::instance().log("sendData() usbCommsWrite() connection closed.", std::string(strerror(errno)));
                 return sent;
             }
 

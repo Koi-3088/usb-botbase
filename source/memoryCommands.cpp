@@ -95,7 +95,7 @@ namespace MemoryCommands {
         attach();
         Result rc = svcReadDebugProcessMemory((void*)(buffer.data() + multi), m_debugHandle, offset, size);
         if (R_FAILED(rc)) {
-            Logger::logToFile("readMem() svcReadDebugProcessMemory() failed.", std::to_string(R_DESCRIPTION(rc)));
+            Logger::instance().log("readMem() svcReadDebugProcessMemory() failed.", std::to_string(R_DESCRIPTION(rc)));
         }
         detach();
     }
@@ -110,7 +110,7 @@ namespace MemoryCommands {
         attach();
         Result rc = svcWriteDebugProcessMemory(m_debugHandle, (void*)buffer.data(), offset, size);
         if (R_FAILED(rc)) {
-            Logger::logToFile("writedMem() svcWriteDebugProcessMemory() failed.", std::to_string(R_DESCRIPTION(rc)));
+            Logger::instance().log("writedMem() svcWriteDebugProcessMemory() failed.", std::to_string(R_DESCRIPTION(rc)));
         }
         detach();
     }

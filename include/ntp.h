@@ -34,13 +34,13 @@ namespace NTP {
 
             addrinfo* res = nullptr;
             if (getaddrinfo(m_ntp_server, m_ntp_port, &hints, &res) != 0 || res == nullptr) {
-                Logger::logToFile("NTP getaddrinfo() failed: ", std::string(gai_strerror(errno)));
+                Logger::instance().log("NTP getaddrinfo() failed: ", std::string(gai_strerror(errno)));
                 return 0;
             }
 
             int sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
             if (sockfd < 0) {
-                Logger::logToFile("NTP socket() failed: ", std::to_string(errno));
+                Logger::instance().log("NTP socket() failed: ", std::to_string(errno));
                 freeaddrinfo(res);
                 return 0;
             }
@@ -51,14 +51,14 @@ namespace NTP {
             };
 
             if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) != 0) {
-                Logger::logToFile("NTP setsockopt() failed: ", std::string(strerror(errno)));
+                Logger::instance().log("NTP setsockopt() failed: ", std::string(strerror(errno)));
                 close(sockfd);
                 freeaddrinfo(res);
                 return 0;
             }
 
             if (sendto(sockfd, packet.data(), packet.size(), 0, res->ai_addr, res->ai_addrlen) <= 0) {
-                Logger::logToFile("NTP sendto() failed or server closed the connection: ", std::string(strerror(errno)));
+                Logger::instance().log("NTP sendto() failed or server closed the connection: ", std::string(strerror(errno)));
                 close(sockfd);
                 freeaddrinfo(res);
                 return 0;
@@ -67,7 +67,7 @@ namespace NTP {
             sockaddr_storage server_addr{};
             socklen_t server_addr_len = sizeof(server_addr);
             if (recvfrom(sockfd, packet.data(), packet.size(), 0, reinterpret_cast<sockaddr*>(&server_addr), &server_addr_len) <= 0) {
-                Logger::logToFile("NTP recvfrom() failed or server closed the connection: ", std::string(strerror(errno)));
+                Logger::instance().log("NTP recvfrom() failed or server closed the connection: ", std::string(strerror(errno)));
                 close(sockfd);
                 freeaddrinfo(res);
                 return 0;
@@ -83,7 +83,7 @@ namespace NTP {
                     );
 
             if (seconds < m_ntp_delta) {
-                Logger::logToFile("Invalid time received from NTP server.", "", true);
+                Logger::instance().log("Invalid time received from NTP server.", "", true);
                 return 0;
             }
 

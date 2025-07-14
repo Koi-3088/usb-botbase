@@ -20,7 +20,7 @@ extern "C" {
 
     void setUpConnection() {
         try {
-            Logger::logToFile("Setting up connection...", "", true);
+            Logger::instance().log("Setting up connection...", "", true);
             m_connection.reset();
             if (Utils::isUSB()) {
                 m_connection = std::make_unique<UsbConnection::UsbConnection>();
@@ -29,7 +29,7 @@ extern "C" {
 
             m_connection = std::make_unique<SocketConnection::SocketConnection>();
         } catch (const std::exception& e) {
-            Logger::logToFile("Exception caught while setting up connection", e.what());
+            Logger::instance().log("Exception caught while setting up connection", e.what());
         }
     }
 
@@ -133,27 +133,27 @@ extern "C" {
     }
 
     int main(int argc, char** argv) {
-        Logger::logToFile("\n##########\r\n", "", true);
-        Logger::logToFile("Starting main()...", "", true);
+        Logger::instance().log("\n##########\r\n", "", true);
+        Logger::instance().log("Starting main()...", "", true);
 
         while (appletMainLoop()) {
             try {
-                Logger::logToFile("Connecting...", "", true);
+                Logger::instance().log("Connecting...", "", true);
                 if (m_connection->connect()) {
                     m_connection->run();
                     m_connection->disconnect();
                 }
 
-                Logger::logToFile("Resetting connection...", "", true);
+                Logger::instance().log("Resetting connection...", "", true);
                 setUpConnection();
             } catch (...) {
                 Result rc = Result { 0x1001 };
-                Logger::logToFile("Exception caught in main().", std::to_string(R_DESCRIPTION(rc)));
+                Logger::instance().log("Exception caught in main().", std::to_string(R_DESCRIPTION(rc)));
                 fatalThrow(rc);
             }
         }
 
-        Logger::logToFile("Exiting main()...", "", true);
+        Logger::instance().log("Exiting main()...", "", true);
         return 0;
     }
 }
