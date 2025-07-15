@@ -275,7 +275,7 @@ namespace SocketConnection {
 				}
 
 				if (!commands.empty()) {
-                    Logger::instance().log("receiveData() received " + std::to_string(commands.size()) + " commands.");
+                    Logger::instance().log("receiveData() received " + std::to_string(commands.size()) + " command(s).");
 					break;
 				}
 			} else if (received == 0) {

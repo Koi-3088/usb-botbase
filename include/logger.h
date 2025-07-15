@@ -42,13 +42,7 @@ namespace SbbLog {
 				return;
 			}
 
-			std::ostringstream oss;
-			oss << "[" << getCurrentTimestamp() << "] " << message;
-			if (!error.empty()) {
-				oss << " Error: " << error;
-			}
-
-			m_queue.push(oss.str());
+			m_queue.push(std::move(LogMessage(std::move(message), std::move(error), getCurrentTimestamp())));
             m_cv.notify_one();
 		}
 	private:
@@ -66,8 +60,19 @@ namespace SbbLog {
 		Logger(const Logger&) = delete;
 		Logger& operator=(const Logger&) = delete;
 
+		struct LogMessage {
+			LogMessage(const std::string& msg, const std::string& err, const uint64_t& ts)
+                : message(std::move(msg)), error(std::move(err)), timestamp(ts) {}
+			
+			LogMessage() = default;
+
+			std::string message;
+			std::string error;
+			uint64_t timestamp;
+		};
+
         size_t m_maxLogSize = 1024 * 1024 * 8;
-		LockFreeQueue<std::string> m_queue;
+		LockFreeQueue<LogMessage> m_queue;
 		std::atomic_bool m_running { false };
 		std::atomic_bool m_logsEnabled { false };
         std::thread m_thread;
@@ -80,7 +85,7 @@ namespace SbbLog {
 			return rc == 0 ? stat_buf.st_size : 0;
 		}
 
-		std::string getCurrentTimestamp() {
+		uint64_t getCurrentTimestamp() {
 			u64 now_sec = 0;
 			Result res = timeGetCurrentTime(TimeType_UserSystemClock, &now_sec);
 			if (R_FAILED(res)) {
@@ -89,16 +94,8 @@ namespace SbbLog {
 			}
 
 			auto now = std::chrono::system_clock::now();
-			auto now_us = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()) % 1000000;
-
-			time_t now_time_t = static_cast<std::time_t>(now_sec);
-			tm* localTime = std::localtime(&now_time_t);
-
-			std::ostringstream oss;
-			oss << std::put_time(localTime, "%Y-%m-%d %H:%M:%S");
-			oss << "." << std::setfill('0') << std::setw(6) << now_us.count();
-
-			return oss.str();
+			auto now_us = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count() % 1000000;
+			return now_sec * 1000000 + now_us;
 		}
 
 		void threadLoop() {
@@ -118,14 +115,30 @@ namespace SbbLog {
 						clear.close();
 					}
 
-					std::string message;
-					if (m_queue.pop(message)) {
-						std::ofstream logFile(filename, std::ios::app);
+					LogMessage message;
+					std::ofstream logFile(filename, std::ios::app);
+					while (m_queue.pop(message)) {
 						if (logFile.is_open()) {
-							logFile << message << std::endl;
-							logFile.close();
+							time_t seconds = static_cast<time_t>(message.timestamp / 1000000);
+							uint32_t microseconds = static_cast<uint32_t>(message.timestamp % 1000000);
+
+							time_t now_time_t = static_cast<std::time_t>(seconds);
+							tm* localTime = std::localtime(&now_time_t);
+
+							std::ostringstream oss;
+							oss << std::put_time(localTime, "%Y-%m-%d %H:%M:%S");
+							oss << "." << std::setfill('0') << std::setw(6) << microseconds;
+
+							std::string msg = "[" + oss.str() + "] " + message.message;
+							if (!message.error.empty()) {
+								msg += " Error: " + message.error;
+							}
+
+							logFile << msg << std::endl;
 						}
 					}
+
+					logFile.close();
 				}
 			} catch (...) {
 				return;

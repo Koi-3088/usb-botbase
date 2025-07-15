@@ -282,9 +282,9 @@ namespace ControllerCommands {
         cqControllerState(cmd);
         if (cmd.seqnum != 0) {
             Logger::instance().log("cqSendState() command finished with seqnum: " + std::to_string(cmd.seqnum));
-            const std::string res = "cqCommandFinished " + std::to_string(cmd.seqnum) + "\r\n";
+            std::string res = "cqCommandFinished " + std::to_string(cmd.seqnum) + "\r\n";
             senderQueue.push(std::vector<char>(res.begin(), res.end()));
-            senderCv.notify_all();
+            senderCv.notify_one();
         }
     }
 
