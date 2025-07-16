@@ -260,9 +260,7 @@ namespace ControllerCommands {
                 }
             }
 
-            m_ccCv.wait_until(lock, m_nextStateChange - earlyWake, [&] {
-                return error || (now + earlyWake >= m_nextStateChange);
-            });
+            m_ccCv.wait_until(lock, m_nextStateChange - earlyWake, [&] { return error || (now + earlyWake >= m_nextStateChange && !m_replaceOnNext); });
         }
 
         m_ccQueue.clear();

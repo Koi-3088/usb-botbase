@@ -20,15 +20,18 @@ namespace SocketConnection {
 
 	Result SocketConnection::initialize(Result& res) {
 		const SocketInitConfig cfg = {
-		    0x800, //tcp_tx_buf_size
-		    0x800, //tcp_rx_buf_size
+			0x800, //tcp_tx_buf_size
+			0x40000, //tcp_rx_buf_size
 		    0x25000, //tcp_tx_buf_max_size
-		    0x25000, //tcp_rx_buf_max_size
+			0x40000, //tcp_rx_buf_max_size
 
 		    0, //udp_tx_buf_size
 		    0, //udp_rx_buf_size
 
-		    1, //sb_efficiency
+		    4, //sb_efficiency
+
+			3, //num_bsd_sessions
+			BsdServiceType::BsdServiceType_Auto,
 		};
 
 		res = socketInitialize(&cfg);
@@ -229,18 +232,17 @@ namespace SocketConnection {
 
 	int SocketConnection::receiveData(int sockfd) {
 		constexpr size_t bufSize = 4096;
-        std::string persistentBuffer;
 		char buf[bufSize];
 
 		while (!m_error) {
 			ssize_t received = recv(sockfd, buf, bufSize, 0);
 			if (received > 0) {
-				persistentBuffer.append(buf, received);
+				m_persistentBuffer.append(buf, received);
 
 				size_t pos;
-				while ((pos = persistentBuffer.find("\r\n")) != std::string::npos && !m_error) {
-					auto cmd = persistentBuffer.substr(0, pos + 2);
-					persistentBuffer.erase(0, pos + 2);
+				while ((pos = m_persistentBuffer.find("\r\n")) != std::string::npos && !m_error) {
+					auto cmd = m_persistentBuffer.substr(0, pos + 2);
+					m_persistentBuffer.erase(0, pos + 2);
 
 					if (m_handler->getIsRunningPA()) {
 						Utils::parseArgs(cmd, [&](const std::string& command, const std::vector<std::string>& params) {
@@ -268,15 +270,14 @@ namespace SocketConnection {
 				}
 			} else if (received == 0) {
 				Logger::instance().log("receiveData() client closed the connection.", std::string(strerror(errno)));
+				m_error = true;
+				notifyAll();
 				return -1;
 			} else if (received == -1 && errno != EWOULDBLOCK && errno != EAGAIN) {
 				Logger::instance().log("receiveData() recv() error.", std::string(strerror(errno)));
 				m_error = true;
 				notifyAll();
 				return -1;
-			} else {
-				svcSleepThread(1e+3L);
-				continue;
 			}
 		}
 
@@ -302,9 +303,6 @@ namespace SocketConnection {
 				m_error = true;
 				notifyAll();
 				return -1;
-			} else {
-                svcSleepThread(1e+3L);
-				continue;
 			}
 		}
 

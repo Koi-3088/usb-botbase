@@ -19,6 +19,7 @@ namespace SocketConnection {
 		};
 
 		~SocketConnection() override {
+            m_persistentBuffer.clear();
             m_error = true;
             notifyAll();
 
@@ -57,6 +58,8 @@ namespace SocketConnection {
                 m_handler->cqNotifyAll();
 			}
 		}
+
+		std::string m_persistentBuffer;
 
 		std::thread m_senderThread;
 		LocklessQueue::LockFreeQueue<std::vector<char>> m_senderQueue;
