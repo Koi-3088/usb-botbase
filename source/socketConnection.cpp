@@ -144,6 +144,8 @@ namespace SocketConnection {
 						int sent = sendData(buffer.data(), buffer.size(), m_tcp.clientFd);
 						if (sent <= 0) {
 							Logger::instance().log("sendData() failed or client disconnected.");
+							m_error = true;
+							notifyAll();
 							break;
 						}
 					}
@@ -162,8 +164,6 @@ namespace SocketConnection {
 			}
 
             Logger::instance().log("Socket sender thread exiting.");
-			m_error = true;
-            notifyAll();
 		});
 
 		m_commandThread = std::thread([&]() {
@@ -204,21 +204,14 @@ namespace SocketConnection {
 			}
 
             Logger::instance().log("Command thread exiting.");
-            m_error = true;
-            notifyAll();
         });
 
-		std::string persistentBuffer;
 		while (!m_error) {
 			try {
-				auto commands = receiveData(persistentBuffer, m_tcp.clientFd);
-				if (m_error) {
+				if (receiveData(m_tcp.clientFd) < 0) {
+                    m_error = true;
+					notifyAll();
 					break;
-				}
-
-				for (auto& cmd : commands) {
-					m_commandQueue.push(cmd);
-					m_commandCv.notify_one();
 				}
 			} catch (const std::exception& e) {
 				Logger::instance().log("Socket reader thread exception.", e.what());
@@ -232,13 +225,11 @@ namespace SocketConnection {
 		}
 
         Logger::instance().log("Main socket thread exiting.");
-        m_error = true;
-        notifyAll();
 	}
 
-	std::vector<std::string> SocketConnection::receiveData(std::string& persistentBuffer, int sockfd) {
+	int SocketConnection::receiveData(int sockfd) {
 		constexpr size_t bufSize = 4096;
-		std::vector<std::string> commands;
+        std::string persistentBuffer;
 		char buf[bufSize];
 
 		while (!m_error) {
@@ -263,52 +254,33 @@ namespace SocketConnection {
 								m_handler->cqEnqueueCommand(controllerCmd);
 							} else if (command == "ping" && params.size() == 1) {
 								std::lock_guard<std::mutex> lock(m_senderMutex);
-								const std::string response = command + " " + params.front() + "\r\n";
+								std::string response = command + " " + params.front() + "\r\n";
                                 sendData(response.data(), response.size(), sockfd);
 							} else {
-								commands.push_back(cmd);
+								m_commandQueue.push(cmd);
+								m_commandCv.notify_one();
 							}
 						});
 					} else {
-						commands.push_back(cmd);
+						m_commandQueue.push(cmd);
+						m_commandCv.notify_one();
 					}
-				}
-
-				if (!commands.empty()) {
-                    Logger::instance().log("receiveData() received " + std::to_string(commands.size()) + " command(s).");
-					break;
 				}
 			} else if (received == 0) {
 				Logger::instance().log("receiveData() client closed the connection.", std::string(strerror(errno)));
-				m_error = true;
-				notifyAll();
-				return {};
-			} else {
-				if (errno == EWOULDBLOCK || errno == EAGAIN) {
-					ssize_t peekResult = recv(sockfd, buf, 1, MSG_PEEK);
-					if (peekResult == 0) {
-						Logger::instance().log("receiveData() client closed the connection (detected by MSG_PEEK).", std::string(strerror(errno)));
-						m_error = true;
-						notifyAll();
-						break;
-					} else if (peekResult < 0 && errno != EWOULDBLOCK && errno != EAGAIN) {
-						Logger::instance().log("receiveData() recv(MSG_PEEK) error.", std::string(strerror(errno)));
-						m_error = true;
-						notifyAll();
-						break;
-					}
-
-					continue;
-				}
-
+				return -1;
+			} else if (received == -1 && errno != EWOULDBLOCK && errno != EAGAIN) {
 				Logger::instance().log("receiveData() recv() error.", std::string(strerror(errno)));
 				m_error = true;
 				notifyAll();
-				return {};
+				return -1;
+			} else {
+				svcSleepThread(1e+3L);
+				continue;
 			}
 		}
 
-		return commands;
+		return 0;
 	}
 
 	int SocketConnection::sendData(const char* buffer, size_t size, int sockfd) {
@@ -331,20 +303,7 @@ namespace SocketConnection {
 				notifyAll();
 				return -1;
 			} else {
-				char tmp;
-				ssize_t peekResult = recv(sockfd, &tmp, 1, MSG_PEEK);
-				if (peekResult == 0) {
-					Logger::instance().log("sendData(): Client closed the connection (detected by MSG_PEEK).");
-					m_error = true;
-					notifyAll();
-					return -1;
-				} else if (peekResult < 0 && errno != EWOULDBLOCK && errno != EAGAIN) {
-					Logger::instance().log("sendData(): recv(MSG_PEEK) error: " + std::string(strerror(errno)));
-					m_error = true;
-					notifyAll();
-					return -1;
-				}
-
+                svcSleepThread(1e+3L);
 				continue;
 			}
 		}

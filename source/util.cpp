@@ -99,29 +99,42 @@ namespace Util {
     }
 
     void Utils::parseArgs(const std::string& cmd, std::function<void(const std::string&, const std::vector<std::string>&)> callback) {
-        std::istringstream stream(cmd);
         std::vector<std::string> params;
-        std::copy(std::istream_iterator<std::string>(stream),
-            std::istream_iterator<std::string>(),
-            std::back_inserter(params));
+        size_t start = 0, end = 0, len = cmd.length();
+
+        while (start < len) {
+            while (start < len && std::isspace(cmd[start])) {
+                ++start;
+            }
+
+            if (start >= len) {
+                break;
+            }
+
+            end = start;
+            while (end < len && !std::isspace(cmd[end])) {
+                ++end;
+            }
+
+            std::string token = cmd.substr(start, end - start);
+            if (!token.empty() && token != "\n") {
+                params.push_back(token);
+            }
+
+            start = end;
+        }
 
         if (params.empty()) {
             return;
         }
 
         std::string command = params[0];
+        std::vector<std::string> parameters;
         if (params.size() > 1) {
-            std::vector<std::string> parameters(params.begin() + 1, params.end());
-            parameters.erase(std::remove_if(parameters.begin(), parameters.end(), [](const std::string& s) {
-                return s == "\0" || s == "\n" || s.empty();
-                }), parameters.end()
-            );
-
-            callback(command, parameters);
-            return;
+            parameters.assign(params.begin() + 1, params.end());
         }
 
-        callback(command, {});
+        callback(command, parameters);
     }
 
     u64 Utils::parseStringToInt(const std::string& arg) {

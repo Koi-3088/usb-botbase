@@ -37,7 +37,7 @@ namespace SocketConnection {
 		bool connect() override;
 		void run() override;
 		void disconnect() override;
-		std::vector<std::string> receiveData(std::string& persistentBuffer, int sockfd = 0) override;
+		int receiveData(int sockfd = 0) override;
 		int sendData(const char* data, size_t data_size, int sockfd) override;
 
 	private:

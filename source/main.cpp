@@ -20,7 +20,6 @@ extern "C" {
 
     void setUpConnection() {
         try {
-            Logger::instance().log("Setting up connection...", "", true);
             m_connection.reset();
             if (Utils::isUSB()) {
                 m_connection = std::make_unique<UsbConnection::UsbConnection>();

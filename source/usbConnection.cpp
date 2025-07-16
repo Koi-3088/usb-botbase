@@ -17,25 +17,9 @@ namespace UsbConnection {
 
 	bool UsbConnection::connect() {
         Utils::flashLed();
-
-        std::string persistentBuffer;
         while (appletMainLoop()) {
-            auto commands = UsbConnection::receiveData(persistentBuffer);
-            fflush(stdout);
-
-            if (!commands.empty()) {
-                for (const auto& command : commands) {
-                    Utils::parseArgs(command, [&](std::string x, const std::vector<std::string>& y) {
-                        auto buffer = m_handler->HandleCommand(x, y);
-                        if (!buffer.empty()) {
-                            if (buffer.back() != '\n') {
-                                buffer.push_back('\n');
-                            }
-
-                            UsbConnection::sendData(buffer.data(), buffer.size());
-                        }
-                    });
-                }
+            if (receiveData() < 0) {
+                return false;
             }
         }
 
@@ -50,8 +34,9 @@ namespace UsbConnection {
 		usbCommsExit();
 	}
 
-    std::vector<std::string> UsbConnection::receiveData(std::string& persistentBuffer, int sockfd) { // More than likely broken, just for compilation purposes
+    int UsbConnection::receiveData(int sockfd) { // More than likely broken, just for compilation purposes
         constexpr size_t bufSize = 4096;
+        std::string persistentBuffer;
         std::vector<std::string> commandBuf;
         char buf[bufSize];
 
@@ -59,6 +44,7 @@ namespace UsbConnection {
             ssize_t received = usbCommsRead(buf, bufSize);
             if (received > 0) {
                 persistentBuffer.append(buf, received);
+
                 size_t pos;
                 while ((pos = persistentBuffer.find("\r\n")) != std::string::npos) {
                     commandBuf.push_back(persistentBuffer.substr(0, pos));
@@ -66,22 +52,33 @@ namespace UsbConnection {
                 }
 
                 if (!commandBuf.empty()) {
-                    break;
+                    for (const auto& command : commandBuf) {
+                        Utils::parseArgs(command, [&](std::string x, const std::vector<std::string>& y) {
+                            auto buffer = m_handler->HandleCommand(x, y);
+                            if (!buffer.empty()) {
+                                if (buffer.back() != '\n') {
+                                    buffer.push_back('\n');
+                                }
+
+                                UsbConnection::sendData(buffer.data(), buffer.size());
+                            }
+                        });
+                    }
                 }
             } else if (received == 0) {
                 Logger::instance().log("receiveData() client closed the connection.", std::string(strerror(errno)));
                 //m_error = true;
                 //notifyAll();
-                return {};
+                return -1;
             } else {
                 Logger::instance().log("receiveData() recv() error.", std::string(strerror(errno)));
                 //m_error = true;
                 //notifyAll();
-                return {};
+                return -1;
             }
         }
 
-        return commandBuf;
+        return 0;
     }
 
     int UsbConnection::sendData(const char* buffer, size_t size, int sockfd) {
