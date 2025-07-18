@@ -46,7 +46,7 @@ namespace SbbLog {
             m_cv.notify_one();
 		}
 	private:
-		Logger(size_t queueCapacity = 1024) : m_queue(queueCapacity), m_running(false), m_logsEnabled(false) {
+		Logger() : m_queue(), m_running(false), m_logsEnabled(false) {
 			m_thread = std::thread(&Logger::threadLoop, this);
 		};
 
@@ -72,7 +72,7 @@ namespace SbbLog {
 		};
 
         size_t m_maxLogSize = 1024 * 1024 * 8;
-		LockFreeQueue<LogMessage> m_queue;
+		LockFreeQueue<LogMessage, 1024> m_queue;
 		std::atomic_bool m_running { false };
 		std::atomic_bool m_logsEnabled { false };
         std::thread m_thread;

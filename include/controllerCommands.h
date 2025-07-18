@@ -14,7 +14,7 @@ namespace ControllerCommands {
 
 	class Controller : protected virtual ModuleBase::BaseCommands {
 	public:
-        Controller() : BaseCommands(), m_ccQueue(1024) {
+        Controller() : BaseCommands(), m_ccQueue() {
            m_workMem = (u8*)aligned_alloc(0x1000, m_workMem_size);
            m_controllerHandle = { 0 };
            m_controllerDevice = { 0 };

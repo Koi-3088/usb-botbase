@@ -13,7 +13,7 @@ namespace CommandHandler {
 namespace SocketConnection {
 	class SocketConnection : public Connection::ConnectionHandler {
 	public:
-		SocketConnection() : ConnectionHandler(), m_tcp(), m_senderQueue(1024), m_commandQueue(1024) {
+		SocketConnection() : ConnectionHandler(), m_tcp(), m_senderQueue(), m_commandQueue() {
 			m_error = false;
 			m_handler = std::make_unique<CommandHandler::Handler>();
 		};

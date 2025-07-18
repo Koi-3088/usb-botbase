@@ -1,9 +1,7 @@
 #pragma once
 
 #include "commandHandler.h"
-#include <string>
 #include <switch.h>
-#include <vector>
 
 namespace Connection {
 	class ConnectionHandler {

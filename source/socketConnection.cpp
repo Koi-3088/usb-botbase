@@ -106,14 +106,14 @@ namespace SocketConnection {
 
 			while (m_tcp.clientFd == -1) {
 				m_tcp.clientFd = accept(m_tcp.serverFd, (struct sockaddr*)&clientAddr, &clientSize);
-				if (m_tcp.clientFd == -1) {
+				if (m_tcp.clientFd == -1 && errno != EWOULDBLOCK && errno != EAGAIN) {
 					close(m_tcp.serverFd);
 					if (setupServerSocket() < 0) {
 						return false;
 					}
-
-					svcSleepThread(1e+9L);
 				}
+
+				svcSleepThread(5e+6L);
 			}
 		} catch (const std::exception& e) {
             Logger::instance().log("Exception while waiting for client to connect: ", e.what());
@@ -185,7 +185,7 @@ namespace SocketConnection {
 									buffer.push_back('\n');
 								}
 
-								m_senderQueue.push(buffer);
+								m_senderQueue.push(std::move(buffer));
 								m_senderCv.notify_one();
 							}
 					    });
@@ -259,15 +259,17 @@ namespace SocketConnection {
 								std::string response = command + " " + params.front() + "\r\n";
                                 sendData(response.data(), response.size(), sockfd);
 							} else {
-								m_commandQueue.push(cmd);
+								m_commandQueue.push(std::move(cmd));
 								m_commandCv.notify_one();
 							}
 						});
 					} else {
-						m_commandQueue.push(cmd);
+						m_commandQueue.push(std::move(cmd));
 						m_commandCv.notify_one();
 					}
 				}
+
+				continue;
 			} else if (received == 0) {
 				Logger::instance().log("receiveData() client closed the connection.", std::string(strerror(errno)));
 				m_error = true;
@@ -278,6 +280,10 @@ namespace SocketConnection {
 				m_error = true;
 				notifyAll();
 				return -1;
+			}
+
+			if (errno == EWOULDBLOCK || errno == EAGAIN) {
+				svcSleepThread(5e+6L);
 			}
 		}
 
@@ -303,6 +309,10 @@ namespace SocketConnection {
 				m_error = true;
 				notifyAll();
 				return -1;
+			}
+
+			if (errno == EWOULDBLOCK || errno == EAGAIN) {
+				svcSleepThread(5e+6L);
 			}
 		}
 
