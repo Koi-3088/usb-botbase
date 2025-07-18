@@ -268,7 +268,7 @@ namespace ControllerCommands {
             }
             m_ccCurrentCommand = cmd;
 
-            m_ccCv.wait_until(lock, m_nextStateChange - earlyWake, [&] { return error || (now + earlyWake >= m_nextStateChange && !m_replaceOnNext); });
+            m_ccCv.wait_until(lock, m_nextStateChange - earlyWake, [&] { return error || now + earlyWake >= m_nextStateChange; });
         }
 
         m_ccQueue.clear();
@@ -342,7 +342,6 @@ namespace ControllerCommands {
      * @brief Replace the next PA controller command on the next enqueue.
      */
     void Controller::cqReplaceOnNext() {
-        std::lock_guard<std::mutex> lock(m_ccMutex);
         Logger::instance().log("cqReplaceOnNext().");
         m_replaceOnNext = true;
     }
