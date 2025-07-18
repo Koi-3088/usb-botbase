@@ -56,8 +56,8 @@ namespace ControllerCommands {
 		};
 
 		struct ControllerCommand {
-			uint64_t seqnum;
-			uint64_t milliseconds;
+			uint64_t seqnum = 0;
+			uint64_t milliseconds = 0;
 			ControllerState state {};
 
 			void parseFromHex(const char str[64]) {
@@ -161,6 +161,7 @@ namespace ControllerCommands {
 
 		std::thread m_ccThread;
 		LockFreeQueue<ControllerCommand> m_ccQueue;
+		ControllerCommand m_ccCurrentCommand;
 		std::mutex m_ccMutex;
 		std::condition_variable m_ccCv;
 

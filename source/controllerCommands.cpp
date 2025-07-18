@@ -237,55 +237,46 @@ namespace ControllerCommands {
     void Controller::commandLoopPA(LockFreeQueue<std::vector<char>>& senderQueue, std::condition_variable& senderCv, std::mutex& senderMutex, std::atomic_bool& error) {
         const std::chrono::microseconds earlyWake(1000);
         m_nextStateChange = WallClock::max();
-        auto cmd = ControllerCommand {};
         m_ccThreadRunning = true;
         Logger::instance().log("commandLoopPA() started.");
 
         std::unique_lock<std::mutex> lock(m_ccMutex);
         while (!error) {
             WallClock now = std::chrono::steady_clock::now();
+            ControllerCommand cmd;
             if (now >= m_nextStateChange) {
                 if (!m_ccQueue.empty()) {
                     m_ccQueue.pop(cmd);
                     Logger::instance().log("commandLoopPA() processing command (seqnum " + std::to_string(cmd.seqnum) + ").");
-                    cqSendState(cmd, senderQueue, senderCv, senderMutex);
-                    cmd.seqnum = 0;
+                    cqControllerState(cmd);
                     m_nextStateChange = now + std::chrono::milliseconds(cmd.milliseconds);
                 } else {
                     Logger::instance().log("commandLoopPA() clearing state (seqnum " + std::to_string(cmd.seqnum) + ").");
                     cmd.state.clear();
-                    cqSendState(cmd, senderQueue, senderCv, senderMutex);
-                    cmd.seqnum = 0;
+                    cqControllerState(cmd);
                     m_nextStateChange = WallClock::max();
                 }
             }
+
+            //  We are done processing the state change, we are off the critical path.
+            //  Now is the best time to send the finished messaged for the previous command.
+            if (m_ccCurrentCommand.seqnum != 0){
+                Logger::instance().log("cqSendState() command finished with seqnum: " + std::to_string(m_ccCurrentCommand.seqnum));
+                std::string res = "cqCommandFinished " + std::to_string(m_ccCurrentCommand.seqnum) + "\r\n";
+                senderQueue.push(std::vector<char>(res.begin(), res.end()));
+                senderCv.notify_one();
+            }
+            m_ccCurrentCommand = cmd;
 
             m_ccCv.wait_until(lock, m_nextStateChange - earlyWake, [&] { return error || (now + earlyWake >= m_nextStateChange && !m_replaceOnNext); });
         }
 
         m_ccQueue.clear();
-        cqSendState(ControllerCommand {}, senderQueue, senderCv, senderMutex);
+        cqControllerState(ControllerCommand{});
         detachController();
         m_ccThreadRunning = false;
         error.store(true);
         Logger::instance().log("commandLoopPA() stopped thread.");
-    }
-
-    /**
-     * @brief Sends the current controller state to the client.
-     * @param The controller command.
-     * @param The queue to which the serialized state will be pushed.
-     * @param The condition variable to notify after pushing to the queue.
-     * @param The mutex to lock the sender queue.
-     */
-    void Controller::cqSendState(const ControllerCommand& cmd, LockFreeQueue<std::vector<char>>& senderQueue, std::condition_variable& senderCv, std::mutex& senderMutex) {
-        cqControllerState(cmd);
-        if (cmd.seqnum != 0) {
-            Logger::instance().log("cqSendState() command finished with seqnum: " + std::to_string(cmd.seqnum));
-            std::string res = "cqCommandFinished " + std::to_string(cmd.seqnum) + "\r\n";
-            senderQueue.push(std::vector<char>(res.begin(), res.end()));
-            senderCv.notify_one();
-        }
     }
 
     /**
@@ -318,6 +309,7 @@ namespace ControllerCommands {
 
         if (m_replaceOnNext) {
             m_replaceOnNext = false;
+            m_ccCurrentCommand = ControllerCommand{};
             m_ccQueue.clear();
             m_nextStateChange = WallClock::min();
             m_ccQueue.push(cmd);
@@ -340,6 +332,7 @@ namespace ControllerCommands {
     void Controller::cqCancel() {
         std::lock_guard<std::mutex> lock(m_ccMutex);
         Logger::instance().log("cqCancel().");
+        m_ccCurrentCommand = ControllerCommand{};
         m_ccQueue.clear();
         m_nextStateChange = WallClock::min();
         m_ccCv.notify_all();
