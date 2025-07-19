@@ -4,8 +4,8 @@
 #include <string>
 #include <functional>
 #include <unordered_map>
-#include <switch.h>
 #include <atomic>
+#include <switch.h>
 
 #define REGISTER_CFG_CMD(name, function) \
     (m_configure)[(name)] = [this](const std::vector<std::string>& params) { this->function(params); }
@@ -14,6 +14,8 @@
     (m_game)[(name)] = [this](std::vector<char>& buffer) { this->function(buffer); }
 
 namespace ModuleBase {
+	static bool g_enableBackwardsCompat = true;
+
 	class BaseCommands {
 	public:
 		BaseCommands() {
@@ -22,6 +24,7 @@ namespace ModuleBase {
 			REGISTER_CFG_CMD("pollRate", setPollRate);
 			REGISTER_CFG_CMD("enablePA", setEnabledPA);
 			REGISTER_CFG_CMD("enableLogs", setEnabledLogs);
+            REGISTER_CFG_CMD("enableBackwardsCompat", setEnabledBackwards);
 
 			REGISTER_GAME_CMD("icon", getGameIcon);
 			REGISTER_GAME_CMD("version", getGameVersion);
@@ -42,12 +45,12 @@ namespace ModuleBase {
 		std::atomic_bool m_isEnabledPA { false };
 
 		struct MetaData {
-			u64 main_nso_base;
-			u64 heap_base;
-			u64 titleID;
-			u64 titleVersion;
-			u64 pid;
-			u8 buildID;
+			u64 main_nso_base = 0;
+			u64 heap_base = 0;
+			u64 titleID = 0;
+			u64 titleVersion = 0;
+			u64 pid = 0;
+			u8 buildID = 0;
 		};
 
 		MetaData m_metaData = { 0 };
@@ -61,7 +64,7 @@ namespace ModuleBase {
 
 	protected:
 		std::string getSbbVersion() {
-			return m_sbbVersion;
+			return getCurrentSbbVersion();
 		}
 
 		bool getIsEnabledPA() {
@@ -87,7 +90,9 @@ namespace ModuleBase {
 		void resetSwitchTime(std::vector<char>& buffer);
 
 	private:
-		const std::string m_sbbVersion = "3.0.0";
+		static std::string getCurrentSbbVersion() {
+            return !g_enableBackwardsCompat ? "3.0.0\r\n" : "3.0.1\r\n";
+        }
 
 		void setKeySleepTime(const std::vector<std::string>& params);
 		void setFingerDiameter(const std::vector<std::string>& params);
@@ -101,6 +106,7 @@ namespace ModuleBase {
 
 		void setEnabledPA(const std::vector<std::string>& params);
         void setEnabledLogs(const std::vector<std::string>& params);
+        void setEnabledBackwards(const std::vector<std::string>& params);
 
 		bool isConnectedToInternet();
 		bool metaHasZeroValue(const MetaData& meta);

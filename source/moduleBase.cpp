@@ -280,8 +280,8 @@ namespace ModuleBase {
      * @param The parameters vector.
      */
     void BaseCommands::setEnabledPA(const std::vector<std::string>& params) {
-        if (params.size() < 2) {
-            Logger::instance().log("setEnabledPA() params size is less than 2.");
+        if (params.size() != 1) {
+            Logger::instance().log("setEnabledPA() incorrect params size.");
             return;
         }
 
@@ -293,13 +293,27 @@ namespace ModuleBase {
      * @param The parameters vector.
      */
     void BaseCommands::setEnabledLogs(const std::vector<std::string>& params) {
-        if (params.size() < 2) {
-            Logger::instance().log("setEnabledLogs() params size is less than 2.");
+        if (params.size() != 1) {
+            Logger::instance().log("setEnabledLogs() incorrect params size.");
             return;
         }
 
         bool enable = (bool)Utils::parseStringToInt(params[1]);
         Logger::instance().enableLogs(enable);
+    }
+
+    /**
+     * @brief Set whether backwards compatibility is enabled from parameters.
+     * @param The parameters vector.
+     */
+    void BaseCommands::setEnabledBackwards(const std::vector<std::string>& params) {
+        if (params.size() != 1) {
+            Logger::instance().log("setEnabledBackwards() incorrect params size.");
+            return;
+        }
+
+        bool enable = (bool)Utils::parseStringToInt(params[1]);
+        g_enableBackwardsCompat = enable;
     }
 
     /**

@@ -28,7 +28,7 @@ extern "C" {
 
             m_connection = std::make_unique<SocketConnection::SocketConnection>();
         } catch (const std::exception& e) {
-            Logger::instance().log("Exception caught while setting up connection", e.what());
+            Logger::instance().log("Exception caught while setting up connection.", e.what());
         }
     }
 
@@ -132,9 +132,7 @@ extern "C" {
     }
 
     int main(int argc, char** argv) {
-        Logger::instance().log("\n##########\r\n", "", true);
-        Logger::instance().log("Starting main()...", "", true);
-
+        Logger::instance().log("\n##########\r\nStarting main()...", "", true);
         while (appletMainLoop()) {
             try {
                 Logger::instance().log("Connecting...", "", true);

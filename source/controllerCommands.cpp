@@ -97,6 +97,7 @@ namespace ControllerCommands {
      */
     void Controller::click(const HidNpadButton& btn) {
         press(btn);
+        svcSleepThread(5e+7L);
         release(btn);
     }
 

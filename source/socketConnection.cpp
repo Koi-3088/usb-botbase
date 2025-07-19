@@ -52,6 +52,15 @@ namespace SocketConnection {
 			return -1;
 		}
 
+        struct linger so_linger {};
+        so_linger.l_onoff = 1;
+        so_linger.l_linger = 0;
+		if (setsockopt(m_tcp.serverFd, SOL_SOCKET, SO_LINGER, &so_linger, sizeof(so_linger)) < 0) {
+			Logger::instance().log("setsockopt(SO_LINGER) error.", std::to_string(errno));
+			close(m_tcp.serverFd);
+			return -1;
+        }
+
 		int opt = 1;
 		if (setsockopt(m_tcp.serverFd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
 			Logger::instance().log("setsockopt() error.", std::to_string(errno));
@@ -143,7 +152,7 @@ namespace SocketConnection {
 				try {
 					std::vector<char> buffer;
 					while (m_senderQueue.pop(buffer) && !m_error) {
-						Logger::instance().log("Sending data to client: " + std::string(buffer.data(), buffer.size() - 1));
+						Logger::instance().log("Sending data to client: " + std::to_string(reinterpret_cast<std::uintptr_t>(buffer.data()) - 1));
 						int sent = sendData(buffer.data(), buffer.size(), m_tcp.clientFd);
 						if (sent <= 0) {
 							Logger::instance().log("sendData() failed or client disconnected.");
@@ -185,6 +194,7 @@ namespace SocketConnection {
 									buffer.push_back('\n');
 								}
 
+                                Logger::instance().log("Command processed: " + x + ".");
 								m_senderQueue.push(std::move(buffer));
 								m_senderCv.notify_one();
 							}
@@ -271,7 +281,7 @@ namespace SocketConnection {
 
 				continue;
 			} else if (received == 0) {
-				Logger::instance().log("receiveData() client closed the connection.", std::string(strerror(errno)));
+				Logger::instance().log("receiveData() client closed the connection.", "", true);
 				m_error = true;
 				notifyAll();
 				return -1;
@@ -287,6 +297,11 @@ namespace SocketConnection {
 			}
 		}
 
+		if (m_error) {
+			Logger::instance().log("receiveData() error flag set, exiting receive loop.");
+			return -1;
+		}
+
 		return 0;
 	}
 
@@ -300,7 +315,7 @@ namespace SocketConnection {
 			}
 
 			if (sent == 0) {
-				Logger::instance().log("sendData(): Failed to send data. Client closed the connection.", std::string(strerror(errno)));
+				Logger::instance().log("sendData(): Failed to send data. Client closed the connection.", "", true);
 				m_error = true;
 				notifyAll();
 				return -1;
@@ -315,6 +330,11 @@ namespace SocketConnection {
 				svcSleepThread(5e+6L);
 			}
 		}
+
+		if (m_error) {
+			Logger::instance().log("sendData() error flag set, exiting send loop.");
+			return -1;
+        }
 
 		return total;
 	}
