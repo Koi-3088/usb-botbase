@@ -33,7 +33,7 @@ namespace ControllerCommands {
         }
 
         // Set the controller type to Pro-Controller, and set the npadInterfaceType.
-        m_controllerDevice.deviceType = HidDeviceType_FullKey3;
+        m_controllerDevice.deviceType = m_controllerInitializedType;
         m_controllerDevice.npadInterfaceType = HidNpadInterfaceType_Bluetooth;
 
         // Set the controller colors. The grip colors are for Pro-Controller on [9.0.0+].
@@ -60,8 +60,7 @@ namespace ControllerCommands {
         }
 
         //init a dummy keyboard state for assignment between keypresses
-        // Hackfix found by Red: an unused key press (KBD_MEDIA_CALC) is required to allow sequential same-key presses. bitfield[3]
-        m_dummyKeyboardState.keys[3] = 0x800000000000000UL;
+        m_dummyKeyboardState.keys[3] = 0x800000000000000UL; // Hackfix found by Red: an unused key press (KBD_MEDIA_CALC) is required to allow sequential same-key presses. bitfield[3]
         m_controllerIsInitialised = true;
     }
 
@@ -97,7 +96,7 @@ namespace ControllerCommands {
      */
     void Controller::click(const HidNpadButton& btn) {
         press(btn);
-        svcSleepThread(5e+7L);
+        svcSleepThread(m_buttonClickSleepTime * 1e+6L);
         release(btn);
     }
 
@@ -164,14 +163,14 @@ namespace ControllerCommands {
             svcSleepThread(holdTime);
             if (!hold) {
                 hiddbgSetTouchScreenAutoPilotState(NULL, 0);
-                svcSleepThread(pollRate * 1e+6L);
+                svcSleepThread(m_pollRate * 1e+6L);
             }
         }
 
         // send finger release event
         if (hold) {
             hiddbgSetTouchScreenAutoPilotState(NULL, 0);
-            svcSleepThread(pollRate * 1e+6L);
+            svcSleepThread(m_pollRate * 1e+6L);
         }
 
         hiddbgUnsetTouchScreenAutoPilotState();
@@ -190,16 +189,16 @@ namespace ControllerCommands {
             std::memcpy(&tempState.keys, states[i].keys, sizeof(u64) * 4);
             tempState.modifiers = states[i].modifiers;
             hiddbgSetKeyboardAutoPilotState(&tempState);
-            svcSleepThread(keyPressSleepTime * 1e+6L);
+            svcSleepThread(m_keyPressSleepTime * 1e+6L);
 
             if (i != (sequentialCount - 1)) {
                 if (std::memcmp(states[i].keys, states[i + 1].keys, sizeof(u64) * 4) == 0 && states[i].modifiers == states[i + 1].modifiers) {
                     hiddbgSetKeyboardAutoPilotState(&m_dummyKeyboardState);
-                    svcSleepThread(pollRate * 1e+6L);
+                    svcSleepThread(m_pollRate * 1e+6L);
                 }
             } else {
                 hiddbgSetKeyboardAutoPilotState(&m_dummyKeyboardState);
-                svcSleepThread(pollRate * 1e+6L);
+                svcSleepThread(m_pollRate * 1e+6L);
             }
         }
 
@@ -211,8 +210,13 @@ namespace ControllerCommands {
      * @param Parameters vector.
      */
     void Controller::setControllerType(const std::vector<std::string>& params) {
+        if (params.size() < 2) {
+            Logger::instance().log("setControllerType() params size is less than 2.");
+            return;
+        }
+
         detachController();
-        m_controllerInitializedType = (HidDeviceType)Utils::parseStringToInt(params[0]);
+        m_controllerInitializedType = (HidDeviceType)Utils::parseStringToInt(params[1]);
     }
 
     /**
@@ -220,14 +224,14 @@ namespace ControllerCommands {
      * @param Queue for sending data.
      * @param Condition variable for the sender queue.
      */
-    void Controller::startControllerThread(LockFreeQueue<std::vector<char>>& senderQueue, std::condition_variable& senderCv, std::mutex& senderMutex, std::atomic_bool& error) {
+    void Controller::startControllerThread(LockFreeQueue<std::vector<char>>& senderQueue, std::condition_variable& senderCv, std::atomic_bool& error) {
         if (m_ccThreadRunning) {
             Logger::instance().log("Controller thread already running.");
             return;
         }
 
         Logger::instance().log("Starting commandLoopPA thread.");
-        m_ccThread = std::thread(&Controller::commandLoopPA, this, std::ref(senderQueue), std::ref(senderCv), std::ref(senderMutex), std::ref(error));
+        m_ccThread = std::thread(&Controller::commandLoopPA, this, std::ref(senderQueue), std::ref(senderCv), std::ref(error));
     }
 
     /**
@@ -235,7 +239,7 @@ namespace ControllerCommands {
      * @param Queue for sending data.
      * @param Condition variable for the sender queue.
      */
-    void Controller::commandLoopPA(LockFreeQueue<std::vector<char>>& senderQueue, std::condition_variable& senderCv, std::mutex& senderMutex, std::atomic_bool& error) {
+    void Controller::commandLoopPA(LockFreeQueue<std::vector<char>>& senderQueue, std::condition_variable& senderCv, std::atomic_bool& error) {
         const std::chrono::microseconds earlyWake(1000);
         m_nextStateChange = WallClock::max();
         m_ccThreadRunning = true;

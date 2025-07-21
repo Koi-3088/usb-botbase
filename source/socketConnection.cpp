@@ -139,10 +139,10 @@ namespace SocketConnection {
 	}
 
 	void SocketConnection::disconnect() {
+		Logger::instance().log("Disconnecting WiFi connection...");
         m_error = true;
 		close(m_tcp.serverFd);
         close(m_tcp.clientFd);
-		Logger::instance().log("Disconnected.");
 	}
 
 	void SocketConnection::run() {
@@ -152,7 +152,7 @@ namespace SocketConnection {
 				try {
 					std::vector<char> buffer;
 					while (m_senderQueue.pop(buffer) && !m_error) {
-						Logger::instance().log("Sending data to client: " + std::to_string(reinterpret_cast<std::uintptr_t>(buffer.data()) - 1));
+						Logger::instance().log("Sending data to client: " + std::string(buffer.data(), buffer.size() - 1));
 						int sent = sendData(buffer.data(), buffer.size(), m_tcp.clientFd);
 						if (sent <= 0) {
 							Logger::instance().log("sendData() failed or client disconnected.");
@@ -186,7 +186,7 @@ namespace SocketConnection {
 						Utils::parseArgs(command, [&](const std::string& x, const std::vector<std::string>& y) {
 							auto buffer = m_handler->HandleCommand(x, y);
 							if (!m_handler->getIsRunningPA() && m_handler->getIsEnabledPA()) {
-								m_handler->startControllerThread(m_senderQueue, m_senderCv, m_senderMutex, m_error);
+								m_handler->startControllerThread(m_senderQueue, m_senderCv, m_error);
 							}
 
 							if (!buffer.empty()) {

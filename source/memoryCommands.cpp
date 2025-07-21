@@ -1,10 +1,14 @@
 #include "defines.h"
 #include "memoryCommands.h"
+#include "moduleBase.h"
+#include "util.h"
 #include "logger.h"
 #include <cstring>
 
 namespace MemoryCommands {
 	using namespace SbbLog;
+    using namespace Util;
+    using namespace ModuleBase;
 
     /**
      * @brief Read memory from the specified offset and size into the buffer.
@@ -22,6 +26,10 @@ namespace MemoryCommands {
             remainder -= receive;
             readMem(buffer, offset + total, receive);
             total += receive;
+        }
+
+        if (g_enableBackwardsCompat && !Utils::isUSB()) {
+            Utils::hexify(buffer);
         }
     }
 
@@ -44,6 +52,10 @@ namespace MemoryCommands {
         for (int i = 0; i < count; i++) {
             readMem(buffer, offsets[i], sizes[i], ofs);
             ofs += sizes[i];
+        }
+
+        if (g_enableBackwardsCompat && !Utils::isUSB()) {
+            Utils::hexify(buffer);
         }
     }
 

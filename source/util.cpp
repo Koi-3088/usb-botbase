@@ -1,8 +1,7 @@
 #include "defines.h"
-#include "util.h"
 #include "logger.h"
-#include <iterator>
-#include <algorithm>
+#include "util.h"
+#include <cstring>
 #include <fstream>
 #include <sstream>
 #include <switch.h>
@@ -201,5 +200,95 @@ namespace Util {
         }
 
         return buffer;
+    }
+
+    /**
+     * @brief Handle backwards compatibility for sent data by WiFi.
+     * @param Output buffer for result.
+     * @param If true, the bytes will be flipped in the output buffer.
+     */
+    void Utils::hexify(std::vector<char>& buffer, bool flip) {
+        if (buffer.empty()) {
+            return;
+        }
+
+        std::vector<char> hexBuffer;
+        hexBuffer.reserve(buffer.size() * 2);
+
+        static const char hexDigits[] = "0123456789ABCDEF";
+        size_t n = buffer.size();
+
+        if (flip) {
+            for (size_t i = 0; i < n; ++i) {
+                unsigned char c = static_cast<unsigned char>(buffer[n - 1 - i]);
+                hexBuffer.push_back(hexDigits[(c >> 4) & 0xF]);
+                hexBuffer.push_back(hexDigits[c & 0xF]);
+            }
+        } else {
+            for (size_t i = 0; i < n; ++i) {
+                unsigned char c = static_cast<unsigned char>(buffer[i]);
+                hexBuffer.push_back(hexDigits[(c >> 4) & 0xF]);
+                hexBuffer.push_back(hexDigits[c & 0xF]);
+            }
+        }
+
+        buffer.swap(hexBuffer);
+    }
+
+    /**
+     * @brief Handle backwards compatibility for sent strings by WiFi.
+     * @param Output buffer for result.
+     * @param If true, the bytes will be flipped in the output buffer.
+     */
+    void Utils::hexifyString(std::vector<char>& buffer, bool flip) {
+        if (buffer.empty()) {
+            return;
+        }
+
+        size_t valueSize = buffer.size();
+        char hexStr[17] = { 0 };
+        const char* dataPtr = buffer.data();
+        char temp[8];
+
+        if (flip && valueSize > 1 && valueSize <= 8) {
+            for (size_t i = 0; i < valueSize; ++i) {
+                temp[i] = buffer[valueSize - 1 - i];
+            }
+
+            dataPtr = temp;
+        }
+
+        switch (valueSize) {
+        case 8: {
+            uint64_t value;
+            std::memcpy(&value, dataPtr, 8);
+            std::snprintf(hexStr, sizeof(hexStr), "%016llX", static_cast<unsigned long long>(value));
+            buffer.assign(hexStr, hexStr + 16);
+            break;
+        }
+        case 4: {
+            uint32_t value;
+            std::memcpy(&value, dataPtr, 4);
+            std::snprintf(hexStr, sizeof(hexStr), "%08X", value);
+            buffer.assign(hexStr, hexStr + 8);
+            break;
+        }
+        case 2: {
+            uint16_t value;
+            std::memcpy(&value, dataPtr, 2);
+            std::snprintf(hexStr, sizeof(hexStr), "%04X", value);
+            buffer.assign(hexStr, hexStr + 4);
+            break;
+        }
+        case 1: {
+            uint8_t value = static_cast<uint8_t>(dataPtr[0]);
+            std::snprintf(hexStr, sizeof(hexStr), "%02X", value);
+            buffer.assign(hexStr, hexStr + 2);
+            break;
+        }
+        default:
+            Logger::instance().log("hexifyString() Unsupported buffer size: " + std::to_string(valueSize), "", true);
+            break;
+        }
     }
 }

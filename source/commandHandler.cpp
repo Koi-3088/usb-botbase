@@ -45,7 +45,6 @@ namespace CommandHandler {
 		return buffer;
 	}
 
-	// All peek***, peek***Multi, poke***, etc. can be condensed to 1 command each using an enum, if desired.
 #pragma region Vision
 	/**
 	 * @brief Handle the "peek" command.
@@ -223,23 +222,13 @@ namespace CommandHandler {
 		u64 val = followMainPointer(mainJump, jumps, buffer);
 		if (val != 0) {
 			val += finalJump;
-
-			if (g_enableBackwardsCompat && !Utils::isUSB()) {
-				std::string hexString;
-				hexString.reserve(buffer.size() * 2);
-				static const char hexDigits[] = "0123456789ABCDEF";
-				for (unsigned char c : buffer) {
-					hexString.push_back(hexDigits[(c >> 4) & 0xF]);
-					hexString.push_back(hexDigits[c & 0xF]);
-				}
-
-				buffer.assign(hexString.begin(), hexString.end());
-				return;
-			} else {
-				std::memcpy(buffer.data(), &val, sizeof(val));
-			}
+			std::memcpy(buffer.data(), &val, sizeof(val));
 		} else {
 			Logger::instance().log("pointerAll_cmd() val is 0, not adding final jump.");
+		}
+
+		if (g_enableBackwardsCompat && !Utils::isUSB()) {
+			Utils::hexify(buffer);
 		}
 	}
 
@@ -274,6 +263,10 @@ namespace CommandHandler {
 		} else {
 			Logger::instance().log("pointerRelative_cmd() val is 0, not adding final jump.");
 		}
+
+		if (g_enableBackwardsCompat && !Utils::isUSB()) {
+			Utils::hexify(buffer);
+		}
 	}
 
 	/**
@@ -306,18 +299,6 @@ namespace CommandHandler {
 		val += finalJump;
 		std::memcpy(buffer.data(), &val, sizeof(val));
 		peek(val, size, buffer);
-
-		if (g_enableBackwardsCompat && !Utils::isUSB()) {
-			std::string hexString;
-			hexString.reserve(buffer.size() * 2);
-			static const char hexDigits[] = "0123456789ABCDEF";
-			for (unsigned char c : buffer) {
-				hexString.push_back(hexDigits[(c >> 4) & 0xF]);
-				hexString.push_back(hexDigits[c & 0xF]);
-			}
-
-			buffer.assign(hexString.begin(), hexString.end());
-        }
 	}
 
 	/**
@@ -498,12 +479,12 @@ namespace CommandHandler {
 		std::vector<HidTouchState> state(count);
 		u32 j = 0;
 		for (u32 i = 0; i < count; i++) {
-			state[i].diameter_x = state[i].diameter_y = fingerDiameter;
+			state[i].diameter_x = state[i].diameter_y = m_fingerDiameter;
 			state[i].x = (u32)Utils::parseStringToInt(params[j++]);
 			state[i].y = (u32)Utils::parseStringToInt(params[j++]);
 		}
 
-		touch(state, count, pollRate * 1e+6L, false);
+		touch(state, count, m_pollRate * 1e+6L, false);
 	}
 
 	/**
@@ -516,7 +497,7 @@ namespace CommandHandler {
 		}
 
 		std::vector<HidTouchState> state(1);
-		state[0].diameter_x = state[0].diameter_y = fingerDiameter;
+		state[0].diameter_x = state[0].diameter_y = m_fingerDiameter;
 		state[0].x = (u32)Utils::parseStringToInt(params[0]);
 		state[0].y = (u32)Utils::parseStringToInt(params[1]);
 		u64 time = Utils::parseStringToInt(params[2]);
@@ -536,12 +517,12 @@ namespace CommandHandler {
 		std::vector<HidTouchState> state(count);
 		u32 j = 0;
 		for (u32 i = 0; i < count; i++) {
-			state[i].diameter_x = state[i].diameter_y = fingerDiameter;
+			state[i].diameter_x = state[i].diameter_y = m_fingerDiameter;
 			state[i].x = (u32)Utils::parseStringToInt(params[j++]);
 			state[i].y = (u32)Utils::parseStringToInt(params[j++]);
 		}
 
-		touch(state, count, pollRate * 1e+6L * 2, true);
+		touch(state, count, m_pollRate * 1e+6L * 2, true);
 	}
 
 	/**
@@ -649,19 +630,14 @@ namespace CommandHandler {
 	 * @param Output buffer for result.
 	 */
 	void Handler::getTitleID_cmd(std::vector<char>& buffer) {
-		if (g_enableBackwardsCompat && !Utils::isUSB()) {
-			char hexStr[17];
-			std::snprintf(hexStr, sizeof(hexStr), "%016llX", static_cast<unsigned long long>(m_metaData.titleID));
-			std::string hexString(hexStr);
-
-			buffer.assign(hexString.begin(), hexString.end());
-            return;
-		}
-
 		buffer.resize(sizeof(m_metaData.titleID));
 		std::copy(reinterpret_cast<const char*>(&m_metaData.titleID),
 			reinterpret_cast<const char*>(&m_metaData.titleID) + sizeof(m_metaData.titleID),
 			buffer.begin());
+
+		if (g_enableBackwardsCompat && !Utils::isUSB()) {
+			Utils::hexifyString(buffer);
+		}
 	}
 
 	/**
@@ -669,19 +645,14 @@ namespace CommandHandler {
 	 * @param Output buffer for result.
 	 */
 	void Handler::getBuildID_cmd(std::vector<char>& buffer) {
-		if (g_enableBackwardsCompat && !Utils::isUSB()) {
-			char hexStr[17];
-			std::snprintf(hexStr, sizeof(hexStr), "%016llX", static_cast<unsigned long long>(m_metaData.buildID));
-			std::string hexString(hexStr);
-
-			buffer.assign(hexString.begin(), hexString.end());
-			return;
-		}
-
 		buffer.resize(sizeof(m_metaData.buildID));
 		std::copy(reinterpret_cast<const char*>(&m_metaData.buildID),
 			reinterpret_cast<const char*>(&m_metaData.buildID) + sizeof(m_metaData.buildID),
 			buffer.begin());
+
+		if (g_enableBackwardsCompat && !Utils::isUSB()) {
+			Utils::hexifyString(buffer);
+		}
 	}
 
 	/**
@@ -689,19 +660,14 @@ namespace CommandHandler {
 	 * @param Output buffer for result.
 	 */
 	void Handler::getTitleVersion_cmd(std::vector<char>& buffer) {
-		if (g_enableBackwardsCompat && !Utils::isUSB()) {
-			char hexStr[17];
-			std::snprintf(hexStr, sizeof(hexStr), "%016llX", static_cast<unsigned long long>(m_metaData.titleVersion));
-			std::string hexString(hexStr);
-
-			buffer.assign(hexString.begin(), hexString.end());
-			return;
-		}
-
 		buffer.resize(sizeof(m_metaData.titleVersion));
 		std::copy(reinterpret_cast<const char*>(&m_metaData.titleVersion),
 			reinterpret_cast<const char*>(&m_metaData.titleVersion) + sizeof(m_metaData.titleVersion),
 			buffer.begin());
+
+		if (g_enableBackwardsCompat && !Utils::isUSB()) {
+			Utils::hexifyString(buffer);
+		}
 	}
 
 	/**
@@ -720,6 +686,10 @@ namespace CommandHandler {
 		std::copy(reinterpret_cast<const char*>(&language),
 			reinterpret_cast<const char*>(&language) + sizeof(language),
 			buffer.begin());
+
+		if (g_enableBackwardsCompat && !Utils::isUSB()) {
+			Utils::hexifyString(buffer);
+		}
 	}
 
 	/**
@@ -739,6 +709,10 @@ namespace CommandHandler {
 		std::copy(reinterpret_cast<const char*>(&isRunning),
 			reinterpret_cast<const char*>(&isRunning) + sizeof(isRunning),
 			buffer.begin());
+
+		if (g_enableBackwardsCompat && !Utils::isUSB()) {
+			Utils::hexifyString(buffer);
+		}
 	}
 
 	/**
@@ -756,6 +730,9 @@ namespace CommandHandler {
 			}
 
 			buffer.resize(outSize);
+			if (g_enableBackwardsCompat && !Utils::isUSB()) {
+				Utils::hexify(buffer);
+            }
 		} catch (const std::bad_alloc& e) {
 			Logger::instance().log("std::bad_alloc caught in pixelPeek_cmd().", std::string(e.what()));
 			throw;
@@ -781,19 +758,14 @@ namespace CommandHandler {
 	 * @param Output buffer for result.
 	 */
 	void Handler::getMainNsoBase_cmd(std::vector<char>& buffer) {
-		if (g_enableBackwardsCompat && !Utils::isUSB()) {
-			char hexStr[17];
-			std::snprintf(hexStr, sizeof(hexStr), "%016llX", static_cast<unsigned long long>(m_metaData.main_nso_base));
-			std::string hexString(hexStr);
-
-			buffer.assign(hexString.begin(), hexString.end());
-			return;
-		}
-
 		buffer.resize(sizeof(m_metaData.main_nso_base));
 		std::copy(reinterpret_cast<const char*>(&m_metaData.main_nso_base),
 			reinterpret_cast<const char*>(&m_metaData.main_nso_base) + sizeof(m_metaData.main_nso_base),
 			buffer.begin());
+
+		if (g_enableBackwardsCompat && !Utils::isUSB()) {
+			Utils::hexifyString(buffer);
+		}
 	}
 
 	/**
@@ -801,19 +773,14 @@ namespace CommandHandler {
 	 * @param Output buffer for result.
 	 */
 	void Handler::getHeapBase_cmd(std::vector<char>& buffer) {
-		if (g_enableBackwardsCompat && !Utils::isUSB()) {
-			char hexStr[17];
-			std::snprintf(hexStr, sizeof(hexStr), "%016llX", static_cast<unsigned long long>(m_metaData.heap_base));
-			std::string hexString(hexStr);
-
-			buffer.assign(hexString.begin(), hexString.end());
-			return;
-		}
-
 		buffer.resize(sizeof(m_metaData.heap_base));
 		std::copy(reinterpret_cast<const char*>(&m_metaData.heap_base),
 			reinterpret_cast<const char*>(&m_metaData.heap_base) + sizeof(m_metaData.heap_base),
 			buffer.begin());
+
+		if (g_enableBackwardsCompat && !Utils::isUSB()) {
+			Utils::hexifyString(buffer);
+		}
 	}
 
 	/**
@@ -839,6 +806,10 @@ namespace CommandHandler {
 		std::copy(reinterpret_cast<const char*>(&charge),
 			reinterpret_cast<const char*>(&charge) + sizeof(charge),
 			buffer.begin());
+
+		if (g_enableBackwardsCompat && !Utils::isUSB()) {
+			Utils::hexifyString(buffer);
+		}
 	}
 #pragma endregion Various base libnx commands.
 #pragma region Misc

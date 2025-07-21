@@ -1,8 +1,6 @@
 #pragma once
 
-#include <vector>
-#include <string>
-#include <functional>
+#include "util.h"
 #include <unordered_map>
 #include <atomic>
 #include <switch.h>
@@ -14,11 +12,12 @@
     (m_game)[(name)] = [this](std::vector<char>& buffer) { this->function(buffer); }
 
 namespace ModuleBase {
-	static bool g_enableBackwardsCompat = true;
+	using namespace Util;
 
 	class BaseCommands {
 	public:
 		BaseCommands() {
+			REGISTER_CFG_CMD("buttonClickSleepTime", setButtonClickSleepTime);
 			REGISTER_CFG_CMD("keySleepTime", setKeySleepTime);
 			REGISTER_CFG_CMD("fingerDiameter", setFingerDiameter);
 			REGISTER_CFG_CMD("pollRate", setPollRate);
@@ -33,15 +32,14 @@ namespace ModuleBase {
 			REGISTER_GAME_CMD("name", getGameName);
 		};
 
-		virtual ~BaseCommands() {
-            m_isEnabledPA = false;
-		};
+		virtual ~BaseCommands() {}
 
 	protected:
 		Handle m_debugHandle = 0;
-		u64 keyPressSleepTime = 25;
-		u64 pollRate = 17;
-		u32 fingerDiameter = 50;
+		u64 m_buttonClickSleepTime = 50;
+		u64 m_keyPressSleepTime = 25;
+		u64 m_pollRate = 17;
+		u32 m_fingerDiameter = 50;
 		std::atomic_bool m_isEnabledPA { false };
 
 		struct MetaData {
@@ -91,9 +89,10 @@ namespace ModuleBase {
 
 	private:
 		static std::string getCurrentSbbVersion() {
-            return !g_enableBackwardsCompat ? "3.0.0\r\n" : "3.0.1\r\n";
+            return !g_enableBackwardsCompat ? "3.0\r\n" : "3.1\r\n";
         }
 
+        void setButtonClickSleepTime(const std::vector<std::string>& params);
 		void setKeySleepTime(const std::vector<std::string>& params);
 		void setFingerDiameter(const std::vector<std::string>& params);
 		void setPollRate(const std::vector<std::string>& params);

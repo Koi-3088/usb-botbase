@@ -1,9 +1,9 @@
+#include "defines.h"
+#include "moduleBase.h"
+#include "ntp.h"
 #include <ctime>
 #include <switch.h>
 #include "logger.h"
-#include "util.h"
-#include "moduleBase.h"
-#include "ntp.h"
 
 namespace ModuleBase {
 	using namespace Util;
@@ -237,6 +237,19 @@ namespace ModuleBase {
     }
 
     /**
+     * @brief Set the button click sleep time from parameters.
+     * @param The parameters vector.
+     */
+    void BaseCommands::setButtonClickSleepTime(const std::vector<std::string>& params) {
+        if (params.size() < 2) {
+            Logger::instance().log("setKeySleepTime() params size is less than 2.");
+            return;
+        }
+
+        m_buttonClickSleepTime = Utils::parseStringToInt(params[1]);
+    }
+
+    /**
      * @brief Set the key press sleep time from parameters.
      * @param The parameters vector.
      */
@@ -246,7 +259,7 @@ namespace ModuleBase {
             return;
         }
 
-        keyPressSleepTime = Utils::parseStringToInt(params[1]);
+        m_keyPressSleepTime = Utils::parseStringToInt(params[1]);
     }
 
     /**
@@ -259,7 +272,7 @@ namespace ModuleBase {
             return;
         }
 
-        fingerDiameter = Utils::parseStringToInt(params[1]);
+        m_fingerDiameter = Utils::parseStringToInt(params[1]);
     }
 
     /**
@@ -272,7 +285,7 @@ namespace ModuleBase {
             return;
         }
 
-        pollRate = Utils::parseStringToInt(params[1]);
+        m_pollRate = Utils::parseStringToInt(params[1]);
     }
 
     /**
@@ -280,8 +293,8 @@ namespace ModuleBase {
      * @param The parameters vector.
      */
     void BaseCommands::setEnabledPA(const std::vector<std::string>& params) {
-        if (params.size() != 1) {
-            Logger::instance().log("setEnabledPA() incorrect params size.");
+        if (params.size() < 2) {
+            Logger::instance().log("setEnabledPA() params size is less than 2.");
             return;
         }
 
@@ -293,8 +306,8 @@ namespace ModuleBase {
      * @param The parameters vector.
      */
     void BaseCommands::setEnabledLogs(const std::vector<std::string>& params) {
-        if (params.size() != 1) {
-            Logger::instance().log("setEnabledLogs() incorrect params size.");
+        if (params.size() < 2) {
+            Logger::instance().log("setEnabledLogs() params size is less than 2.");
             return;
         }
 
@@ -307,8 +320,8 @@ namespace ModuleBase {
      * @param The parameters vector.
      */
     void BaseCommands::setEnabledBackwards(const std::vector<std::string>& params) {
-        if (params.size() != 1) {
-            Logger::instance().log("setEnabledBackwards() incorrect params size.");
+        if (params.size() < 2) {
+            Logger::instance().log("setEnabledBackwards() params size is less than 2.");
             return;
         }
 
@@ -349,6 +362,8 @@ namespace ModuleBase {
         std::copy(reinterpret_cast<const char*>(&data[0].nacp.display_version[0]),
             reinterpret_cast<const char*>(&data[0].nacp.display_version[15]),
             buffer.begin());
+
+        buffer.erase(std::remove(buffer.begin(), buffer.end(), '\0'), buffer.end());
     }
 
     /**
@@ -364,7 +379,7 @@ namespace ModuleBase {
 
         buffer.resize(sizeof(int));
         std::copy(reinterpret_cast<const char*>(&data[0].nacp.rating_age[0]),
-            reinterpret_cast<const char*>(&data[0].nacp.rating_age[1] + sizeof(int)),
+            reinterpret_cast<const char*>(&data[0].nacp.rating_age[0] + sizeof(int)),
             buffer.begin());
     }
 
@@ -391,6 +406,8 @@ namespace ModuleBase {
         std::copy(reinterpret_cast<const char*>(&lang->author[0]),
             reinterpret_cast<const char*>(&lang->author[255]),
             buffer.begin());
+
+        buffer.erase(std::remove(buffer.begin(), buffer.end(), '\0'), buffer.end());
         delete lang;
     }
 
@@ -417,6 +434,8 @@ namespace ModuleBase {
         std::copy(reinterpret_cast<const char*>(&lang->name[0]),
             reinterpret_cast<const char*>(&lang->name[511]),
             buffer.begin());
+
+        buffer.erase(std::remove(buffer.begin(), buffer.end(), '\0'), buffer.end());
         delete lang;
     }
 

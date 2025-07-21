@@ -23,7 +23,7 @@ namespace ControllerCommands {
            m_dummyKeyboardState = { 0 };
            m_controllerIsInitialised = false;
 		   m_controllerDevice.npadInterfaceType = HidNpadInterfaceType_Bluetooth;
-           m_controllerInitializedType = HidDeviceType_FullKey3;
+		   m_controllerInitializedType = HidDeviceType_FullKey3;
            m_ccThreadRunning = false;
         };
 
@@ -81,7 +81,7 @@ namespace ControllerCommands {
 		static int parseStringToButton(const std::string& arg);
 		static int parseStringToStick(const std::string& arg);
 
-        void startControllerThread(LockFreeQueue<std::vector<char>>& senderQueue, std::condition_variable& senderCv, std::mutex& senderMutex, std::atomic_bool& error);
+        void startControllerThread(LockFreeQueue<std::vector<char>>& senderQueue, std::condition_variable& senderCv, std::atomic_bool& error);
 		void cqEnqueueCommand(const ControllerCommand& cmd);
 		void cqReplaceOnNext();
 		void cqCancel();
@@ -102,9 +102,9 @@ namespace ControllerCommands {
 		void setControllerType(const std::vector<std::string>& params);
 
 	private:
-		void commandLoopPA(LockFreeQueue<std::vector<char>>& senderQueue, std::condition_variable& senderCv, std::mutex& senderMutex, std::atomic_bool& error);
+		void commandLoopPA(LockFreeQueue<std::vector<char>>& senderQueue, std::condition_variable& senderCv, std::atomic_bool& error);
 		void cqControllerState(const ControllerCommand& cmd);
-        void cqSendState(const ControllerCommand& cmd, LockFreeQueue<std::vector<char>>& senderQueue, std::condition_variable& senderCv, std::mutex& senderMutex);
+
 		inline void* aligned_alloc(size_t alignment, size_t size) {
 			if (alignment < sizeof(void*) || (alignment & (alignment - 1)) != 0) {
 				return nullptr;

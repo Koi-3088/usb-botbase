@@ -6,6 +6,8 @@
 #include <functional>
 
 namespace Util {
+	static bool g_enableBackwardsCompat = true;
+
 	class Utils {
 	public:
 		Utils() {}
@@ -18,6 +20,8 @@ namespace Util {
 		static u64 parseStringToInt(const std::string& arg);
 		static s64 parseStringToSignedLong(const std::string& arg);
 		static std::vector<char> parseStringToByteBuffer(const std::string& arg);
+		static void hexify(std::vector<char>& buffer, bool flip = false);
+		static void hexifyString(std::vector<char>& buffer, bool flip = false);
 
 	private:
 		static void sendPatternStatic(const HidsysNotificationLedPattern* pattern, const HidNpadIdType idType);
