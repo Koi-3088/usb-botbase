@@ -1,13 +1,13 @@
 #include "defines.h"
-#include "logger.h"
 #include "util.h"
+#include "logger.h"
 #include <cstring>
 #include <fstream>
-#include <sstream>
-#include <switch.h>
 
 namespace Util {
     using namespace SbbLog;
+
+    bool g_enableBackwardsCompat = true;
 
     // taken from sys-httpd (thanks jolan!)
     static const HidsysNotificationLedPattern breathingPattern = {

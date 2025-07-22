@@ -2,7 +2,6 @@
 #include "moduleBase.h"
 #include "ntp.h"
 #include <ctime>
-#include <switch.h>
 #include "logger.h"
 
 namespace ModuleBase {

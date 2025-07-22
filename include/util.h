@@ -1,12 +1,12 @@
 #pragma once
 
-#include <switch.h>
 #include <vector>
 #include <string>
 #include <functional>
+#include <switch.h>
 
 namespace Util {
-	static bool g_enableBackwardsCompat = true;
+	extern bool g_enableBackwardsCompat;
 
 	class Utils {
 	public:

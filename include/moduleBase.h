@@ -1,9 +1,8 @@
 #pragma once
 
 #include "util.h"
-#include <unordered_map>
 #include <atomic>
-#include <switch.h>
+#include <unordered_map>
 
 #define REGISTER_CFG_CMD(name, function) \
     (m_configure)[(name)] = [this](const std::vector<std::string>& params) { this->function(params); }
