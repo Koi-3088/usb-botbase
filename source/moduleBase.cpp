@@ -182,6 +182,7 @@ namespace ModuleBase {
         }
 
         std::vector<NsApplicationControlData> buf(1);
+        initMetaData();
         rc = nsGetApplicationControlData(NsApplicationControlSource_Storage, m_metaData.titleID, buf.data(), sizeof(NsApplicationControlData), &out);
         nsExit();
         if (R_FAILED(rc)) {

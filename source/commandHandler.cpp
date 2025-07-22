@@ -25,16 +25,7 @@ namespace CommandHandler {
 			return buffer;
 		}
 
-		if (m_metaData.pid == 0) {
-            initMetaData();
-        }
-
 		Logger::instance().log("HandleCommand cmd: " + cmd + ". Params#: " + std::to_string(params.size()));
-		/*Logger::instance().log("HandleCommand() params#: " + std::to_string(params.size()));
-		for (int i = 0; i < (int)params.size(); i++) {
-			Logger::instance().log("HandleCommand() param " + std::to_string(i) + ": " + params.at(i));
-		}*/
-
 		auto it = Handler::m_cmd.find(cmd);
 		if (it != Handler::m_cmd.end()) {
 			it->second(params, buffer);
@@ -630,6 +621,7 @@ namespace CommandHandler {
 	 * @param Output buffer for result.
 	 */
 	void Handler::getTitleID_cmd(std::vector<char>& buffer) {
+		initMetaData();
 		buffer.resize(sizeof(m_metaData.titleID));
 		std::copy(reinterpret_cast<const char*>(&m_metaData.titleID),
 			reinterpret_cast<const char*>(&m_metaData.titleID) + sizeof(m_metaData.titleID),
@@ -645,6 +637,7 @@ namespace CommandHandler {
 	 * @param Output buffer for result.
 	 */
 	void Handler::getBuildID_cmd(std::vector<char>& buffer) {
+		initMetaData();
 		buffer.resize(sizeof(m_metaData.buildID));
 		std::copy(reinterpret_cast<const char*>(&m_metaData.buildID),
 			reinterpret_cast<const char*>(&m_metaData.buildID) + sizeof(m_metaData.buildID),
@@ -660,6 +653,7 @@ namespace CommandHandler {
 	 * @param Output buffer for result.
 	 */
 	void Handler::getTitleVersion_cmd(std::vector<char>& buffer) {
+		initMetaData();
 		buffer.resize(sizeof(m_metaData.titleVersion));
 		std::copy(reinterpret_cast<const char*>(&m_metaData.titleVersion),
 			reinterpret_cast<const char*>(&m_metaData.titleVersion) + sizeof(m_metaData.titleVersion),
@@ -758,6 +752,7 @@ namespace CommandHandler {
 	 * @param Output buffer for result.
 	 */
 	void Handler::getMainNsoBase_cmd(std::vector<char>& buffer) {
+		initMetaData();
 		buffer.resize(sizeof(m_metaData.main_nso_base));
 		std::copy(reinterpret_cast<const char*>(&m_metaData.main_nso_base),
 			reinterpret_cast<const char*>(&m_metaData.main_nso_base) + sizeof(m_metaData.main_nso_base),
@@ -773,6 +768,7 @@ namespace CommandHandler {
 	 * @param Output buffer for result.
 	 */
 	void Handler::getHeapBase_cmd(std::vector<char>& buffer) {
+		initMetaData();
 		buffer.resize(sizeof(m_metaData.heap_base));
 		std::copy(reinterpret_cast<const char*>(&m_metaData.heap_base),
 			reinterpret_cast<const char*>(&m_metaData.heap_base) + sizeof(m_metaData.heap_base),
