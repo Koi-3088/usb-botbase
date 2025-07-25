@@ -1,5 +1,6 @@
 #pragma once
 
+#include "defines.h"
 #include "controllerCommands.h"
 #include "memoryCommands.h"
 #include <functional>

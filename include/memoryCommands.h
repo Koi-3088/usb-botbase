@@ -1,5 +1,6 @@
 #pragma once
 
+#include "defines.h"
 #include "moduleBase.h"
 #include <vector>
 #include <switch.h>

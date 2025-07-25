@@ -223,6 +223,7 @@ namespace ControllerCommands {
      * @brief Start the PA controller thread for processing commands.
      * @param Queue for sending data.
      * @param Condition variable for the sender queue.
+     * @param Atomic boolean for error handling, passed from the command thread.
      */
     void Controller::startControllerThread(LockFreeQueue<std::vector<char>>& senderQueue, std::condition_variable& senderCv, std::atomic_bool& error) {
         if (m_ccThreadRunning) {
@@ -238,6 +239,7 @@ namespace ControllerCommands {
      * @brief Main loop for processing PA controller commands in a thread.
      * @param Queue for sending data.
      * @param Condition variable for the sender queue.
+     * @param Atomic boolean for error handling, passed from the command thread.
      */
     void Controller::commandLoopPA(LockFreeQueue<std::vector<char>>& senderQueue, std::condition_variable& senderCv, std::atomic_bool& error) {
         const std::chrono::microseconds earlyWake(1000);
@@ -271,21 +273,20 @@ namespace ControllerCommands {
                 senderQueue.push(std::vector<char>(res.begin(), res.end()));
                 senderCv.notify_one();
             }
-            m_ccCurrentCommand = cmd;
 
+            m_ccCurrentCommand = cmd;
             m_ccCv.wait_until(lock, m_nextStateChange - earlyWake, [&] { return error || now + earlyWake >= m_nextStateChange; });
         }
 
         m_ccQueue.clear();
         cqControllerState(ControllerCommand{});
         detachController();
+        Logger::instance().log("commandLoopPA() exiting thread...");
         m_ccThreadRunning = false;
-        error.store(true);
-        Logger::instance().log("commandLoopPA() stopped thread.");
     }
 
     /**
-     * @brief Update the PA controller state and optionally send a response.
+     * @brief Update the PA controller state.
      * @param The PA controller command.
      */
     void Controller::cqControllerState(const ControllerCommand& cmd) {

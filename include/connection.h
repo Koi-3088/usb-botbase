@@ -1,5 +1,6 @@
 #pragma once
 
+#include "defines.h"
 #include "commandHandler.h"
 #include <switch.h>
 

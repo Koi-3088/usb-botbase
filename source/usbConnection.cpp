@@ -30,7 +30,6 @@ namespace UsbConnection {
                 try {
                     std::vector<char> buffer;
                     while (m_senderQueue.pop(buffer) && !m_error) {
-                        Logger::instance().log("Sending data to client: " + std::string(buffer.data(), buffer.size() - 1));
                         int sent = sendData(buffer.data(), buffer.size());
                         if (sent <= 0) {
                             Logger::instance().log("sendData() failed or client disconnected.");
@@ -120,7 +119,11 @@ namespace UsbConnection {
 	void UsbConnection::disconnect() {
         Logger::instance().log("Disconnecting USB connection...");
         m_error = true;
-		usbCommsExit();
+        notifyAll();
+
+        if (m_senderThread.joinable()) m_senderThread.join();
+        if (m_commandThread.joinable()) m_commandThread.join();
+        usbCommsExit();
 	}
 
     int UsbConnection::receiveData(int sockfd) {
@@ -130,7 +133,6 @@ namespace UsbConnection {
                 std::vector<char> buf(bufSize);
 
                 if (g_enableBackwardsCompat) {
-                    //Logger::instance().log("Reading USB data size header...");
                     char header[4];
                     size_t headerRead = 0;
                     while (headerRead < 4 && !m_error) {
@@ -145,14 +147,11 @@ namespace UsbConnection {
 
                     uint32_t dataSize = 0;
                     std::memcpy(&dataSize, header, 4);
-                    Logger::instance().log("USB data size header read: " + std::to_string(dataSize) + " bytes.");
                     buf.resize(dataSize - 2);
                 }
 
-                //Logger::instance().log("Reading USB data...");
                 ssize_t received = usbCommsRead((void*)buf.data(), buf.size());
                 if (received > 0) {
-                    //Logger::instance().log("Received " + std::to_string(received) + " bytes from USB.");
                     m_persistentBuffer.append(buf.data(), received);
                     fflush(stdout);
                     if (g_enableBackwardsCompat) {
@@ -184,7 +183,6 @@ namespace UsbConnection {
                                 }
                             });
                         } else {
-                            //Logger::instance().log("Command received: " + std::string(cmd.data(), cmd.size() - 2) + ". Processing command.");
                             m_commandQueue.push(std::move(cmd));
                             m_commandCv.notify_one();
                         }
@@ -226,7 +224,6 @@ namespace UsbConnection {
         while (total < size && !m_error) {
             try {
                 if (g_enableBackwardsCompat) {
-                    //Logger::instance().log("Sending USB data size header...");
                     usbCommsWrite((void*)&response, 4);
                 }
 

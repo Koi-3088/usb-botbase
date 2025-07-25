@@ -1,14 +1,11 @@
 #pragma once
 
+#include "defines.h"
 #include "lockFreeQueue.h"
 #include "connection.h"
 #include <string>
 #include <vector>
 #include <memory>
-
-namespace CommandHandler {
-	class Handler;
-}
 
 namespace SocketConnection {
 	class SocketConnection : public Connection::ConnectionHandler {
@@ -19,18 +16,16 @@ namespace SocketConnection {
 		};
 
 		~SocketConnection() override {
-            m_persistentBuffer.clear();
-            m_error = true;
-            notifyAll();
+			m_error = true;
+			notifyAll();
 
-            std::lock_guard<std::mutex> sendLock(m_senderMutex);
+			m_persistentBuffer.clear();
+			m_senderQueue.clear();
+			m_commandQueue.clear();
+
 			if (m_senderThread.joinable()) m_senderThread.join();
-
-            std::lock_guard<std::mutex> commandLock(m_commandMutex);
 			if (m_commandThread.joinable()) m_commandThread.join();
-			if (m_handler) {
-				m_handler.reset();
-			}
+			if (m_handler) m_handler.reset();
 		};
 
 	public:
@@ -54,9 +49,7 @@ namespace SocketConnection {
 		void notifyAll() {
 			m_commandCv.notify_all();
             m_senderCv.notify_all();
-			if (m_handler) {
-                m_handler->cqNotifyAll();
-			}
+			if (m_handler) m_handler->cqNotifyAll();
 		}
 
 		std::string m_persistentBuffer;

@@ -20,13 +20,11 @@ extern "C" {
 
     void setUpConnection() {
         try {
-            m_connection.reset();
             if (Utils::isUSB()) {
                 m_connection = std::make_unique<UsbConnection::UsbConnection>();
-                return;
+            } else {
+                m_connection = std::make_unique<SocketConnection::SocketConnection>();
             }
-
-            m_connection = std::make_unique<SocketConnection::SocketConnection>();
         } catch (const std::exception& e) {
             Logger::instance().log("Exception caught while setting up connection.", e.what());
         }
@@ -124,7 +122,12 @@ extern "C" {
         if (m_connection) {
             m_connection->disconnect();
             m_connection.reset();
-            socketExit();
+
+            if (Utils::isUSB()) {
+                usbCommsExit();
+            } else {
+                socketExit();
+            }
         }
 
         capsscExit();
@@ -142,6 +145,7 @@ extern "C" {
                 }
 
                 Logger::instance().log("Resetting connection...", "", true);
+                m_connection.reset();
                 setUpConnection();
             } catch (...) {
                 Result rc = Result { 0x1001 };

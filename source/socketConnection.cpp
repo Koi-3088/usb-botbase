@@ -10,6 +10,7 @@
 #include <sys/errno.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
+#include <sys/select.h>
 #include <netinet/in.h>
 
 namespace SocketConnection {
@@ -63,29 +64,28 @@ namespace SocketConnection {
 
 		int opt = 1;
 		if (setsockopt(m_tcp.serverFd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
-			Logger::instance().log("setsockopt() error.", std::to_string(errno));
+			Logger::instance().log("setsockopt(SO_REUSEADDR) error.", std::to_string(errno));
 			close(m_tcp.serverFd);
 			return -1;
 		}
+
+#ifdef SO_REUSEPORT
+		opt = 1;
+		if (setsockopt(m_tcp.serverFd, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt)) < 0) {
+			Logger::instance().log("setsockopt(SO_REUSEPORT) error.", std::to_string(errno));
+			close(m_tcp.serverFd);
+			return -1;
+		}
+#endif
 
 		struct sockaddr_in serverAddr {};
 		serverAddr.sin_family = AF_INET;
 		serverAddr.sin_addr.s_addr = INADDR_ANY;
 		serverAddr.sin_port = htons(m_tcp.port);
 
-		int retries = 0;
 		while (bind(m_tcp.serverFd, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0) {
             Logger::instance().log("bind() error, retrying in 1 second...", std::to_string(errno));
-			svcSleepThread(1e+9L);
-
-			if (++retries > 10) {
-				Logger::instance().log("Failed to bind socket after multiple attempts, giving up.", std::to_string(errno));
-				close(m_tcp.serverFd);
-				socketExit();
-				Result rc;
-                initialize(rc);
-				return -1;
-            }
+			svcSleepThread(5e+6L);
 		}
 
 		if (listen(m_tcp.serverFd, 3) < 0) {
@@ -104,8 +104,6 @@ namespace SocketConnection {
 					return false;
 				}
 
-				m_handler->HandleCommand("click", std::vector<std::string> { "UNUSED" });
-				m_handler->HandleCommand("detachController", {});
 				Utils::flashLed();
 			}
 
@@ -113,46 +111,89 @@ namespace SocketConnection {
 			socklen_t clientSize = sizeof(clientAddr);
 			Logger::instance().log("Waiting for client to connect...", "", true);
 
-			while (m_tcp.clientFd == -1) {
-				m_tcp.clientFd = accept(m_tcp.serverFd, (struct sockaddr*)&clientAddr, &clientSize);
-				if (m_tcp.clientFd == -1 && errno != EWOULDBLOCK && errno != EAGAIN) {
+			while (true) {
+				fd_set readfds;
+				FD_ZERO(&readfds);
+				FD_SET(m_tcp.serverFd, &readfds);
+
+				if (select(m_tcp.serverFd + 1, &readfds, nullptr, nullptr, nullptr) < 0) {
+					if (errno == EWOULDBLOCK || errno == EAGAIN || errno == EINTR) {
+						svcSleepThread(1e+6L);
+						continue;
+					}
+
+					Logger::instance().log("select() error.", std::string(strerror(errno)));
 					close(m_tcp.serverFd);
+					svcSleepThread(5e+6L);
 					if (setupServerSocket() < 0) {
 						return false;
 					}
+
+					continue;
 				}
 
-				svcSleepThread(5e+6L);
+				if (FD_ISSET(m_tcp.serverFd, &readfds)) {
+					while (m_tcp.clientFd == -1) {
+						m_tcp.clientFd = accept(m_tcp.serverFd, (struct sockaddr*)&clientAddr, &clientSize);
+						if (m_tcp.clientFd == -1) {
+							if (errno != EWOULDBLOCK && errno != EAGAIN && errno != EINTR) {
+								Logger::instance().log("accept() error.", std::string(strerror(errno)));
+								close(m_tcp.serverFd);
+								svcSleepThread(5e+6L);
+								if (setupServerSocket() < 0) {
+									return false;
+								}
+
+								break;
+							}
+
+							svcSleepThread(1e+6L);
+							continue;
+						}
+
+						break;
+					}
+				}
+
+				if (m_tcp.clientFd != -1) {
+					break;
+                }
 			}
 		} catch (const std::exception& e) {
             Logger::instance().log("Exception while waiting for client to connect: ", e.what());
-            m_error = true;
 			return false;
 		} catch (...) {
             Logger::instance().log("Unknown exception while waiting for client to connect.", "Unknown error.");
-            m_error = true;
 			return false;
         }
 
+		m_handler->HandleCommand("click", std::vector<std::string> { "UNUSED" });
+		m_handler->HandleCommand("detachController", {});
 		Logger::instance().log("Client connected.");
 		return true;
 	}
 
 	void SocketConnection::disconnect() {
+		if (m_tcp.clientFd == -1 && m_tcp.serverFd == -1) {
+			return;
+        }
+
 		Logger::instance().log("Disconnecting WiFi connection...");
-        m_error = true;
 		close(m_tcp.serverFd);
-        close(m_tcp.clientFd);
+		m_tcp.serverFd = -1;
+		close(m_tcp.clientFd);
+		m_tcp.clientFd = -1;
+
+		if (m_senderThread.joinable()) m_senderThread.join();
+		if (m_commandThread.joinable()) m_commandThread.join();
 	}
 
 	void SocketConnection::run() {
-		m_error = false;
 		m_senderThread = std::thread([&]() {
 			while (!m_error) {
 				try {
 					std::vector<char> buffer;
 					while (m_senderQueue.pop(buffer) && !m_error) {
-						Logger::instance().log("Sending data to client: " + std::string(buffer.data(), buffer.size() - 1));
 						int sent = sendData(buffer.data(), buffer.size(), m_tcp.clientFd);
 						if (sent <= 0) {
 							Logger::instance().log("sendData() failed or client disconnected.");
@@ -168,10 +209,12 @@ namespace SocketConnection {
 					Logger::instance().log("Sender thread exception.", e.what());
 					m_error = true;
 					notifyAll();
+					break;
 				} catch (...) {
 					Logger::instance().log("Unknown sender thread exception.", "Unknown error.");
 					m_error = true;
 					notifyAll();
+					break;
 				}
 			}
 
@@ -217,6 +260,8 @@ namespace SocketConnection {
 			}
 
             Logger::instance().log("Command thread exiting.");
+			m_error = true;
+			notifyAll();
         });
 
 		while (!m_error) {
@@ -230,10 +275,12 @@ namespace SocketConnection {
 				Logger::instance().log("Socket reader thread exception.", e.what());
 				m_error = true;
 				notifyAll();
+				break;
 			} catch (...) {
 				Logger::instance().log("Unknown socket reader thread exception.", "Unknown error.");
 				m_error = true;
 				notifyAll();
+				break;
 			}
 		}
 
@@ -297,12 +344,7 @@ namespace SocketConnection {
 			}
 		}
 
-		if (m_error) {
-			Logger::instance().log("receiveData() error flag set, exiting receive loop.");
-			return -1;
-		}
-
-		return 0;
+		return !m_error ? 0 : -1;
 	}
 
 	int SocketConnection::sendData(const char* buffer, size_t size, int sockfd) {
@@ -331,11 +373,6 @@ namespace SocketConnection {
 			}
 		}
 
-		if (m_error) {
-			Logger::instance().log("sendData() error flag set, exiting send loop.");
-			return -1;
-        }
-
-		return total;
+		return !m_error ? total : -1;
 	}
 }

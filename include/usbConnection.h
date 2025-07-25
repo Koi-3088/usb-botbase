@@ -1,5 +1,6 @@
 #pragma once
 
+#include "defines.h"
 #include "lockFreeQueue.h"
 #include "connection.h"
 #include <string>
@@ -15,18 +16,16 @@ namespace UsbConnection {
 		};
 
 		~UsbConnection() override {
-			m_persistentBuffer.clear();
 			m_error = true;
 			notifyAll();
 
-			std::lock_guard<std::mutex> sendLock(m_senderMutex);
-			if (m_senderThread.joinable()) m_senderThread.join();
+			m_persistentBuffer.clear();
+			m_senderQueue.clear();
+			m_commandQueue.clear();
 
-			std::lock_guard<std::mutex> commandLock(m_commandMutex);
+			if (m_senderThread.joinable()) m_senderThread.join();
 			if (m_commandThread.joinable()) m_commandThread.join();
-			if (m_handler) {
-				m_handler.reset();
-			}
+			if (m_handler) m_handler.reset();
 		};
 
 	public:
@@ -41,9 +40,7 @@ namespace UsbConnection {
 		void notifyAll() {
 			m_commandCv.notify_all();
 			m_senderCv.notify_all();
-			if (m_handler) {
-				m_handler->cqNotifyAll();
-			}
+			if (m_handler) m_handler->cqNotifyAll();
 		}
 
 		std::string m_persistentBuffer;

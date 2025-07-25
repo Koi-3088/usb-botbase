@@ -1,5 +1,6 @@
 #pragma once
 
+#include "defines.h"
 #include "util.h"
 #include <atomic>
 #include <unordered_map>

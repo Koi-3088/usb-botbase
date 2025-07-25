@@ -4,7 +4,6 @@
 #include "util.h"
 #include <algorithm>
 #include <cstring>
-#include <switch.h>
 
 namespace CommandHandler {
 	using namespace SbbLog;
