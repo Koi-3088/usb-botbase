@@ -87,6 +87,7 @@ namespace ControllerCommands {
 		void cqReplaceOnNext();
 		void cqCancel();
 		void cqNotifyAll();
+        void cqJoinThread();
 
 	protected:
 		std::atomic_bool m_ccThreadRunning { false };

@@ -282,7 +282,6 @@ namespace ControllerCommands {
         cqControllerState(ControllerCommand{});
         detachController();
         Logger::instance().log("commandLoopPA() exiting thread...");
-        m_ccThreadRunning = false;
     }
 
     /**
@@ -357,6 +356,17 @@ namespace ControllerCommands {
      */
     void Controller::cqNotifyAll() {
         m_ccCv.notify_all();
+    }
+
+    /**
+     * @brief Join the PA controller thread if it is running.
+     */
+    void Controller::cqJoinThread() {
+        if (m_ccThreadRunning && m_ccThread.joinable()) {
+            m_ccThread.join();
+            m_ccThreadRunning = false;
+            Logger::instance().log("commandLoopPA thread finished.");
+        }
     }
 
     /**

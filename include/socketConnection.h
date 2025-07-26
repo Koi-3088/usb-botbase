@@ -25,6 +25,7 @@ namespace SocketConnection {
 
 			if (m_senderThread.joinable()) m_senderThread.join();
 			if (m_commandThread.joinable()) m_commandThread.join();
+			if (m_handler) m_handler->cqJoinThread();
 			if (m_handler) m_handler.reset();
 		};
 

@@ -84,7 +84,7 @@ namespace SocketConnection {
 		serverAddr.sin_port = htons(m_tcp.port);
 
 		while (bind(m_tcp.serverFd, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0) {
-            Logger::instance().log("bind() error, retrying in 1 second...", std::to_string(errno));
+            Logger::instance().log("bind() error, retrying in 50ms...", std::to_string(errno));
 			svcSleepThread(5e+6L);
 		}
 
@@ -109,6 +109,8 @@ namespace SocketConnection {
 
 			struct sockaddr_in clientAddr {};
 			socklen_t clientSize = sizeof(clientAddr);
+			int eagainCount = 0;
+			const int maxEagain = 10;
 			Logger::instance().log("Waiting for client to connect...", "", true);
 
 			while (true) {
@@ -117,13 +119,9 @@ namespace SocketConnection {
 				FD_SET(m_tcp.serverFd, &readfds);
 
 				if (select(m_tcp.serverFd + 1, &readfds, nullptr, nullptr, nullptr) < 0) {
-					if (errno == EWOULDBLOCK || errno == EAGAIN || errno == EINTR) {
-						svcSleepThread(1e+6L);
-						continue;
-					}
-
 					Logger::instance().log("select() error.", std::string(strerror(errno)));
 					close(m_tcp.serverFd);
+					m_tcp.serverFd = -1;
 					svcSleepThread(5e+6L);
 					if (setupServerSocket() < 0) {
 						return false;
@@ -133,31 +131,38 @@ namespace SocketConnection {
 				}
 
 				if (FD_ISSET(m_tcp.serverFd, &readfds)) {
-					while (m_tcp.clientFd == -1) {
-						m_tcp.clientFd = accept(m_tcp.serverFd, (struct sockaddr*)&clientAddr, &clientSize);
-						if (m_tcp.clientFd == -1) {
-							if (errno != EWOULDBLOCK && errno != EAGAIN && errno != EINTR) {
-								Logger::instance().log("accept() error.", std::string(strerror(errno)));
-								close(m_tcp.serverFd);
-								svcSleepThread(5e+6L);
-								if (setupServerSocket() < 0) {
-									return false;
-								}
-
-								break;
-							}
-
-							svcSleepThread(1e+6L);
-							continue;
-						}
-
+					m_tcp.clientFd = accept(m_tcp.serverFd, (struct sockaddr*)&clientAddr, &clientSize);
+					if (m_tcp.clientFd >= 0) {
 						break;
 					}
-				}
 
-				if (m_tcp.clientFd != -1) {
-					break;
-                }
+					if (errno == EWOULDBLOCK || errno == EAGAIN) {
+						eagainCount++;
+						if (eagainCount >= maxEagain) {
+							Logger::instance().log("accept() EAGAIN/EWOULDBLOCK repeated, recreating server socket.");
+							close(m_tcp.serverFd);
+							m_tcp.serverFd = -1;
+							svcSleepThread(5e+6L);
+							if (setupServerSocket() < 0) {
+								return false;
+							}
+						} else {
+							svcSleepThread(5e+6L);
+						}
+
+						continue;
+					}
+
+					Logger::instance().log("accept() error.", std::string(strerror(errno)));
+					close(m_tcp.serverFd);
+					m_tcp.serverFd = -1;
+					svcSleepThread(5e+6L);
+					if (setupServerSocket() < 0) {
+						return false;
+					}
+
+					eagainCount = 0;
+				}
 			}
 		} catch (const std::exception& e) {
             Logger::instance().log("Exception while waiting for client to connect: ", e.what());
@@ -186,6 +191,7 @@ namespace SocketConnection {
 
 		if (m_senderThread.joinable()) m_senderThread.join();
 		if (m_commandThread.joinable()) m_commandThread.join();
+		if (m_handler) m_handler->cqJoinThread();
 	}
 
 	void SocketConnection::run() {

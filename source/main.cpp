@@ -136,7 +136,7 @@ extern "C" {
 
     int main(int argc, char** argv) {
         Logger::instance().log("##########\r\n##########\r\nStarting main()...", "", true);
-        while (appletMainLoop()) {
+        while (true) {
             try {
                 Logger::instance().log("Connecting...", "", true);
                 if (m_connection->connect()) {
