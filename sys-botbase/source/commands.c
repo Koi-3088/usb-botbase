@@ -248,12 +248,14 @@ void peek(u64 offset, u64 size)
     Result rc = readMem(out, offset, size);
     if (R_FAILED(rc))
     {
-        printf("\n");
+        if (!usb)
+            printf("\n");
         detach();
         free(out);
         return;
     }
 
+    detach();
     if (usb)
     {
         response.size = size;
@@ -265,9 +267,8 @@ void peek(u64 offset, u64 size)
 		u64 i;
 		for (i = 0; i < size; i++)
 			printf("%02X", out[i]);
+        printf("\n");
 	}
-	printf("\n");
-	detach();
     free(out);
 }
 
@@ -287,9 +288,11 @@ void peekInfinite(u64 offset, u64 size)
         Result rc = readMem(out, offset + totalFetched, thisBuffersize);
         if (R_FAILED(rc))
         {
-            printf("\n");
+            if (!usb)
+                printf("\n");
             detach();
             free(out);
+            free(usbOut);
             return;
         }
 
@@ -303,15 +306,15 @@ void peekInfinite(u64 offset, u64 size)
         totalFetched += thisBuffersize;
     }
 
+    detach();
     if (usb)
     {
         response.size = size;
         response.data = &usbOut[0];
         sendUsbResponse(response);
     }
+    else printf("\n");
 
-    detach();
-    printf("\n");
     free(out);
     free(usbOut);
 }
@@ -330,7 +333,8 @@ void peekMulti(u64* offset, u64* size, u64 count)
         Result rc = readMem(out + ofs, offset[i], size[i]);
         if (R_FAILED(rc))
         {
-            printf("\n");
+            if (!usb)
+                printf("\n");
             detach();
             free(out);
             return;
@@ -338,6 +342,7 @@ void peekMulti(u64* offset, u64* size, u64 count)
         ofs += size[i];
     }
 
+    detach();
     if (usb)
     {
         response.size = totalSize;
@@ -349,9 +354,8 @@ void peekMulti(u64* offset, u64* size, u64 count)
 		u64 i;
 		for (i = 0; i < totalSize; i++)
 			printf("%02X", out[i]);
+        printf("\n");
 	}
-    printf("\n");
-    detach();
     free(out);
 }
 
