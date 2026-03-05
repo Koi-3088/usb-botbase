@@ -13,18 +13,13 @@
 #include "util.h"
 #include "freeze.h"
 #include <poll.h>
-#include "time.h"
+#include <time.h>
+#include "ntp.h"
 
 #define TITLE_ID 0x430000000000000B
 #define HEAP_SIZE 0x00480000
 #define THREAD_SIZE 0x1A000
 #define VERSION_S "2.5"
-
-typedef struct
-{
-    u64 size;
-    void* data;
-}USBResponse;
 
 typedef enum {
     Active = 0,
@@ -43,6 +38,10 @@ void sub_click(void* arg);
 void usbMainLoop();
 void wifiMainLoop();
 bool isUSB();
+bool handle_connection();
+void handle_disconnect();
+bool isConnectedToInternet(USBResponse* response);
+void sendResult(uint16_t success, USBResponse* response);
 
 // locks for thread
 Mutex freezeMutex, touchMutex, keyMutex, clickMutex;
@@ -54,7 +53,7 @@ u8 clickThreadState = 0; // 1 = break thread
 KeyData currentKeyEvent = { 0 };
 TouchData currentTouchEvent = { 0 };
 char* currentClick = NULL;
-bool usb = true;
+bool usb = false;
 
 // for cancelling the touch/click thread
 u8 touchToken = 0;
@@ -67,13 +66,6 @@ int fd_size = 5;
 // we aren't an applet
 u32 __nx_applet_type = AppletType_None;
 TimeServiceType __nx_time_service_type = TimeServiceType_System;
-
-void sendUsbResponse(USBResponse response)
-{
-    usbCommsWrite((void*)&response, 4);
-    if (response.size > 0)
-        usbCommsWrite(response.data, response.size);
-}
 
 // we override libnx internals to do a minimal init
 void __libnx_initheap(void)
@@ -91,9 +83,11 @@ void __appInit(void)
 {
     Result rc;
     svcSleepThread(20000000000L);
+
     rc = smInitialize();
     if (R_FAILED(rc))
         fatalThrow(rc);
+
     if (hosversionGet() == 0) {
         rc = setsysInitialize();
         if (R_SUCCEEDED(rc)) {
@@ -104,48 +98,45 @@ void __appInit(void)
             setsysExit();
         }
     }
+
     rc = timeInitialize();
     if (R_FAILED(rc))
     {
         timeExit();
         __nx_time_service_type = TimeServiceType_User;
         rc = timeInitialize();
-        if(R_FAILED(rc))
+        if (R_FAILED(rc))
             fatalThrow(rc);
     }
+
     rc = pmdmntInitialize();
     if (R_FAILED(rc))
         fatalThrow(rc);
+
     rc = ldrDmntInitialize();
     if (R_FAILED(rc))
         fatalThrow(rc);
+
     rc = pminfoInitialize();
-	if (R_FAILED(rc)) 
-		fatalThrow(rc);
+    if (R_FAILED(rc))
+        fatalThrow(rc);
+
     rc = fsInitialize();
     if (R_FAILED(rc))
         fatalThrow(rc);
+
     rc = fsdevMountSdmc();
     if (R_FAILED(rc))
         fatalThrow(rc);
 
-    usb = isUSB();
-    if (usb)
-    {
-        rc = usbCommsInitialize();
-        if (R_FAILED(rc))
-            fatalThrow(rc);
-    }
-    else
-    {
-        rc = socketInitializeDefault();
-        if (R_FAILED(rc))
-            fatalThrow(rc);
-    }
+    bool success = handle_connection();
+    if (!success)
+        fatalThrow(rc);
 
     rc = capsscInitialize();
     if (R_FAILED(rc))
         fatalThrow(rc);
+
     rc = viInitialize(ViServiceType_Default);
     if (R_FAILED(rc))
         fatalThrow(rc);
@@ -153,16 +144,14 @@ void __appInit(void)
 
 void __appExit(void)
 {
-    fsdevUnmountAll();
-    fsExit();
     smExit();
-    nsExit();
-    audoutExit();
     timeExit();
+    pmdmntExit();
+    ldrDmntExit();
+    pminfoExit();
+    handle_disconnect();
+    capsscExit();
     viExit();
-    if (usb)
-        usbCommsExit();
-    else socketExit();
 }
 
 u64 mainLoopSleepTime = 50;
@@ -173,7 +162,7 @@ bool echoCommands = false;
 void makeTouch(HidTouchState* state, u64 sequentialCount, u64 holdTime, bool hold)
 {
     mutexLock(&touchMutex);
-    memset(&currentTouchEvent, 0, sizeof currentTouchEvent);
+    memset(&currentTouchEvent, 0, sizeof(currentTouchEvent));
     currentTouchEvent.states = state;
     currentTouchEvent.sequentialCount = sequentialCount;
     currentTouchEvent.holdTime = holdTime;
@@ -185,7 +174,7 @@ void makeTouch(HidTouchState* state, u64 sequentialCount, u64 holdTime, bool hol
 void makeKeys(HiddbgKeyboardAutoPilotState* states, u64 sequentialCount)
 {
     mutexLock(&keyMutex);
-    memset(&currentKeyEvent, 0, sizeof currentKeyEvent);
+    memset(&currentKeyEvent, 0, sizeof(currentKeyEvent));
     currentKeyEvent.states = states;
     currentKeyEvent.sequentialCount = sequentialCount;
     currentKeyEvent.state = 1;
@@ -221,12 +210,6 @@ int argmain(int argc, char** argv)
         u64 offset = parseStringToInt(argv[1]);
         u64 size = parseStringToInt(argv[2]);
         peekInfinite(meta.heap_base + offset, size);
-		/*if (usb)
-		{
-			response.size = size;
-			response.data = &out[0];
-			sendUsbResponse(response);
-		}*/
     }
 
     if (!strcmp(argv[0], "peekMulti"))
@@ -251,12 +234,6 @@ int argmain(int argc, char** argv)
             sizes[i] = parseStringToInt(argv[(i * 2) + 2]);
         }
         peekMulti(offsets, sizes, itemCount);
-        /*if (usb)
-        {
-            response.size = totalSize;
-            response.data = &out[0];
-            sendUsbResponse(response);
-        }*/
     }
 
     if (!strcmp(argv[0], "peekAbsolute"))
@@ -267,12 +244,6 @@ int argmain(int argc, char** argv)
         u64 offset = parseStringToInt(argv[1]);
         u64 size = parseStringToInt(argv[2]);
         peekInfinite(offset, size);
-		/*if (usb)
-		{
-			response.size = size;
-			response.data = &out[0];
-			sendUsbResponse(response);
-		}*/
     }
 
     if (!strcmp(argv[0], "peekAbsoluteMulti"))
@@ -290,12 +261,6 @@ int argmain(int argc, char** argv)
             sizes[i] = parseStringToInt(argv[(i * 2) + 2]);
         }
         peekMulti(offsets, sizes, itemCount);
-        /*if (usb)
-        {
-            response.size = totalSize;
-            response.data = &out[0];
-            sendUsbResponse(response);
-        }*/
     }
 
     if (!strcmp(argv[0], "peekMain"))
@@ -313,12 +278,6 @@ int argmain(int argc, char** argv)
         u64 offset = parseStringToInt(argv[1]);
         u64 size = parseStringToInt(argv[2]);
         peekInfinite(meta.main_nso_base + offset, size);
-		/*if (usb)
-		{
-			response.size = size;
-			response.data = &data[0];
-			sendUsbResponse(response);
-		}*/
     }
 
     if (!strcmp(argv[0], "peekMainMulti"))
@@ -343,12 +302,6 @@ int argmain(int argc, char** argv)
             sizes[i] = parseStringToInt(argv[(i * 2) + 2]);
         }
         peekMulti(offsets, sizes, itemCount);
-        /*if (usb)
-        {
-            response.size = totalSize;
-            response.data = &out[0];
-            sendUsbResponse(response);
-        }*/
     }
 
     //poke <address in hex or dec> <data in hex or dec>
@@ -490,19 +443,24 @@ int argmain(int argc, char** argv)
         NacpLanguageEntry* langentry = NULL;
         if (outsize != 0) {
             if (!strcmp(argv[1], "icon")) {
+                u8* icon = malloc(outsize);
+
                 u64 i;
                 for (i = 0; i < outsize - sizeof(buf->nacp); i++)
                 {
-                    char* ch = buf->icon[i];
+                    u8 ic = buf->icon[i];
                     if (usb)
-		            {
-			            response.size = sizeof(ch);
-			            response.data = &ch;
-			            sendUsbResponse(response);
-		            }
-                    else printf("%02X", ch);
+                        icon[i] = ic;
+                    else printf("%02X", ic);
                 }
-                printf("\n");
+                if (usb)
+                {
+                    response.size = outsize;
+                    response.data = &icon[0];
+                    sendUsbResponse(response);
+                }
+                else printf("\n");
+                free(icon);
             }
             if (!strcmp(argv[1], "version"))
             {
@@ -511,22 +469,22 @@ int argmain(int argc, char** argv)
                 strncpy(version, buf->nacp.display_version, sizeof(version));
 
                 if (usb)
-		        {
-			        response.size = sizeof(version);
-			        response.data = &version;
-			        sendUsbResponse(response);
-		        }
+                {
+                    response.size = sizeof(version);
+                    response.data = &version;
+                    sendUsbResponse(response);
+                }
                 else printf("%s\n", version);
             }
             if (!strcmp(argv[1], "rating"))
             {
                 int rating = buf->nacp.rating_age[0];
                 if (usb)
-		        {
-			        response.size = sizeof(rating);
-			        response.data = &rating;
-			        sendUsbResponse(response);
-		        }
+                {
+                    response.size = sizeof(rating);
+                    response.data = &rating;
+                    sendUsbResponse(response);
+                }
                 else printf("%d\n", rating);
             }
             if (!strcmp(argv[1], "author"))
@@ -537,11 +495,11 @@ int argmain(int argc, char** argv)
                 strncpy(author, langentry->author, sizeof(author));
 
                 if (usb)
-		        {
-			        response.size = sizeof(author);
-			        response.data = &author;
-			        sendUsbResponse(response);
-		        }
+                {
+                    response.size = sizeof(author);
+                    response.data = &author;
+                    sendUsbResponse(response);
+                }
                 else printf("%s\n", author);
             }
             if (!strcmp(argv[1], "name"))
@@ -552,11 +510,11 @@ int argmain(int argc, char** argv)
                 strncpy(name, langentry->name, sizeof(name));
 
                 if (usb)
-		        {
-			        response.size = sizeof(name);
-			        response.data = &name;
-			        sendUsbResponse(response);
-		        }
+                {
+                    response.size = sizeof(name);
+                    response.data = &name;
+                    sendUsbResponse(response);
+                }
                 else printf("%s\n", name);
             }
         }
@@ -657,12 +615,12 @@ int argmain(int argc, char** argv)
         SetLanguage language = SetLanguage_ENUS;
         setGetSystemLanguage(&languageCode);
         setMakeLanguage(languageCode, &language);
-		if (usb)
-		{
-			response.size = sizeof(language);
-			response.data = &language;
-			sendUsbResponse(response);
-		}
+        if (usb)
+        {
+            response.size = sizeof(language);
+            response.data = &language;
+            sendUsbResponse(response);
+        }
         else printf("%d\n", language);
     }
 
@@ -726,12 +684,12 @@ int argmain(int argc, char** argv)
             return 0;
         u64 programId = parseStringToInt(argv[1]);
         bool isRunning = getIsProgramOpen(programId);
-		if (usb)
-		{
-			response.size = sizeof(isRunning);
-			response.data = &isRunning;
-			sendUsbResponse(response);
-		}
+        if (usb)
+        {
+            response.size = sizeof(isRunning);
+            response.data = &isRunning;
+            sendUsbResponse(response);
+        }
         else printf("%d\n", isRunning);
     }
 
@@ -746,32 +704,30 @@ int argmain(int argc, char** argv)
         if (R_FAILED(rc) && debugResultCodes)
             printf("capssc, 1204: %d\n", rc);
 
-		if (usb)
-		{
-			response.data = &buf[0];
-			response.size = outSize;
-			sendUsbResponse(response);
-		}
-		else
-		{
-			u64 i;
-			for (i = 0; i < outSize; i++)
-			{
-				printf("%02X", buf[i]);
-			}
-			printf("\n");
-		}
+        if (usb)
+        {
+            response.data = &buf[0];
+            response.size = outSize;
+            sendUsbResponse(response);
+        }
+        else
+        {
+            u64 i;
+            for (i = 0; i < outSize; i++)
+            {
+                printf("%02X", buf[i]);
+            }
+            printf("\n");
+        }
 
         free(buf);
     }
 
-    if(!strcmp(argv[0], "getVersion")){
+    if (!strcmp(argv[0], "getVersion")) {
         if (usb)
         {
-            char buf[] = VERSION_S;
-            strcat(buf, "\n");
-            response.data = buf;
-            response.size = sizeof(buf);
+            response.data = VERSION_S;
+            response.size = sizeof(VERSION_S);
             sendUsbResponse(response);
         }
         else printf("%s\n", VERSION_S);
@@ -794,13 +750,13 @@ int argmain(int argc, char** argv)
             response.size = sizeof(solved);
             sendUsbResponse(response);
         }
-		else printf("%016lX\n", solved);
-	}
+        else printf("%016lX\n", solved);
+    }
 
     // pointerAll <first (main) jump> <additional jumps> <final jump in pointerexpr> 
     // possibly redundant between the one above, one needs to go eventually. (little endian, flip it yourself if required)
-	if (!strcmp(argv[0], "pointerAll"))
-	{
+    if (!strcmp(argv[0], "pointerAll"))
+    {
         if (argc < 3)
             return 0;
         s64 finalJump = parseStringToSignedLong(argv[argc - 1]);
@@ -853,7 +809,7 @@ int argmain(int argc, char** argv)
             sendUsbResponse(response);
         }
         else printf("%016lX\n", solved);
-	}
+    }
 
     // pointerPeek <amount of bytes in hex or dec> <first (main) jump> <additional jumps> <final jump in pointerexpr>
     // warning: no validation
@@ -871,13 +827,7 @@ int argmain(int argc, char** argv)
         u64 solved = followMainPointer(jumps, count);
         solved += finalJump;
         peek(solved, size);
-        /*if (usb)
-        {
-            response.size = size;
-            response.data = &data[0];
-            sendUsbResponse(response);
-        }*/
-	}
+    }
 
     // pointerPeekMulti <amount of bytes in hex or dec> <first (main) jump> <additional jumps> <final jump in pointerexpr> split by asterisks (*)
     // warning: no validation
@@ -926,13 +876,7 @@ int argmain(int argc, char** argv)
         }
 
         peekMulti(offsets, sizes, itemCount);
-        /*if (usb)
-        {
-            response.size = totalSize;
-            response.data = &out[0];
-            sendUsbResponse(response);
-        }*/
-	}
+    }
 
     // pointerPoke <data to be sent> <first (main) jump> <additional jumps> <final jump in pointerexpr>
     // warning: no validation
@@ -1182,21 +1126,118 @@ int argmain(int argc, char** argv)
     }
 
     if (!strcmp(argv[0], "fdCount"))
-	{
-		if (usb)
-		{
-			response.size = sizeof(int);
-			response.data = fd_count;
-			sendUsbResponse(response);
-		}
+    {
+        if (usb)
+        {
+            response.size = sizeof(int);
+            response.data = &fd_count;
+            sendUsbResponse(response);
+        }
         else printf("%d\n", fd_count);
     }
 
-    if(!strcmp(argv[0], "daySkip"))
-        dateSkip();
+    if (!strcmp(argv[0], "getSwitchTime"))
+    {
+        time_t posix = 0;
+        Result res = timeGetCurrentTime(TimeType_UserSystemClock, (u64*)&posix);
+        if (R_FAILED(res))
+        {
+            sendResult(0, &response);
+            return 0;
+        }
 
-    if(!strcmp(argv[0], "resetTime"))
-        resetTime();
+        struct tm* time = localtime(&posix);
+        if (time->tm_year >= 160)
+        {
+            time->tm_year = 100;
+            time->tm_mon = 0;
+            time->tm_mday = 1;
+
+            res = timeSetCurrentTime(TimeType_NetworkSystemClock, mktime(time));
+            if (R_FAILED(res))
+            {
+                sendResult(0, &response);
+                return 0;
+            }
+
+            posix = mktime(time);
+        }
+
+        if (usb)
+        {
+            response.size = sizeof(long);
+            response.data = &posix;
+            sendUsbResponse(response);
+        }
+        else
+        {
+            printf("%ld\n", posix);
+        }
+    }
+
+    if (!strcmp(argv[0], "setSwitchTime"))
+    {
+        if (argc != 2)
+            return 0;
+
+        time_t input = (time_t)strtoull(argv[1], NULL, 10);
+        struct tm* toSet = localtime(&input);
+        if (toSet->tm_year >= 160)
+        {
+            int fail = 0;
+            if (usb)
+            {
+                response.size = sizeof(fail);
+                response.data = &fail;
+                sendUsbResponse(response);
+            }
+            else
+            {
+                printf("%d\n", fail);
+            }
+
+            return 0;
+        }
+
+        Result res = timeSetCurrentTime(TimeType_NetworkSystemClock, input);
+        if (R_FAILED(res))
+        {
+            sendResult(0, &response);
+            return 0;
+        }
+
+        sendResult(1, &response);
+    }
+
+    if (!strcmp(argv[0], "resetSwitchTime"))
+    {
+        bool sync;
+        Result res = setsysInitialize();
+        if (R_FAILED(res))
+        {
+            sendResult(0, &response);
+            return 0;
+        }
+
+        res = setsysIsUserSystemClockAutomaticCorrectionEnabled(&sync);
+        if (R_FAILED(res) || !sync)
+        {
+            setsysExit();
+            sendResult(0, &response);
+            return 0;
+        }
+
+        setsysExit();
+        if (!isConnectedToInternet(&response))
+            return 0;
+
+        time_t ntp = ntpGetTime();
+        res = timeSetCurrentTime(TimeType_NetworkSystemClock, ntp);
+        if (R_FAILED(res))
+            sendResult(0, &response);
+
+        sendResult(1, &response);
+    }
 
     return 0;
 }
@@ -1290,35 +1331,7 @@ void wifiMainLoop()
     fd_count = 1;
 
     int newfd;
-
-    Result rc;
     int fr_count = 0;
-
-    initFreezes();
-
-    // freeze thread
-    mutexInit(&freezeMutex);
-    rc = threadCreate(&freezeThread, sub_freeze, (void*)&freeze_thr_state, NULL, THREAD_SIZE, 0x2C, -2);
-    if (R_SUCCEEDED(rc))
-        rc = threadStart(&freezeThread);
-
-    // touch thread
-    mutexInit(&touchMutex);
-    rc = threadCreate(&touchThread, sub_touch, (void*)&currentTouchEvent, NULL, THREAD_SIZE, 0x2C, -2);
-    if (R_SUCCEEDED(rc))
-        rc = threadStart(&touchThread);
-
-    // key thread
-    mutexInit(&keyMutex);
-    rc = threadCreate(&keyboardThread, sub_key, (void*)&currentKeyEvent, NULL, THREAD_SIZE, 0x2C, -2);
-    if (R_SUCCEEDED(rc))
-        rc = threadStart(&keyboardThread);
-
-    // click sequence thread
-    mutexInit(&clickMutex);
-    rc = threadCreate(&clickThread, sub_click, (void*)currentClick, NULL, THREAD_SIZE, 0x2C, -2);
-    if (R_SUCCEEDED(rc))
-        rc = threadStart(&clickThread);
 
     flashLed();
 
@@ -1391,21 +1404,33 @@ void usbMainLoop()
 {
     USBResponse response;
     int fr_count = 0;
-    flashLed();
 
+    flashLed();
     while (true)
     {
         int lenUSB;
-        usbCommsRead(&lenUSB, sizeof(lenUSB)); //Should use malloc
-        char linebufUSB[lenUSB + 1];
+        size_t len = usbCommsRead(&lenUSB, sizeof(lenUSB)); //Should use malloc
+        if (len <= 0)
+        {
+            svcSleepThread(mainLoopSleepTime * 1e+6L);
+            continue;
+        }
 
+        char linebufUSB[lenUSB + 1];
         mutexLock(&freezeMutex);
         for (int i = 0; i < lenUSB + 1; i++)
             linebufUSB[i] = 0;
 
-        usbCommsRead(&linebufUSB, lenUSB);
+        len = usbCommsRead(&linebufUSB, lenUSB);
+        bool failed = lenUSB - 2 > sizeof(linebufUSB) || len <= 0;
+        if (failed)
+        {
+            svcSleepThread(mainLoopSleepTime * 1e+6L);
+            mutexUnlock(&freezeMutex);
+            continue;
+        }
 
-        //Adds necessary escape characters for pasrser
+        //Adds necessary escape characters for parser
         linebufUSB[lenUSB - 1] = '\n';
         linebufUSB[lenUSB - 2] = '\r';
 
@@ -1570,7 +1595,6 @@ void sub_click(void* arg)
         }
 
         clickToken = 0;
-
         svcSleepThread(1e+6L);
     }
 }
@@ -1587,4 +1611,62 @@ bool isUSB()
             return false;
     }
     return true;
+}
+
+bool handle_connection()
+{
+    Result rc;
+    usb = isUSB();
+    if (usb)
+        rc = usbCommsInitialize();
+    else rc = socketInitializeDefault();
+
+    fsExit();
+    fsdevUnmountAll();
+
+    if (R_FAILED(rc))
+        return false;
+    return true;
+}
+
+void handle_disconnect()
+{
+    if (usb)
+        usbCommsExit();
+    else socketExit();
+}
+
+bool isConnectedToInternet(USBResponse* response)
+{
+    Result res = nifmInitialize(NifmServiceType_User);
+    if (R_FAILED(res))
+    {
+        sendResult(0, response);
+        return false;
+    }
+
+    NifmInternetConnectionStatus status;
+    res = nifmGetInternetConnectionStatus(NULL, NULL, &status);
+    if (R_FAILED(res) || status != NifmInternetConnectionStatus_Connected)
+    {
+        sendResult(0, response);
+        nifmExit();
+        return false;
+    }
+
+    return true;
+}
+
+void sendResult(uint16_t success, USBResponse* response)
+{
+    if (usb)
+    {
+        response->size = sizeof(uint16_t);
+        response->data = &success;
+        sendUsbResponse(*response);
+    }
+    else
+    {
+        printf("%u\n", success);
+    }
 }

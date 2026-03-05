@@ -14,6 +14,8 @@ extern u64 keyPressSleepTime;
 extern u64 pollRate;
 extern u32 fingerDiameter;
 extern bool usb;
+extern u8* hdlmem;
+extern size_t hdlmem_size;
 
 typedef struct {
     u64 main_nso_base;
@@ -36,6 +38,12 @@ typedef struct {
     u64 sequentialCount;
     u8 state;
 } KeyData;
+
+typedef struct
+{
+    u64 size;
+    void* data;
+}USBResponse;
 
 #define JOYSTICK_LEFT 0
 #define JOYSTICK_RIGHT 1
@@ -67,5 +75,4 @@ u64 followMainPointer(s64* jumps, size_t count);
 void touch(HidTouchState* state, u64 sequentialCount, u64 holdTime, bool hold, u8* token);
 void key(HiddbgKeyboardAutoPilotState* states, u64 sequentialCount);
 void clickSequence(char* seq, u8* token);
-void dateSkip();
-void resetTime();
+void sendUsbResponse(USBResponse response);

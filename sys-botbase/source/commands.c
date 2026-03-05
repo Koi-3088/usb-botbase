@@ -14,8 +14,7 @@ HidDeviceType controllerInitializedType = HidDeviceType_FullKey3;
 HiddbgHdlsHandle controllerHandle = { 0 };
 HiddbgHdlsDeviceInfo controllerDevice = { 0 };
 HiddbgHdlsState controllerState = { 0 };
-time_t curTime = 0;
-time_t origTime = 0;
+USBResponse response;
 
 //Keyboard:
 HiddbgKeyboardAutoPilotState dummyKeyboardState = { 0 };
@@ -244,7 +243,6 @@ void detachController()
     hiddbgExit();
     free(workmem);
     bControllerIsInitialised = false;
-
     sessionId.id = 0;
 }
 
@@ -273,23 +271,27 @@ void peek(u64 offset, u64 size)
     Result rc = readMem(out, offset, size);
     if (R_FAILED(rc))
     {
-        printf("\n");
+        if (!usb)
+            printf("\n");
         detach();
         free(out);
         return;
     }
 
-    if (!usb)
-    {
-        u64 i;
-        for (i = 0; i < size; i++)
-        {
-            printf("%02X", out[i]);
-        }
-    }
-
-    printf("\n");
     detach();
+    if (usb)
+    {
+        response.size = size;
+        response.data = &out[0];
+        sendUsbResponse(response);
+    }
+    else
+	{
+		u64 i;
+		for (i = 0; i < size; i++)
+			printf("%02X", out[i]);
+        printf("\n");
+	}
     free(out);
 }
 
@@ -299,7 +301,9 @@ void peekInfinite(u64 offset, u64 size)
     u64 totalFetched = 0;
     u64 i;
     u8* out = malloc(sizeof(u8) * MAX_LINE_LENGTH);
-    if (out == NULL) {
+    u8* usbOut = malloc(size);
+    if (out == NULL || usbOut == NULL) {
+        // add USB handling
         printf("\n");
         return;
     }
@@ -312,25 +316,35 @@ void peekInfinite(u64 offset, u64 size)
         Result rc = readMem(out, offset + totalFetched, thisBuffersize);
         if (R_FAILED(rc))
         {
-            printf("\n");
+            if (!usb)
+                printf("\n");
             detach();
             free(out);
+            free(usbOut);
             return;
         }
 
-		if (!usb)
-		{
-            for (i = 0; i < thisBuffersize; i++)
-            {
-                printf("%02X", out[i]);
-            }
-		}
+        for (i = 0; i < thisBuffersize; i++)
+        {
+            if (usb)
+                usbOut[totalFetched + i] = out[i];
+            else printf("%02X", out[i]);
+        }
 
         totalFetched += thisBuffersize;
     }
-    printf("\n");
+
     detach();
+    if (usb)
+    {
+        response.size = size;
+        response.data = &usbOut[0];
+        sendUsbResponse(response);
+    }
+    else printf("\n");
+
     free(out);
+    free(usbOut);
 }
 
 void peekMulti(u64* offset, u64* size, u64 count)
@@ -347,7 +361,8 @@ void peekMulti(u64* offset, u64* size, u64 count)
         Result rc = readMem(out + ofs, offset[i], size[i]);
         if (R_FAILED(rc))
         {
-            printf("\n");
+            if (!usb)
+                printf("\n");
             detach();
             free(out);
             return;
@@ -355,16 +370,20 @@ void peekMulti(u64* offset, u64* size, u64 count)
         ofs += size[i];
     }
 
-    if (!usb)
-    {
-        u64 i;
-        for (i = 0; i < totalSize; i++)
-        {
-            printf("%02X", out[i]);
-        }
-    }
-    printf("\n");
     detach();
+    if (usb)
+    {
+        response.size = totalSize;
+        response.data = &out[0];
+        sendUsbResponse(response);
+	}
+	else
+	{
+		u64 i;
+		for (i = 0; i < totalSize; i++)
+			printf("%02X", out[i]);
+        printf("\n");
+	}
     free(out);
 }
 
@@ -604,48 +623,9 @@ void clickSequence(char* seq, u8* token)
     }
 }
 
-void dateSkip()
+void sendUsbResponse(USBResponse response)
 {
-    if (origTime == 0)
-    {
-        Result ot = timeGetCurrentTime(TimeType_UserSystemClock, (u64*)&origTime);
-        if (R_FAILED(ot))
-            fatalThrow(ot);
-    }
-
-    Result tg = timeGetCurrentTime(TimeType_UserSystemClock, (u64*)&curTime); //Current system time
-    if (R_FAILED(tg))
-        fatalThrow(tg);
-
-    Result ts = timeSetCurrentTime(TimeType_NetworkSystemClock, (uint64_t)(curTime + 86400)); //Set new time
-    if (R_FAILED(ts))
-        fatalThrow(ts);
-}
-
-void resetTime()
-{
-    if (curTime == 0)
-    {
-        Result ct = timeGetCurrentTime(TimeType_UserSystemClock, (u64*)&curTime); //Current system time
-        if (R_FAILED(ct))
-            fatalThrow(ct);
-    }
-
-    if (origTime == 0)
-    {
-        Result ct = timeGetCurrentTime(TimeType_UserSystemClock, (u64*)&origTime);
-        if (R_FAILED(ct))
-            fatalThrow(ct);
-    }
-
-    struct tm currentTime = *localtime(&curTime);
-    struct tm timeReset = *localtime(&origTime);
-    timeReset.tm_hour = currentTime.tm_hour;
-    timeReset.tm_min = currentTime.tm_min;
-    timeReset.tm_sec = currentTime.tm_sec;
-    Result rt = timeSetCurrentTime(TimeType_NetworkSystemClock, mktime(&timeReset));
-    curTime = 0;
-    origTime = 0;
-    if (R_FAILED(rt))
-        fatalThrow(rt);
+    usbCommsWrite((void*)&response, 4);
+    if (response.size > 0)
+        usbCommsWrite(response.data, response.size);
 }
